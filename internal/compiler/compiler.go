@@ -7,6 +7,7 @@ package compiler
 
 import (
 	"fmt"
+	"strings"
 
 	feel "github.com/pbinitiative/feel"
 
@@ -17,9 +18,14 @@ import (
 
 // Compile typecheck puis abaisse le modèle conceptuel en IR.
 func Compile(m *model.Model) (*ir.CompiledModel, error) {
-	cm := &ir.CompiledModel{Name: m.Name, Inputs: map[string]ir.Type{}}
+	cm := &ir.CompiledModel{Name: m.Name, Inputs: map[string]ir.Type{}, Domains: map[string]ir.Domain{}}
 	for _, in := range m.Inputs {
 		cm.Inputs[in.Name] = irType(in.Type)
+		dom, err := parseDomain(in.Domain)
+		if err != nil {
+			return nil, fmt.Errorf("input %q (ligne %d): %w", in.Name, in.Line, err)
+		}
+		cm.Domains[in.Name] = dom
 	}
 	// Noms résolvables : entrées externes + décisions (une cellule/expr peut référencer une décision amont).
 	valid := map[string]bool{}
@@ -283,6 +289,73 @@ func parseHitPolicy(s string, no int) (ir.HitPolicy, ir.Aggregation, error) {
 	default:
 		return 0, 0, fmt.Errorf("ligne %d: hit policy non supportée: %q", no, s)
 	}
+}
+
+// parseDomain interprète une contrainte de domaine d'entrée (`in [a..b]`, `>= 0`, `in {..}`)
+// en ir.Domain pour la vérification de complétude. Une forme non reconnue -> DomNone (pas d'erreur).
+func parseDomain(s string) (ir.Domain, error) {
+	rest := strings.TrimSpace(s)
+	if rest == "" {
+		return ir.Domain{Kind: ir.DomNone}, nil
+	}
+	if strings.HasPrefix(rest, "in ") {
+		rest = strings.TrimSpace(rest[len("in "):])
+	}
+	// Enum : { v1, v2, ... }
+	if strings.HasPrefix(rest, "{") {
+		body := strings.TrimSuffix(strings.TrimPrefix(rest, "{"), "}")
+		dom := ir.Domain{Kind: ir.DomEnum}
+		for _, part := range strings.Split(body, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			node, err := feel.ParseString(part)
+			if err != nil {
+				return ir.Domain{}, fmt.Errorf("domaine enum %q: %w", part, err)
+			}
+			v, err := literalValue(node)
+			if err != nil {
+				return ir.Domain{}, fmt.Errorf("domaine enum %q: %w", part, err)
+			}
+			dom.Enum = append(dom.Enum, v)
+		}
+		return dom, nil
+	}
+	node, err := feel.ParseString(rest)
+	if err != nil {
+		return ir.Domain{Kind: ir.DomNone}, nil // non interprétable -> pas de domaine (dégradation)
+	}
+	switch n := node.(type) {
+	case *feel.RangeNode:
+		lo, err := literalValue(n.Start)
+		if err != nil {
+			return ir.Domain{Kind: ir.DomNone}, nil
+		}
+		hi, err := literalValue(n.End)
+		if err != nil {
+			return ir.Domain{Kind: ir.DomNone}, nil
+		}
+		return ir.Domain{Kind: ir.DomNumeric, Lo: lo, Hi: hi, LoOpen: n.StartOpen, HiOpen: n.EndOpen}, nil
+	case *feel.Binop:
+		if v, ok := n.Left.(*feel.Var); ok && v.Name == "?" {
+			lit, err := literalValue(n.Right)
+			if err != nil {
+				return ir.Domain{Kind: ir.DomNone}, nil
+			}
+			switch n.Op {
+			case ">=":
+				return ir.Domain{Kind: ir.DomNumeric, Lo: lit, HiInf: true}, nil
+			case ">":
+				return ir.Domain{Kind: ir.DomNumeric, Lo: lit, LoOpen: true, HiInf: true}, nil
+			case "<=":
+				return ir.Domain{Kind: ir.DomNumeric, Hi: lit, LoInf: true}, nil
+			case "<":
+				return ir.Domain{Kind: ir.DomNumeric, Hi: lit, HiOpen: true, LoInf: true}, nil
+			}
+		}
+	}
+	return ir.Domain{Kind: ir.DomNone}, nil
 }
 
 func irType(t model.Type) ir.Type {

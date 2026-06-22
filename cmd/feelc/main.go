@@ -12,7 +12,10 @@ import (
 
 	apd "github.com/cockroachdb/apd/v3"
 
+	"github.com/maxgfr/feelc/internal/compiler"
+	"github.com/maxgfr/feelc/internal/dsl"
 	"github.com/maxgfr/feelc/internal/engine"
+	"github.com/maxgfr/feelc/internal/verify"
 )
 
 // Version est injectée au build (ldflags) ; valeur par défaut pour le dev.
@@ -28,6 +31,8 @@ func main() {
 	switch cmd {
 	case "run":
 		err = cmdRun(args)
+	case "verify":
+		err = cmdVerify(args)
 	case "version", "--version", "-v":
 		fmt.Println("feelc", Version)
 	case "help", "--help", "-h":
@@ -47,10 +52,63 @@ func usage() {
 	fmt.Fprint(os.Stderr, `feelc — moteur de règles métier (DMN/FEEL) compilé
 
 Usage:
-  feelc run --rules <fichier.rules> --decision <nom> --input '<json>' [--json]
+  feelc run    --rules <fichier.rules> --decision <nom> --input '<json>' [--json]
+  feelc verify --rules <fichier.rules> [--json]
   feelc version
 
 `)
+}
+
+func cmdVerify(args []string) error {
+	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
+	rulesPath := fs.String("rules", "", "chemin du fichier .rules")
+	asJSON := fs.Bool("json", false, "sortie au format JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *rulesPath == "" {
+		return fmt.Errorf("--rules est requis")
+	}
+	src, err := os.ReadFile(*rulesPath)
+	if err != nil {
+		return err
+	}
+	m, err := dsl.Parse(string(src))
+	if err != nil {
+		return err
+	}
+	cm, err := compiler.Compile(m)
+	if err != nil {
+		return err
+	}
+	rep := verify.Verify(cm)
+
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(rep); err != nil {
+			return err
+		}
+	} else {
+		renderReport(rep)
+	}
+	if n := rep.Blockers(); n > 0 {
+		return fmt.Errorf("%d bloqueur(s) de vérification", n)
+	}
+	return nil
+}
+
+func renderReport(rep *verify.Report) {
+	if len(rep.Findings) == 0 {
+		fmt.Println("✓ aucune anomalie détectée (table prouvée complète et cohérente)")
+		return
+	}
+	for _, f := range rep.Findings {
+		fmt.Printf("[%s] %s — %s\n", f.Severity, f.Decision, f.Message)
+		if len(f.Witness) > 0 {
+			fmt.Printf("        contre-exemple: %v\n", f.Witness)
+		}
+	}
 }
 
 func cmdRun(args []string) error {

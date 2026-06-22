@@ -103,10 +103,29 @@ const (
 	TypeContext // Tranche 2
 )
 
+// DomainKind : nature du domaine d'une entrée (pour la vérification de complétude).
+type DomainKind uint8
+
+const (
+	DomNone    DomainKind = iota // pas de domaine déclaré
+	DomNumeric                   // intervalle [Lo, Hi] (bornes éventuellement infinies)
+	DomEnum                      // ensemble fini de valeurs
+)
+
+// Domain : contrainte de domaine d'une entrée (issue de `input x : T in [..]` / `>= 0` / `in {..}`).
+type Domain struct {
+	Kind                   DomainKind
+	Lo, Hi                 Value // bornes numériques (si DomNumeric)
+	LoInf, HiInf           bool  // borne infinie ?
+	LoOpen, HiOpen         bool  // borne exclue ?
+	Enum                   []Value
+}
+
 // CompiledModel : le modèle prêt à exécuter (sortie du compilateur).
 type CompiledModel struct {
 	Name      string
 	Inputs    map[string]Type
+	Domains   map[string]Domain // domaine déclaré par entrée (vide = DomNone)
 	Decisions []Decision
 
 	byName map[string]int

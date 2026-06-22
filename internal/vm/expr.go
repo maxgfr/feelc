@@ -43,13 +43,13 @@ func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (ir.Value, erro
 			push(r)
 		case ir.OpEqOp:
 			b, a := pop(), pop()
-			push(ir.Bool(valueEq(a, b)))
+			push(ir.Bool(ir.ValueEq(a, b)))
 		case ir.OpNeOp:
 			b, a := pop(), pop()
-			push(ir.Bool(!valueEq(a, b)))
+			push(ir.Bool(!ir.ValueEq(a, b)))
 		case ir.OpLtOp, ir.OpLeOp, ir.OpGtOp, ir.OpGeOp:
 			b, a := pop(), pop()
-			ok, err := numCompare(cmpOp(in.Op), a, b)
+			ok, err := ir.NumCompare(cmpOp(in.Op), a, b)
 			if err != nil {
 				return ir.Value{}, err
 			}

@@ -202,7 +202,7 @@ func aggregateNumbers(agg ir.Aggregation, matched []ir.Rule) (ir.Value, error) {
 // une valeur absente est la moins prioritaire.
 func rank(priority []ir.Value, v ir.Value) int {
 	for i, p := range priority {
-		if valueEq(v, p) {
+		if ir.ValueEq(v, p) {
 			return i
 		}
 	}
@@ -214,7 +214,7 @@ func outputsEqual(a, b []ir.Value) bool {
 		return false
 	}
 	for i := range a {
-		if !valueEq(a[i], b[i]) {
+		if !ir.ValueEq(a[i], b[i]) {
 			return false
 		}
 	}
@@ -247,29 +247,7 @@ func (e *evaluator) matches(r ir.Rule, cols []ir.Value) (bool, error) {
 }
 
 func (e *evaluator) testCell(ct ir.CellTest, v ir.Value) (bool, error) {
-	switch ct.Op {
-	case ir.OpAny:
-		return true, nil
-	case ir.OpEq:
-		return valueEq(v, ct.A), nil
-	case ir.OpNe:
-		return !valueEq(v, ct.A), nil
-	case ir.OpLt, ir.OpLe, ir.OpGt, ir.OpGe:
-		return numCompare(ct.Op, v, ct.A)
-	case ir.OpInRange:
-		return inRange(ct, v)
-	case ir.OpInSet:
-		for _, sub := range ct.Sub {
-			ok, err := e.testCell(sub, v)
-			if err != nil {
-				return false, err
-			}
-			if ok {
-				return true, nil
-			}
-		}
-		return false, nil
-	case ir.OpProg:
+	if ct.Op == ir.OpProg {
 		res, err := e.evalExpr(ct.Prog, &v)
 		if err != nil {
 			return false, err
@@ -278,58 +256,6 @@ func (e *evaluator) testCell(ct ir.CellTest, v ir.Value) (bool, error) {
 			return false, fmt.Errorf("cellule Op=Prog: résultat non booléen")
 		}
 		return res.Bool, nil
-	default:
-		return false, fmt.Errorf("opérateur de cellule non supporté: %d", ct.Op)
 	}
-}
-
-func numCompare(op ir.Op, v, a ir.Value) (bool, error) {
-	if v.Tag == ir.TagNull {
-		return false, nil // null ne satisfait aucune comparaison (trivalent, cf. ADR 0003)
-	}
-	if v.Tag != ir.TagNumber || a.Tag != ir.TagNumber {
-		return false, fmt.Errorf("comparaison numérique sur une valeur non numérique")
-	}
-	c := decimal.Cmp(v.Num, a.Num)
-	switch op {
-	case ir.OpLt:
-		return c < 0, nil
-	case ir.OpLe:
-		return c <= 0, nil
-	case ir.OpGt:
-		return c > 0, nil
-	default: // OpGe
-		return c >= 0, nil
-	}
-}
-
-func inRange(ct ir.CellTest, v ir.Value) (bool, error) {
-	if v.Tag == ir.TagNull {
-		return false, nil // null hors de tout intervalle (trivalent, cf. ADR 0003)
-	}
-	if v.Tag != ir.TagNumber || ct.A.Tag != ir.TagNumber || ct.B.Tag != ir.TagNumber {
-		return false, fmt.Errorf("intervalle sur une valeur non numérique")
-	}
-	lo := decimal.Cmp(v.Num, ct.A.Num)
-	hi := decimal.Cmp(v.Num, ct.B.Num)
-	okLo := lo > 0 || (lo == 0 && !ct.AOpen)
-	okHi := hi < 0 || (hi == 0 && !ct.BOpen)
-	return okLo && okHi, nil
-}
-
-func valueEq(a, b ir.Value) bool {
-	if a.Tag != b.Tag {
-		return false
-	}
-	switch a.Tag {
-	case ir.TagNumber:
-		return decimal.Cmp(a.Num, b.Num) == 0
-	case ir.TagString:
-		return a.Str == b.Str
-	case ir.TagBool:
-		return a.Bool == b.Bool
-	case ir.TagNull:
-		return true
-	}
-	return false
+	return ir.MatchCell(ct, v) // sémantique géométrique partagée avec le vérificateur
 }
