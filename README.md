@@ -32,8 +32,17 @@ feelc serve  --rules m.rules [--addr :8080] [--watch] [--strict]       # service
 Cœur **opérationnel** : langage → compilateur → IR → VM déterministe (décimal exact), 7 hit policies,
 **vérification formelle** (complétude/conflits/règles mortes avec contre-exemples), **service HTTP +
 hot-reload**, **gate sémantique** (`check`), **import DMN XML**. 4 exemples de référence vérifiés.
-Skill d'autoring : [maxgfr/feelc-rules](https://github.com/maxgfr/feelc-rules).
 Reportés (ADR 0004) : BKM paramétré, extension SMT/Z3.
+
+## Skill d'autoring (l'IA écrit les règles)
+
+Une **skill portable** (Claude Code, Codex, Cursor…) est intégrée dans [`skill/`](skill/) : elle
+guide un agent pour rédiger/vérifier des règles via le flux *interview → DSL → `verify` → `run` →
+itère*, en utilisant `feelc` comme oracle déterministe. Voir [`skill/SKILL.md`](skill/SKILL.md).
+
+```sh
+node skill/scripts/feelc-skill.mjs verify --rules examples/credit/credit.rules --json
+```
 
 ## Exemple
 

@@ -1,0 +1,32 @@
+{
+  "name": "feelc-rules",
+  "version": "0.2.0",
+  "description": "Skill portable : rédiger, vérifier et tester des règles métier dans le langage feelc (DMN/FEEL compilé, déterministe). L'IA écrit le DSL ; le binaire feelc est l'oracle.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "author": "maxgfr",
+  "homepage": "https://github.com/maxgfr/feelc/tree/main/skill",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maxgfr/feelc.git",
+    "directory": "skill"
+  },
+  "keywords": [
+    "feelc",
+    "dmn",
+    "feel",
+    "business-rules",
+    "decision-table",
+    "rules-engine",
+    "claude-skill",
+    "skill"
+  ],
+  "files": [
+    "SKILL.md",
+    "scripts/",
+    "references/"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
