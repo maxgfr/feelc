@@ -1,36 +1,36 @@
 {
   "benefits/aids": {
-    "model_hash": "f4173df12d96af7669d97ee498ab127de8462098098e5d814f9e3c6647862b90",
+    "model_hash": "b334c931e11f35af72bdd05a44bdd5ccf6baced7cbb0689d345bb0ab403b829a",
     "out_hash": "bc61e2303da91e4106fdaaa383ffae118f58d312d397e178441f788218430317",
     "out_canon": "[\"housing\",\"family\",\"student_grant\"]"
   },
   "credit/dti": {
-    "model_hash": "6c8e10c241470fc6ea6ecd1ceeac4523349af4a738f9c538dcc139a981617219",
+    "model_hash": "4455536f630c49b4a8dbc0464e22b6b8fcee2c09b1f40f87247b5ae85c5caf60",
     "out_hash": "59d720a1ab8d6974a057e11e4b77890669f8d6177371630c78eab78f0065f9cf",
     "out_canon": "\"0.3\""
   },
   "credit/eligibility/approved": {
-    "model_hash": "6c8e10c241470fc6ea6ecd1ceeac4523349af4a738f9c538dcc139a981617219",
+    "model_hash": "4455536f630c49b4a8dbc0464e22b6b8fcee2c09b1f40f87247b5ae85c5caf60",
     "out_hash": "09c57dc25225afd5687b6d278d4747765b001506c0de2e08734620ae9b18548b",
     "out_canon": "{\"eligible\":true,\"reason\":\"approuvé\"}"
   },
   "credit/eligibility/low_score": {
-    "model_hash": "6c8e10c241470fc6ea6ecd1ceeac4523349af4a738f9c538dcc139a981617219",
+    "model_hash": "4455536f630c49b4a8dbc0464e22b6b8fcee2c09b1f40f87247b5ae85c5caf60",
     "out_hash": "3d68e4227b526a8b1426aa05faf5c52b2facfd6e340b61c75e87d8b111139c3f",
     "out_canon": "{\"eligible\":false,\"reason\":\"score insuffisant\"}"
   },
   "insurance/premium": {
-    "model_hash": "7e5d0c10bf0a25cf57db12478f81ed86e4416a0d60cd1b77e4b2fbc4a6a38499",
+    "model_hash": "651eeecf051659758abda9b7a1db958dfad3e0c52b324bfe5cde832b122a7374",
     "out_hash": "71c1e4733e54680fcb052a489927c69e95e52cb92511c58dfa7c14e62db3082a",
     "out_canon": "\"1950\""
   },
   "insurance/surcharge": {
-    "model_hash": "7e5d0c10bf0a25cf57db12478f81ed86e4416a0d60cd1b77e4b2fbc4a6a38499",
+    "model_hash": "651eeecf051659758abda9b7a1db958dfad3e0c52b324bfe5cde832b122a7374",
     "out_hash": "4f146f11236845fe8036708a8da1095b95d9a2ae5bec3ba4867eede6f11f17fc",
     "out_canon": "\"950\""
   },
   "promo/discount": {
-    "model_hash": "75b8e8958451c82d53682dd7a253308954ba27e7b45a7cef661b5d3ce2d89ef7",
+    "model_hash": "805449725d72a25940f6dbc4fc61e73ea447d128cd153da993b2586df5c8c5f1",
     "out_hash": "046419ca5ecebeb34fdfe9dde8106ccee5ce39f8e4dd115e8ef20b869f8bed82",
     "out_canon": "\"20\""
   }

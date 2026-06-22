@@ -65,7 +65,23 @@ func inRange(ct CellTest, v Value) (bool, error) {
 
 // MatchCell : la cellule `ct` matche-t-elle la valeur `v` ?
 // OpProg nécessite une évaluation bytecode (non géométrique) -> erreur ici ; la VM la gère.
+// `Negate` (issu de `not(<test>)`) inverse le test géométrique. null reste non-matchant même
+// nié (trivalent, ADR 0003 : null ne satisfait aucun test, et `not` ne le « réveille » pas).
 func MatchCell(ct CellTest, v Value) (bool, error) {
+	res, err := matchCellBase(ct, v)
+	if err != nil {
+		return false, err
+	}
+	if ct.Negate {
+		if v.Tag == TagNull {
+			return false, nil
+		}
+		return !res, nil
+	}
+	return res, nil
+}
+
+func matchCellBase(ct CellTest, v Value) (bool, error) {
 	switch ct.Op {
 	case OpAny:
 		return true, nil

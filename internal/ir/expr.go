@@ -24,6 +24,9 @@ const (
 	OpNot
 	OpJmpFalse // saut conditionnel (if) : dépile un booléen, saute à Arg si faux
 	OpJmp      // saut inconditionnel à Arg
+	OpFloor    // arrondi vers -∞ (built-in floor, mono-arg)
+	OpCeil     // arrondi vers +∞ (built-in ceiling, mono-arg)
+	OpRound    // arrondi à l'entier le plus proche, HALF_EVEN (built-in round, mono-arg)
 )
 
 // Instr : une instruction (opcode + argument entier dense).

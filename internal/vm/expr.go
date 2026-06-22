@@ -19,7 +19,9 @@ func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (ir.Value, erro
 		stack = stack[:len(stack)-1]
 		return v
 	}
-	for _, in := range p.Code {
+	// PC indexé (et non un simple range) : les sauts OpJmp/OpJmpFalse (if/then/else) déplacent pc.
+	for pc := 0; pc < len(p.Code); pc++ {
+		in := p.Code[pc]
 		switch in.Op {
 		case ir.OpPushConst:
 			push(p.Consts[in.Arg])
@@ -64,6 +66,28 @@ func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (ir.Value, erro
 			} else {
 				push(ir.Bool(a.Bool || b.Bool))
 			}
+		case ir.OpNot:
+			a := pop()
+			if a.Tag != ir.TagBool {
+				return ir.Value{}, fmt.Errorf("`not` sur une valeur non booléenne")
+			}
+			push(ir.Bool(!a.Bool))
+		case ir.OpFloor, ir.OpCeil, ir.OpRound:
+			r, err := unaryNum(in.Op, pop())
+			if err != nil {
+				return ir.Value{}, err
+			}
+			push(r)
+		case ir.OpJmp:
+			pc = int(in.Arg) - 1 // -1 : le pc++ de la boucle atterrira sur Arg
+		case ir.OpJmpFalse:
+			c := pop()
+			if c.Tag != ir.TagBool {
+				return ir.Value{}, fmt.Errorf("condition `if` non booléenne")
+			}
+			if !c.Bool {
+				pc = int(in.Arg) - 1
+			}
 		default:
 			return ir.Value{}, fmt.Errorf("opcode non supporté à l'exécution: %d", in.Op)
 		}
@@ -95,6 +119,31 @@ func arith(op ir.Opcode, a, b ir.Value) (ir.Value, error) {
 			return ir.Value{}, fmt.Errorf("division par zéro")
 		}
 		_, err = decimal.Ctx.Quo(r, a.Num, b.Num)
+	}
+	if err != nil {
+		return ir.Value{}, err
+	}
+	return ir.Num(r), nil
+}
+
+// unaryNum applique un built-in numérique mono-arg (floor/ceiling/round). Contexte décimal
+// figé (HALF_EVEN) -> déterminisme préservé (ADR 0002). null propagé (trivalent).
+func unaryNum(op ir.Opcode, a ir.Value) (ir.Value, error) {
+	if a.Tag == ir.TagNull {
+		return ir.Null(), nil
+	}
+	if a.Tag != ir.TagNumber {
+		return ir.Value{}, fmt.Errorf("built-in numérique (floor/ceiling/round) sur une valeur non numérique")
+	}
+	r := new(apd.Decimal)
+	var err error
+	switch op {
+	case ir.OpFloor:
+		_, err = decimal.Ctx.Floor(r, a.Num)
+	case ir.OpCeil:
+		_, err = decimal.Ctx.Ceil(r, a.Num)
+	case ir.OpRound:
+		_, err = decimal.Ctx.RoundToIntegralValue(r, a.Num)
 	}
 	if err != nil {
 		return ir.Value{}, err

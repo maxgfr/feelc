@@ -47,3 +47,17 @@ couvre l'essentiel des tables DMN sans dépendance externe (ni CGo ni binaire Z3
 
 **Reprise.** Quand un besoin réel de conditions inter-colonnes prouvables apparaît : intégrer Z3
 (via binaire ou binding) sous `//go:build smt`, et router les cellules `Op=Prog` vers le solveur.
+
+## 3. Built-ins FEEL multi-arguments — reporté (Tranche 22)
+
+La Tranche 22 ajoute les built-ins **purs mono-arg** `floor` / `ceiling` / `round(x)` (+ `not`),
+`if/then/else`, et `not(<test>)` géométrique. Les built-ins **multi-arguments** restent **hors
+périmètre** et **échouent franchement** (jamais conformés en silence) :
+
+- `round(x, n)` (arrondi à `n` décimales),
+- `substring(s, start[, len])`, et les autres built-ins chaîne/liste multi-args.
+
+**Raison.** Le périmètre v2 reste volontairement minimal (sous-ensemble décidable, déterministe) ;
+ces fonctions ajouteraient une sémantique (gestion des décimales, indices de chaîne) sans exemple
+justificatif. Le lowerer émet un diagnostic explicite renvoyant à cet ADR. **Reprise.** Ajouter
+l'opcode/lowering dédié + tests quand un besoin réel apparaît.

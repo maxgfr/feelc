@@ -93,6 +93,10 @@ func collectBKMCalls(node feel.Node, bkms map[string]model.BKM, out map[string]b
 	case *feel.Binop:
 		collectBKMCalls(n.Left, bkms, out)
 		collectBKMCalls(n.Right, bkms, out)
+	case *feel.IfExpr:
+		collectBKMCalls(n.Cond, bkms, out)
+		collectBKMCalls(n.ThenBranch, bkms, out)
+		collectBKMCalls(n.ElseBranch, bkms, out)
 	}
 }
 
@@ -150,12 +154,66 @@ func (l *lowerer) emit(node feel.Node) error {
 			return err
 		}
 		l.push(op, 0)
+	case *feel.IfExpr:
+		return l.emitIf(n)
 	case *feel.FunCall:
-		return l.emitBKMCall(n)
+		return l.emitCall(n)
 	default:
 		return diag.Newf(diag.CodeUnsupported, 0, "expression non supportée en v2: %T", node)
 	}
 	return nil
+}
+
+// monoArgBuiltins : built-ins purs mono-arg supportés en expression. floor/ceiling/round mappent
+// sur le contexte décimal figé (déterminisme) ; `not` est la négation booléenne.
+var monoArgBuiltins = map[string]ir.Opcode{
+	"floor":   ir.OpFloor,
+	"ceiling": ir.OpCeil,
+	"round":   ir.OpRound,
+	"not":     ir.OpNot,
+}
+
+// emitIf compile `if c then a else b` par backpatch (OpJmpFalse vers else, OpJmp vers fin).
+func (l *lowerer) emitIf(n *feel.IfExpr) error {
+	if err := l.emit(n.Cond); err != nil {
+		return err
+	}
+	jmpFalse := len(l.prog.Code)
+	l.push(ir.OpJmpFalse, 0) // -> else (backpatché)
+	if err := l.emit(n.ThenBranch); err != nil {
+		return err
+	}
+	jmpEnd := len(l.prog.Code)
+	l.push(ir.OpJmp, 0) // -> fin (backpatché)
+	elseStart := len(l.prog.Code)
+	if err := l.emit(n.ElseBranch); err != nil {
+		return err
+	}
+	end := len(l.prog.Code)
+	l.prog.Code[jmpFalse].Arg = uint32(elseStart)
+	l.prog.Code[jmpEnd].Arg = uint32(end)
+	return nil
+}
+
+// emitCall route une invocation : built-in mono-arg, sinon inlining BKM.
+func (l *lowerer) emitCall(fc *feel.FunCall) error {
+	ref, ok := fc.FunRef.(*feel.Var)
+	if !ok {
+		return diag.Newf(diag.CodeUnsupported, 0, "invocation: seul `nom(...)` est supporté, obtenu %s", fc.FunRef.Repr())
+	}
+	if op, isBuiltin := monoArgBuiltins[ref.Name]; isBuiltin {
+		// Multi-arg (ex: round(x, n), substring(s, i, n)) : échec franc, cf ADR 0004.
+		if len(fc.Args) != 1 || fc.Args[0].Name != "" {
+			return diag.Newf(diag.CodeUnsupported, 0,
+				"built-in %q attend exactement 1 argument positionnel (multi-arguments non supportés, cf ADR 0004)", ref.Name)
+		}
+		if err := l.emit(fc.Args[0].Arg); err != nil {
+			return err
+		}
+		l.push(op, 0)
+		return nil
+	}
+	return l.emitBKMCall(fc)
 }
 
 // emitBKMCall inline une invocation de BKM `name(a1, ..., an)` : substitution AST des
@@ -219,6 +277,12 @@ func substitute(node feel.Node, subst map[string]feel.Node) feel.Node {
 		return n
 	case *feel.Binop:
 		return &feel.Binop{Op: n.Op, Left: substitute(n.Left, subst), Right: substitute(n.Right, subst)}
+	case *feel.IfExpr:
+		return &feel.IfExpr{
+			Cond:       substitute(n.Cond, subst),
+			ThenBranch: substitute(n.ThenBranch, subst),
+			ElseBranch: substitute(n.ElseBranch, subst),
+		}
 	case *feel.FunCall:
 		args := make([]feel.FunCallArg, len(n.Args))
 		for i, a := range n.Args {
@@ -238,6 +302,8 @@ func hasColumnRef(node feel.Node) bool {
 		return n.Name == "?"
 	case *feel.Binop:
 		return hasColumnRef(n.Left) || hasColumnRef(n.Right)
+	case *feel.IfExpr:
+		return hasColumnRef(n.Cond) || hasColumnRef(n.ThenBranch) || hasColumnRef(n.ElseBranch)
 	case *feel.FunCall:
 		for _, a := range n.Args {
 			if hasColumnRef(a.Arg) {
@@ -248,6 +314,16 @@ func hasColumnRef(node feel.Node) bool {
 	default:
 		return false
 	}
+}
+
+// progUsesInput indique si un programme référence `?` (OpLoadInput) — interdit hors cellule.
+func progUsesInput(p *ir.ExprProgram) bool {
+	for _, in := range p.Code {
+		if in.Op == ir.OpLoadInput {
+			return true
+		}
+	}
+	return false
 }
 
 func binopcode(op string) (ir.Opcode, error) {
@@ -281,7 +357,10 @@ func binopcode(op string) (ir.Opcode, error) {
 	}
 }
 
-// maxStack calcule la profondeur de pile maximale (T2 : pas de sauts).
+// maxStack calcule une borne SUPÉRIEURE de la profondeur de pile. Avec les sauts (if/then/else),
+// la passe linéaire surestime (compte les deux branches) — c'est sûr : la pile VM est un slice
+// qui croît par append, MaxStack n'est qu'un indice de capacité. Les opcodes unaires (not/floor/
+// ceiling/round) sont neutres ; OpJmpFalse dépile la condition.
 func maxStack(code []ir.Instr) int {
 	depth, max := 0, 0
 	for _, in := range code {
@@ -290,8 +369,8 @@ func maxStack(code []ir.Instr) int {
 			depth++
 		case ir.OpAdd, ir.OpSub, ir.OpMul, ir.OpDivOp,
 			ir.OpEqOp, ir.OpNeOp, ir.OpLtOp, ir.OpLeOp, ir.OpGtOp, ir.OpGeOp,
-			ir.OpAnd, ir.OpOr:
-			depth-- // pop 2, push 1
+			ir.OpAnd, ir.OpOr, ir.OpJmpFalse:
+			depth-- // pop 2 push 1 (binops/logiques) ; OpJmpFalse dépile la condition
 		}
 		if depth > max {
 			max = depth

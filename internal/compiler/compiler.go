@@ -62,6 +62,13 @@ func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]mode
 			return ir.Decision{}, diag.Wrap(diag.CodeUnsupported, d.Line, fmt.Sprintf("décision %q", d.Name), err).
 				WithCol(d.Expr.Col)
 		}
+		// `?` (valeur de colonne) n'a de sens que dans une cellule de table : refus FRANC à la
+		// compilation (sinon échec seulement à l'exécution — y compris via un argument de BKM).
+		if progUsesInput(prog) {
+			return ir.Decision{}, diag.Newf(diag.CodeUnsupported, d.Line,
+				"décision %q: `?` (valeur de colonne) interdit dans une expression literal — réservé aux cellules de table", d.Name).
+				WithCol(d.Expr.Col)
+		}
 		if err := checkVars(prog.Vars, valid, d.Name, d.Line); err != nil {
 			return ir.Decision{}, err
 		}
@@ -215,9 +222,56 @@ func normalizeNode(node feel.Node, src string, valid map[string]bool, bkms map[s
 			return ir.CellTest{}, diag.Wrap(diag.CodeLiteral, line, fmt.Sprintf("cellule %q", src), err).WithCol(col)
 		}
 		return ir.CellTest{Op: ir.OpEq, A: lit}, nil
+	case *feel.FunCall:
+		// `not(<test>)` en cellule : négation GÉOMÉTRIQUE (reste analysable par le vérificateur).
+		// not(x) -> test(x) nié ; not(a, b, ...) -> hors de l'ensemble {a, b, ...}.
+		if v, ok := n.FunRef.(*feel.Var); ok && v.Name == "not" {
+			return negateCell(n, src, valid, bkms, dec, line, col)
+		}
+		// Autre invocation (BKM, floor/round) utilisée comme test booléen -> cellule Op=Prog.
+		return progCell(node, valid, bkms, dec, line, col)
 	default:
 		return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cellule %q: construct non supporté en v2", src).WithCol(col)
 	}
+}
+
+// negateCell normalise `not(...)` en cellule : un test géométrique inversé (Negate), ou un
+// OpNot appliqué au programme pour un test non géométrique (Op=Prog). Échec franc sur kwargs / 0 arg.
+func negateCell(n *feel.FunCall, src string, valid map[string]bool, bkms map[string]model.BKM, dec string, line, col int) (ir.CellTest, error) {
+	if len(n.Args) == 0 {
+		return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cellule %q: `not()` attend au moins un test", src).WithCol(col)
+	}
+	for _, a := range n.Args {
+		if a.Name != "" {
+			return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cellule %q: `not(...)` n'accepte pas d'arguments nommés", src).WithCol(col)
+		}
+	}
+	if len(n.Args) == 1 {
+		inner, err := normalizeNode(n.Args[0].Arg, src, valid, bkms, dec, line, col)
+		if err != nil {
+			return ir.CellTest{}, err
+		}
+		if inner.Op == ir.OpProg {
+			// non géométrique : négation à l'exécution (OpNot sur le résultat booléen).
+			inner.Prog.Code = append(inner.Prog.Code, ir.Instr{Op: ir.OpNot})
+			return inner, nil
+		}
+		inner.Negate = !inner.Negate // toggle (gère not(not(...)))
+		return inner, nil
+	}
+	// not(a, b, ...) : hors de l'ensemble — OU des sous-tests, le tout nié.
+	ct := ir.CellTest{Op: ir.OpInSet, Negate: true}
+	for _, a := range n.Args {
+		sub, err := normalizeNode(a.Arg, src, valid, bkms, dec, line, col)
+		if err != nil {
+			return ir.CellTest{}, err
+		}
+		if sub.Op == ir.OpProg {
+			return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cellule %q: `not(...)` multi-tests exige des tests géométriques", src).WithCol(col)
+		}
+		ct.Sub = append(ct.Sub, sub)
+	}
+	return ct, nil
 }
 
 // progCell compile une cellule en expression booléenne (couche bytecode), `?` = valeur de colonne.

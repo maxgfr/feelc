@@ -27,13 +27,14 @@ const (
 // CellTest : forme normalisée d'une cellule d'entrée. C'est exactement la géométrie
 // (comparaison/intervalle/ensemble) que le vérificateur sait décomposer.
 type CellTest struct {
-	Op    Op
-	A     Value        // comparand (Eq/Ne/Lt..) ou borne basse (InRange)
-	B     Value        // borne haute (InRange)
-	AOpen bool         // borne basse exclue ?
-	BOpen bool         // borne haute exclue ?
-	Sub   []CellTest   // OpInSet : OU de sous-tests (sémantique virgule des unary tests DMN)
-	Prog  *ExprProgram // OpProg : cellule = expression libre (référence une autre colonne, arithmétique)
+	Op     Op
+	A      Value        // comparand (Eq/Ne/Lt..) ou borne basse (InRange)
+	B      Value        // borne haute (InRange)
+	AOpen  bool         // borne basse exclue ?
+	BOpen  bool         // borne haute exclue ?
+	Negate bool         // `not(<test>)` : inverse le résultat géométrique (reste analysable)
+	Sub    []CellTest   // OpInSet : OU de sous-tests (sémantique virgule des unary tests DMN)
+	Prog   *ExprProgram // OpProg : cellule = expression libre (référence une autre colonne, arithmétique)
 }
 
 // HitPolicy : politique de résolution d'une table de décision (sémantique DMN).

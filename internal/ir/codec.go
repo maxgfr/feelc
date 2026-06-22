@@ -182,6 +182,7 @@ func (e *encoder) putCellTest(c CellTest) {
 	e.putValue(c.B)
 	e.putBool(c.AOpen)
 	e.putBool(c.BOpen)
+	e.putBool(c.Negate)
 	e.putU32(uint32(len(c.Sub)))
 	for _, s := range c.Sub {
 		e.putCellTest(s)
@@ -386,6 +387,7 @@ func (d *decoder) getCellTest() CellTest {
 	c.B = d.getValue()
 	c.AOpen = d.getBool()
 	c.BOpen = d.getBool()
+	c.Negate = d.getBool()
 	n := int(d.getU32())
 	for i := 0; i < n && d.err == nil; i++ {
 		c.Sub = append(c.Sub, d.getCellTest())
