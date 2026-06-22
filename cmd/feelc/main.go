@@ -16,6 +16,7 @@ import (
 	"github.com/maxgfr/feelc/internal/audit"
 	"github.com/maxgfr/feelc/internal/check"
 	"github.com/maxgfr/feelc/internal/compiler"
+	"github.com/maxgfr/feelc/internal/dmnxml"
 	"github.com/maxgfr/feelc/internal/dsl"
 	"github.com/maxgfr/feelc/internal/engine"
 	"github.com/maxgfr/feelc/internal/loader"
@@ -41,6 +42,8 @@ func main() {
 		err = cmdVerify(args)
 	case "check":
 		err = cmdCheck(args)
+	case "import":
+		err = cmdImport(args)
 	case "serve":
 		err = cmdServe(args)
 	case "version", "--version", "-v":
@@ -65,10 +68,39 @@ Usage:
   feelc run    --rules <fichier.rules> --decision <nom> --input '<json>' [--json]
   feelc verify --rules <fichier.rules> [--json]
   feelc check  --rules <fichier.rules> --claims <claims.json> [--json]
+  feelc import --in <modele.dmn> [-o <sortie.rules>]
   feelc serve  --rules <fichier.rules> [--addr :8080] [--watch] [--strict]
   feelc version
 
 `)
+}
+
+func cmdImport(args []string) error {
+	fs := flag.NewFlagSet("import", flag.ContinueOnError)
+	in := fs.String("in", "", "chemin du fichier DMN XML à importer")
+	out := fs.String("o", "", "fichier .rules de sortie (stdout si absent)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *in == "" {
+		return fmt.Errorf("--in est requis")
+	}
+	data, err := os.ReadFile(*in)
+	if err != nil {
+		return err
+	}
+	rules, warns, err := dmnxml.Import(data)
+	if err != nil {
+		return err
+	}
+	for _, w := range warns {
+		fmt.Fprintln(os.Stderr, "avertissement:", w)
+	}
+	if *out == "" {
+		fmt.Print(rules)
+		return nil
+	}
+	return os.WriteFile(*out, []byte(rules), 0o644)
 }
 
 func cmdCheck(args []string) error {
