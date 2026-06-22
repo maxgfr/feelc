@@ -75,6 +75,10 @@ func Check(cm *ir.CompiledModel, claims []Claim) *Report {
 	return rep
 }
 
+// Equal expose la comparaison attendu-vs-obtenu (égalité décimale exacte, listes, contexts) —
+// réutilisée TELLE QUELLE par le harnais TCK (internal/tck), zéro duplication de sémantique.
+func Equal(expect, got any) bool { return equalValue(expect, got) }
+
 // equalValue compare une valeur attendue (issue de JSON, nombres en json.Number) à la sortie
 // de la VM (décimaux exacts, listes, contexts).
 func equalValue(expect, got any) bool {

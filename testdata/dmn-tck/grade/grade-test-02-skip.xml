@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Cas hors sous-ensemble : la valeur attendue est de type date (non supporté par feelc).
+     Le harnais doit le SKIPPER avec une raison, pas le compter comme échec ni le conformer. -->
+<testCases xmlns="http://www.omg.org/spec/DMN/20160719/testcase"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <testCase id="grade-date-skip">
+    <inputNode name="score"><value xsi:type="xsd:integer">50</value></inputNode>
+    <resultNode name="grade"><expected><value xsi:type="xsd:date">2020-01-01</value></expected></resultNode>
+  </testCase>
+</testCases>

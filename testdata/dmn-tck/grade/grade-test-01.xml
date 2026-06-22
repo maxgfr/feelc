@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testCases xmlns="http://www.omg.org/spec/DMN/20160719/testcase"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <testCase id="grade-F">
+    <inputNode name="score"><value xsi:type="xsd:integer">30</value></inputNode>
+    <resultNode name="grade"><expected><value xsi:type="xsd:string">F</value></expected></resultNode>
+  </testCase>
+  <testCase id="grade-B">
+    <inputNode name="score"><value xsi:type="xsd:integer">65</value></inputNode>
+    <resultNode name="grade"><expected><value xsi:type="xsd:string">B</value></expected></resultNode>
+  </testCase>
+  <testCase id="grade-A">
+    <inputNode name="score"><value xsi:type="xsd:integer">90</value></inputNode>
+    <resultNode name="grade"><expected><value xsi:type="xsd:string">A</value></expected></resultNode>
+  </testCase>
+</testCases>

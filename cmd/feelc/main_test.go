@@ -13,6 +13,26 @@ import (
 	"github.com/maxgfr/feelc/internal/ir"
 )
 
+// feelc tck : succès sur les fixtures (3 passés, 1 skip), et --min trop haut échoue.
+func TestCmdTck(t *testing.T) {
+	suite := filepath.Join("..", "..", "testdata", "dmn-tck")
+	out := captureStdout(t, func() {
+		if err := cmdTck([]string{"--suite", suite}); err != nil {
+			t.Fatalf("tck: %v", err)
+		}
+	})
+	if !strings.Contains(out, "3 passés") || !strings.Contains(out, "100.0%") {
+		t.Errorf("sortie tck inattendue: %q", out)
+	}
+	// --min 100 passe (conformité 100%) ; un seuil au-dessus est impossible -> on teste l'échec via
+	// un seuil > 100 (jamais atteignable) pour vérifier le gate.
+	_ = captureStdout(t, func() {
+		if err := cmdTck([]string{"--suite", suite, "--min", "100.5"}); err == nil {
+			t.Errorf("--min 100.5 devrait échouer (conformité 100%%)")
+		}
+	})
+}
+
 // feelc fmt : stdout par défaut, -w idempotent, --check exit≠0 si non formaté.
 func TestCmdFmt(t *testing.T) {
 	dir := t.TempDir()

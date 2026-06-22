@@ -30,6 +30,7 @@ import (
 	"github.com/maxgfr/feelc/internal/loader"
 	"github.com/maxgfr/feelc/internal/registry"
 	"github.com/maxgfr/feelc/internal/service"
+	"github.com/maxgfr/feelc/internal/tck"
 	"github.com/maxgfr/feelc/internal/verify"
 )
 
@@ -139,6 +140,8 @@ func main() {
 		err = cmdImport(args)
 	case "export":
 		err = cmdExport(args)
+	case "tck":
+		err = cmdTck(args)
 	case "serve":
 		err = cmdServe(args)
 	case "version", "--version", "-v":
@@ -187,6 +190,7 @@ Usage:
   feelc fmt    --rules <fichier.rules> [-w] [--check]
   feelc import --in <modele.dmn> [-o <sortie.rules>]
   feelc export --rules <fichier.rules> [-o <sortie.dmn>]
+  feelc tck    --suite <dir-tck> [--json] [--min <pct>]
   feelc serve  --rules <fichier.rules> [--addr :8080] [--watch] [--strict]
   feelc version
 
@@ -259,6 +263,52 @@ func cmdImport(args []string) error {
 		return nil
 	}
 	return os.WriteFile(*out, []byte(rules), 0o644)
+}
+
+func cmdTck(args []string) error {
+	fs := flag.NewFlagSet("tck", flag.ContinueOnError)
+	suite := fs.String("suite", "", "répertoire de la suite DMN TCK")
+	asJSON := fs.Bool("json", false, "sortie au format JSON")
+	min := fs.Float64("min", 0, "seuil de conformité minimal (%) ; exit≠0 si en-dessous")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *suite == "" {
+		return fmt.Errorf("--suite est requis")
+	}
+	rep, err := tck.Run(*suite)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(rep); err != nil {
+			return err
+		}
+	} else {
+		renderTckReport(rep)
+	}
+	if rep.Failed > 0 {
+		return fmt.Errorf("%d cas TCK en échec", rep.Failed)
+	}
+	if *min > 0 && rep.Conformance() < *min {
+		return fmt.Errorf("conformité %.1f%% < seuil %.1f%%", rep.Conformance(), *min)
+	}
+	return nil
+}
+
+func renderTckReport(rep *tck.Report) {
+	fmt.Printf("TCK : %d passés, %d échecs, %d skippés — conformité %.1f%%\n",
+		rep.Passed, rep.Failed, rep.Skipped, rep.Conformance())
+	for _, c := range rep.Cases {
+		switch c.Status {
+		case tck.Fail:
+			fmt.Printf("  ✗ %s/%s [%s] attendu %s, obtenu %s\n", c.Model, c.Case, c.Decision, c.Expected, c.Got)
+		case tck.Skipped:
+			fmt.Printf("  ⊘ %s/%s [%s] skippé : %s\n", c.Model, c.Case, c.Decision, c.Reason)
+		}
+	}
 }
 
 func cmdExport(args []string) error {
