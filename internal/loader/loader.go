@@ -6,7 +6,6 @@
 package loader
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -40,8 +39,13 @@ func CompileFile(path string, src []byte) (*ir.CompiledModel, string, *verify.Re
 		return nil, "", nil, diag.WithFileIfDiag(err, path)
 	}
 	rep := verify.Verify(cm)
-	sum := sha256.Sum256(src)
-	return cm, hex.EncodeToString(sum[:])[:16], rep, nil
+	// Hash = identité CANONIQUE du modèle compilé (hex(ir.Hash)), pas du texte source :
+	// deux sources qui compilent vers le même IR partagent le hash (breaking voulu, ADR 0006).
+	h, err := ir.Hash(cm)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	return cm, hex.EncodeToString(h[:]), rep, nil
 }
 
 // Reload lit un fichier et le publie dans reg SI valide. En mode strict, des bloqueurs de

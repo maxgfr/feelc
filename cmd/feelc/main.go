@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -19,6 +20,7 @@ import (
 	"github.com/maxgfr/feelc/internal/diag"
 	"github.com/maxgfr/feelc/internal/dmnxml"
 	"github.com/maxgfr/feelc/internal/engine"
+	"github.com/maxgfr/feelc/internal/ir"
 	"github.com/maxgfr/feelc/internal/loader"
 	"github.com/maxgfr/feelc/internal/registry"
 	"github.com/maxgfr/feelc/internal/service"
@@ -44,6 +46,65 @@ func reportCompileErr(err error, asJSON bool) error {
 	return err
 }
 
+// loadModel lit un modèle depuis un chemin : soit une source .rules (parse + compile, avec
+// erreurs positionnées), soit un .ir.bin déjà compilé (décodage direct de l'IR canonique).
+// Renvoie aussi le rapport de vérification (recalculé pour un binaire). En cas d'erreur de
+// compilation et --json, l'erreur structurée a déjà été rendue (errAlreadyReported).
+func loadModel(path string, asJSON bool) (*ir.CompiledModel, *verify.Report, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	if ir.IsEncoded(data) {
+		cm, err := ir.Decode(data)
+		if err != nil {
+			return nil, nil, err
+		}
+		return cm, verify.Verify(cm), nil
+	}
+	cm, _, rep, err := loader.CompileFile(path, data)
+	if err != nil {
+		return nil, nil, reportCompileErr(err, asJSON)
+	}
+	return cm, rep, nil
+}
+
+// cmdCompile compile une source .rules en IR canonique sérialisé (.ir.bin) et affiche le hash.
+func cmdCompile(args []string) error {
+	fs := flag.NewFlagSet("compile", flag.ContinueOnError)
+	rulesPath := fs.String("rules", "", "chemin du fichier .rules")
+	out := fs.String("o", "", "fichier .ir.bin de sortie (stdout si absent)")
+	asJSON := fs.Bool("json", false, "sortie au format JSON pour les erreurs")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *rulesPath == "" {
+		return fmt.Errorf("--rules est requis")
+	}
+	src, err := os.ReadFile(*rulesPath)
+	if err != nil {
+		return err
+	}
+	cm, _, _, err := loader.CompileFile(*rulesPath, src)
+	if err != nil {
+		return reportCompileErr(err, *asJSON)
+	}
+	blob, err := ir.Encode(cm)
+	if err != nil {
+		return err
+	}
+	h, err := ir.Hash(cm)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "modèle %q compilé — %d octets — hash %s\n", cm.Name, len(blob), hex.EncodeToString(h[:]))
+	if *out == "" {
+		_, err = os.Stdout.Write(blob)
+		return err
+	}
+	return os.WriteFile(*out, blob, 0o644)
+}
+
 // Version est injectée au build (ldflags) ; valeur par défaut pour le dev.
 var Version = "0.0.0-dev"
 
@@ -57,6 +118,8 @@ func main() {
 	switch cmd {
 	case "run":
 		err = cmdRun(args)
+	case "compile":
+		err = cmdCompile(args)
 	case "verify":
 		err = cmdVerify(args)
 	case "check":
@@ -86,8 +149,9 @@ func usage() {
 	fmt.Fprint(os.Stderr, `feelc — moteur de règles métier (DMN/FEEL) compilé
 
 Usage:
-  feelc run    --rules <fichier.rules> --decision <nom> --input '<json>' [--json]
-  feelc verify --rules <fichier.rules> [--json]
+  feelc run     --rules <fichier.rules|.ir.bin> --decision <nom> --input '<json>' [--json]
+  feelc compile --rules <fichier.rules> [-o <model.ir.bin>] [--json]
+  feelc verify  --rules <fichier.rules|.ir.bin> [--json]
   feelc check  --rules <fichier.rules> --claims <claims.json> [--json]
   feelc import --in <modele.dmn> [-o <sortie.rules>]
   feelc serve  --rules <fichier.rules> [--addr :8080] [--watch] [--strict]
@@ -135,13 +199,9 @@ func cmdCheck(args []string) error {
 	if *rulesPath == "" || *claimsPath == "" {
 		return fmt.Errorf("--rules et --claims sont requis")
 	}
-	src, err := os.ReadFile(*rulesPath)
+	cm, _, err := loadModel(*rulesPath, *asJSON)
 	if err != nil {
 		return err
-	}
-	cm, _, _, err := loader.CompileFile(*rulesPath, src)
-	if err != nil {
-		return reportCompileErr(err, *asJSON)
 	}
 	cf, err := os.ReadFile(*claimsPath)
 	if err != nil {
@@ -241,13 +301,9 @@ func cmdVerify(args []string) error {
 	if *rulesPath == "" {
 		return fmt.Errorf("--rules est requis")
 	}
-	src, err := os.ReadFile(*rulesPath)
+	_, rep, err := loadModel(*rulesPath, *asJSON)
 	if err != nil {
 		return err
-	}
-	_, _, rep, err := loader.CompileFile(*rulesPath, src)
-	if err != nil {
-		return reportCompileErr(err, *asJSON)
 	}
 
 	if *asJSON {
@@ -290,17 +346,13 @@ func cmdRun(args []string) error {
 	if *rulesPath == "" || *decision == "" {
 		return fmt.Errorf("--rules et --decision sont requis")
 	}
-	src, err := os.ReadFile(*rulesPath)
-	if err != nil {
-		return err
-	}
 	inputs, err := decodeInputs(*inputJSON)
 	if err != nil {
 		return fmt.Errorf("--input: %w", err)
 	}
-	cm, _, _, err := loader.CompileFile(*rulesPath, src)
+	cm, _, err := loadModel(*rulesPath, *asJSON)
 	if err != nil {
-		return reportCompileErr(err, *asJSON)
+		return err
 	}
 	out, err := engine.Eval(cm, *decision, inputs)
 	if err != nil {
