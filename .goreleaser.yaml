@@ -1,0 +1,36 @@
+version: 2
+project_name: feelc
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: feelc
+    main: ./cmd/feelc
+    binary: feelc
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.Version={{ .Version }}
+
+archives:
+  - id: feelc
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  # semantic-release fournit les notes de version ; goreleaser ne régénère pas de changelog.
+  disable: true
+
+release:
+  github:
+    owner: maxgfr
+    name: feelc

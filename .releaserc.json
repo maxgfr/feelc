@@ -1,0 +1,13 @@
+{
+  "branches": ["main"],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    [
+      "@semantic-release/exec",
+      {
+        "publishCmd": "git tag v${nextRelease.version} && git push origin v${nextRelease.version} && goreleaser release --clean"
+      }
+    ]
+  ]
+}

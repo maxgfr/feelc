@@ -17,10 +17,23 @@ les deux :
 - **Hot-reload.** Les règles sont des *données* : on les met à jour à chaud, sans recompiler le binaire.
 - **Auditable.** Chaque décision est rejouable (hash du modèle + trace d'explication citant la source).
 
+## Commandes
+
+```sh
+feelc run    --rules m.rules --decision <nom> --input '{…}' [--json]   # évaluer une décision
+feelc verify --rules m.rules [--json]                                  # vérif formelle (trous/conflits)
+feelc check  --rules m.rules --claims claims.json [--json]             # gate sémantique NL↔règle
+feelc import --in modele.dmn [-o m.rules]                              # importer du DMN XML
+feelc serve  --rules m.rules [--addr :8080] [--watch] [--strict]       # service HTTP + hot-reload
+```
+
 ## Statut
 
-🚧 En construction (voir le plan de développement par tranches). Le cœur (DSL → IR → VM) et la
-vérification arrivent en premier ; service hot-reload, interop DMN XML, gate sémantique et skill suivent.
+Cœur **opérationnel** : langage → compilateur → IR → VM déterministe (décimal exact), 7 hit policies,
+**vérification formelle** (complétude/conflits/règles mortes avec contre-exemples), **service HTTP +
+hot-reload**, **gate sémantique** (`check`), **import DMN XML**. 4 exemples de référence vérifiés.
+Skill d'autoring : [maxgfr/feelc-rules](https://github.com/maxgfr/feelc-rules).
+Reportés (ADR 0004) : BKM paramétré, extension SMT/Z3.
 
 ## Exemple
 

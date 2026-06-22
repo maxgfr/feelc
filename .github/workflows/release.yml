@@ -1,0 +1,31 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # créer tags + release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # semantic-release a besoin de tout l'historique
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          check-latest: true
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          install-only: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # semantic-release calcule la version, crée le tag, puis (via exec) goreleaser publie
+      # les binaires multi-OS/arch sur la release GitHub.
+      - run: npx --yes -p semantic-release -p @semantic-release/exec semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
