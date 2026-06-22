@@ -1,0 +1,83 @@
+package ir
+
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+
+	apd "github.com/cockroachdb/apd/v3"
+
+	"github.com/maxgfr/feelc/internal/decimal"
+)
+
+// Tag identifie le type dynamique d'une Value (FEEL est trivalent : null fait partie du jeu).
+type Tag uint8
+
+const (
+	TagNull Tag = iota
+	TagNumber
+	TagString
+	TagBool
+)
+
+// Value : valeur unboxée de taille fixe manipulée par la VM.
+// Pas d'interface{} dans le hot path (cf. plan). Les nombres sont décimaux exacts.
+type Value struct {
+	Tag  Tag
+	Num  *apd.Decimal
+	Str  string
+	Bool bool
+}
+
+func Null() Value             { return Value{Tag: TagNull} }
+func Num(d *apd.Decimal) Value { return Value{Tag: TagNumber, Num: d} }
+func Str(s string) Value      { return Value{Tag: TagString, Str: s} }
+func Bool(b bool) Value       { return Value{Tag: TagBool, Bool: b} }
+
+// FromAny convertit une entrée externe (map JSON-ish) en Value déterministe.
+// Les nombres repassent par leur représentation décimale pour rester exacts.
+func FromAny(v any) (Value, error) {
+	switch x := v.(type) {
+	case nil:
+		return Null(), nil
+	case string:
+		return Str(x), nil
+	case bool:
+		return Bool(x), nil
+	case int:
+		return Num(decimal.FromInt(int64(x))), nil
+	case int64:
+		return Num(decimal.FromInt(x)), nil
+	case float64:
+		d, err := decimal.Parse(strconv.FormatFloat(x, 'f', -1, 64))
+		if err != nil {
+			return Value{}, err
+		}
+		return Num(d), nil
+	case json.Number:
+		// Entrée JSON décodée avec UseNumber : on garde la repr exacte (pas de passage par float64).
+		d, err := decimal.Parse(x.String())
+		if err != nil {
+			return Value{}, err
+		}
+		return Num(d), nil
+	case *apd.Decimal:
+		return Num(x), nil
+	default:
+		return Value{}, fmt.Errorf("type d'entrée non supporté: %T", v)
+	}
+}
+
+// ToAny rend la Value sous une forme exploitable hors du moteur.
+func (v Value) ToAny() any {
+	switch v.Tag {
+	case TagNumber:
+		return v.Num
+	case TagString:
+		return v.Str
+	case TagBool:
+		return v.Bool
+	default:
+		return nil
+	}
+}

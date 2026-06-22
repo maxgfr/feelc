@@ -1,0 +1,23 @@
+# Binaries
+/feelc
+/dist/
+*.exe
+*.test
+*.out
+
+# IR artifacts
+*.ir.bin
+
+# Go
+/vendor/
+go.work
+go.work.sum
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Spike (throwaway)
+/spike/**/go.sum

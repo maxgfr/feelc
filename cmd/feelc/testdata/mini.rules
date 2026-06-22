@@ -1,0 +1,11 @@
+model "mini" {}
+
+input score : number
+
+decision eligibility : string {
+  needs: score
+  hit: first
+  #  score  => result
+     < 580   => "rejected"
+     -       => "approved"
+}
