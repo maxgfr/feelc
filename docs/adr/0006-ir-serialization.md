@@ -39,3 +39,8 @@ acceptent indifféremment une source ou un `.ir.bin`.
   (jamais conformer en silence).
 - Le `.ir.bin` ne porte **pas** les positions source (`Src`/`Line`/`Col`) : `explain` sur un binaire
   dégrade honnêtement (positions absentes).
+- **Robustesse (blob non fiable).** `Decode` ingère des `.ir.bin` arbitraires ; le décodeur borne
+  donc (a) toute longueur length-prefixed aux octets restants (`count()`) — pas de `make(..., n)`
+  géant depuis une taille corrompue → pas d'OOM ; (b) la profondeur de récursion
+  (`maxDecodeDepth`) — pas de débordement de pile fatal sur une imbrication TagList/Sub profonde.
+  Tout dépassement échoue franchement (jamais conformer en silence). Cf. revue adverse Tranche 4.

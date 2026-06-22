@@ -252,10 +252,16 @@ func (e *encoder) putValueSlice(xs []Value) {
 
 // --- décodeur ---
 
+// maxDecodeDepth borne la profondeur de récursion du décodeur (blob non fiable) : sinon un
+// blob minuscule à imbrication TagList/TagContext/Sub profonde provoque un stack overflow
+// FATAL non rattrapable par recover() (revue adverse). Jamais conformer en silence : on échoue.
+const maxDecodeDepth = 1000
+
 type decoder struct {
-	b   []byte
-	pos int
-	err error
+	b     []byte
+	pos   int
+	depth int
+	err   error
 }
 
 func (d *decoder) need(n int) ([]byte, bool) {
@@ -269,6 +275,21 @@ func (d *decoder) need(n int) ([]byte, bool) {
 	s := d.b[d.pos : d.pos+n]
 	d.pos += n
 	return s, true
+}
+
+// count lit une longueur (u32) et la BORNE par les octets restants : chaque élément consomme
+// au moins 1 octet, donc une longueur supérieure est forcément corrompue/malveillante. Évite
+// toute préallocation géante (`make(..., n)`) depuis une longueur non fiable (revue adverse).
+func (d *decoder) count() int {
+	n := d.getU32()
+	if d.err != nil {
+		return 0
+	}
+	if int64(n) > int64(len(d.b)-d.pos) {
+		d.err = fmt.Errorf("ir: longueur %d invalide (dépasse %d octets restants)", n, len(d.b)-d.pos)
+		return 0
+	}
+	return int(n)
 }
 
 func (d *decoder) getU8() uint8 {
@@ -308,17 +329,17 @@ func (d *decoder) getStr() string { return string(d.getBytes()) }
 func (d *decoder) getModel() *CompiledModel {
 	cm := &CompiledModel{Inputs: map[string]Type{}, Domains: map[string]Domain{}}
 	cm.Name = d.getStr()
-	nin := int(d.getU32())
+	nin := d.count()
 	for i := 0; i < nin && d.err == nil; i++ {
 		name := d.getStr()
 		cm.Inputs[name] = Type(d.getU8())
 	}
-	ndom := int(d.getU32())
+	ndom := d.count()
 	for i := 0; i < ndom && d.err == nil; i++ {
 		name := d.getStr()
 		cm.Domains[name] = d.getDomain()
 	}
-	ndec := int(d.getU32())
+	ndec := d.count()
 	for i := 0; i < ndec && d.err == nil; i++ {
 		cm.Decisions = append(cm.Decisions, d.getDecision())
 	}
@@ -333,7 +354,7 @@ func (d *decoder) getDomain() Domain {
 	dom.HiInf = d.getBool()
 	dom.LoOpen = d.getBool()
 	dom.HiOpen = d.getBool()
-	n := int(d.getU32())
+	n := d.count()
 	for i := 0; i < n && d.err == nil; i++ {
 		dom.Enum = append(dom.Enum, d.getValue())
 	}
@@ -344,7 +365,7 @@ func (d *decoder) getDecision() Decision {
 	dec := Decision{}
 	dec.Name = d.getStr()
 	dec.Kind = DecisionKind(d.getU8())
-	ndeps := int(d.getU32())
+	ndeps := d.count()
 	for i := 0; i < ndeps && d.err == nil; i++ {
 		dec.Deps = append(dec.Deps, d.getStr())
 	}
@@ -361,10 +382,10 @@ func (d *decoder) getTable() *DecisionTable {
 	t.Outputs = d.getStrSlice()
 	t.HitPolicy = HitPolicy(d.getU8())
 	t.Agg = Aggregation(d.getU8())
-	nr := int(d.getU32())
+	nr := d.count()
 	for i := 0; i < nr && d.err == nil; i++ {
 		var r Rule
-		nc := int(d.getU32())
+		nc := d.count()
 		for j := 0; j < nc && d.err == nil; j++ {
 			r.Conds = append(r.Conds, d.getCellTest())
 		}
@@ -382,13 +403,19 @@ func (d *decoder) getTable() *DecisionTable {
 }
 
 func (d *decoder) getCellTest() CellTest {
+	d.depth++
+	defer func() { d.depth-- }()
+	if d.depth > maxDecodeDepth {
+		d.err = fmt.Errorf("ir: imbrication de cellules trop profonde (> %d)", maxDecodeDepth)
+		return CellTest{}
+	}
 	c := CellTest{Op: Op(d.getU8())}
 	c.A = d.getValue()
 	c.B = d.getValue()
 	c.AOpen = d.getBool()
 	c.BOpen = d.getBool()
 	c.Negate = d.getBool()
-	n := int(d.getU32())
+	n := d.count()
 	for i := 0; i < n && d.err == nil; i++ {
 		c.Sub = append(c.Sub, d.getCellTest())
 	}
@@ -401,7 +428,7 @@ func (d *decoder) getProg() *ExprProgram {
 		return nil
 	}
 	p := &ExprProgram{}
-	nc := int(d.getU32())
+	nc := d.count()
 	for i := 0; i < nc && d.err == nil; i++ {
 		op := Opcode(d.getU8())
 		arg := d.getU32()
@@ -414,6 +441,12 @@ func (d *decoder) getProg() *ExprProgram {
 }
 
 func (d *decoder) getValue() Value {
+	d.depth++
+	defer func() { d.depth-- }()
+	if d.depth > maxDecodeDepth {
+		d.err = fmt.Errorf("ir: imbrication de valeurs trop profonde (> %d)", maxDecodeDepth)
+		return Value{}
+	}
 	v := Value{Tag: Tag(d.getU8())}
 	switch v.Tag {
 	case TagNumber:
@@ -430,7 +463,7 @@ func (d *decoder) getValue() Value {
 	case TagBool:
 		v.Bool = d.getBool()
 	case TagContext:
-		n := int(d.getU32())
+		n := d.count()
 		v.Ctx = make(map[string]Value, n)
 		for i := 0; i < n && d.err == nil; i++ {
 			name := d.getStr()
@@ -443,7 +476,7 @@ func (d *decoder) getValue() Value {
 }
 
 func (d *decoder) getStrSlice() []string {
-	n := int(d.getU32())
+	n := d.count()
 	if n == 0 {
 		return nil
 	}
@@ -455,7 +488,7 @@ func (d *decoder) getStrSlice() []string {
 }
 
 func (d *decoder) getValueSlice() []Value {
-	n := int(d.getU32())
+	n := d.count()
 	if n == 0 {
 		return nil
 	}

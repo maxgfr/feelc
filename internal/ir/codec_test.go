@@ -2,12 +2,62 @@ package ir_test
 
 import (
 	"bytes"
+	"encoding/binary"
+	"strings"
 	"testing"
 
 	"github.com/maxgfr/feelc/internal/compiler"
 	"github.com/maxgfr/feelc/internal/dsl"
 	"github.com/maxgfr/feelc/internal/ir"
 )
+
+func be32(x uint32) []byte {
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b, x)
+	return b
+}
+
+// header valide + un modèle dont la 1re Domain.Lo est une Value à décoder ; on contrôle ensuite
+// les octets de cette Value pour les blobs malveillants ci-dessous.
+func craftToFirstDomainValue() []byte {
+	var b []byte
+	b = append(b, 'F', 'L', 'I', 'R', 0x00, 0x01) // magic + version 1
+	b = append(b, be32(0)...)                      // Name = ""
+	b = append(b, be32(0)...)                      // 0 inputs
+	b = append(b, be32(1)...)                      // 1 domain
+	b = append(b, be32(0)...)                      // domain name = ""
+	b = append(b, 0)                               // Domain.Kind
+	return b // suit : Lo = getValue(...)
+}
+
+// DoS d'allocation : une longueur géante ne doit JAMAIS déclencher un make(..., n) massif
+// (revue adverse) — count() la borne aux octets restants et échoue franchement.
+func TestDecodeRejectsHugeLength(t *testing.T) {
+	b := craftToFirstDomainValue()
+	b = append(b, 5)                   // Lo : tag TagList
+	b = append(b, be32(0xFFFFFFFF)...) // count = 4 milliards (aucun octet derrière)
+	if _, err := ir.Decode(b); err == nil {
+		t.Fatal("longueur géante : Decode aurait dû échouer sans allouer")
+	}
+}
+
+// DoS de récursion : une imbrication profonde ne doit pas faire déborder la pile (panic fatale
+// non rattrapable) ; au-delà de maxDecodeDepth, échec franc.
+func TestDecodeRejectsDeepNesting(t *testing.T) {
+	b := craftToFirstDomainValue()
+	for i := 0; i < 1100; i++ { // > maxDecodeDepth (1000)
+		b = append(b, 5)          // TagList
+		b = append(b, be32(1)...) // count 1 -> un élément (lui-même imbriqué)
+	}
+	b = append(b, 0) // valeur la plus interne : TagNull
+	_, err := ir.Decode(b)
+	if err == nil {
+		t.Fatal("imbrication profonde : Decode aurait dû échouer (garde de profondeur)")
+	}
+	if !strings.Contains(err.Error(), "profonde") {
+		t.Errorf("attendu une erreur de profondeur, obtenu %q", err.Error())
+	}
+}
 
 // richSrc exerce un maximum de formes encodables : domaines (numérique + enum), table
 // PRIORITY, sortie context multi-colonnes, cellule Op=Prog, COLLECT sum, literal-expr.
