@@ -17,50 +17,50 @@ func be32(x uint32) []byte {
 	return b
 }
 
-// header valide + un modèle dont la 1re Domain.Lo est une Value à décoder ; on contrôle ensuite
-// les octets de cette Value pour les blobs malveillants ci-dessous.
+// valid header + a model whose first Domain.Lo is a Value to decode; we then control
+// the bytes of that Value for the malicious blobs below.
 func craftToFirstDomainValue() []byte {
 	var b []byte
 	b = append(b, 'F', 'L', 'I', 'R', 0x00, 0x01) // magic + version 1
-	b = append(b, be32(0)...)                      // Name = ""
-	b = append(b, be32(0)...)                      // 0 inputs
-	b = append(b, be32(1)...)                      // 1 domain
-	b = append(b, be32(0)...)                      // domain name = ""
-	b = append(b, 0)                               // Domain.Kind
-	return b // suit : Lo = getValue(...)
+	b = append(b, be32(0)...)                     // Name = ""
+	b = append(b, be32(0)...)                     // 0 inputs
+	b = append(b, be32(1)...)                     // 1 domain
+	b = append(b, be32(0)...)                     // domain name = ""
+	b = append(b, 0)                              // Domain.Kind
+	return b                                      // follows: Lo = getValue(...)
 }
 
-// DoS d'allocation : une longueur géante ne doit JAMAIS déclencher un make(..., n) massif
-// (revue adverse) — count() la borne aux octets restants et échoue franchement.
+// Allocation DoS: a giant length must NEVER trigger a massive make(..., n)
+// (adversarial review) — count() bounds it to the remaining bytes and fails hard.
 func TestDecodeRejectsHugeLength(t *testing.T) {
 	b := craftToFirstDomainValue()
-	b = append(b, 5)                   // Lo : tag TagList
-	b = append(b, be32(0xFFFFFFFF)...) // count = 4 milliards (aucun octet derrière)
+	b = append(b, 5)                   // Lo: tag TagList
+	b = append(b, be32(0xFFFFFFFF)...) // count = 4 billion (no byte behind)
 	if _, err := ir.Decode(b); err == nil {
-		t.Fatal("longueur géante : Decode aurait dû échouer sans allouer")
+		t.Fatal("giant length: Decode should have failed without allocating")
 	}
 }
 
-// DoS de récursion : une imbrication profonde ne doit pas faire déborder la pile (panic fatale
-// non rattrapable) ; au-delà de maxDecodeDepth, échec franc.
+// Recursion DoS: deep nesting must not overflow the stack (fatal unrecoverable
+// panic); beyond maxDecodeDepth, fail hard.
 func TestDecodeRejectsDeepNesting(t *testing.T) {
 	b := craftToFirstDomainValue()
 	for i := 0; i < 1100; i++ { // > maxDecodeDepth (1000)
 		b = append(b, 5)          // TagList
-		b = append(b, be32(1)...) // count 1 -> un élément (lui-même imbriqué)
+		b = append(b, be32(1)...) // count 1 -> one element (itself nested)
 	}
-	b = append(b, 0) // valeur la plus interne : TagNull
+	b = append(b, 0) // innermost value: TagNull
 	_, err := ir.Decode(b)
 	if err == nil {
-		t.Fatal("imbrication profonde : Decode aurait dû échouer (garde de profondeur)")
+		t.Fatal("deep nesting: Decode should have failed (depth guard)")
 	}
-	if !strings.Contains(err.Error(), "profonde") {
-		t.Errorf("attendu une erreur de profondeur, obtenu %q", err.Error())
+	if !strings.Contains(err.Error(), "deep") {
+		t.Errorf("expected a depth error, got %q", err.Error())
 	}
 }
 
-// richSrc exerce un maximum de formes encodables : domaines (numérique + enum), table
-// PRIORITY, sortie context multi-colonnes, cellule Op=Prog, COLLECT sum, literal-expr.
+// richSrc exercises a maximum of encodable forms: domains (numeric + enum), PRIORITY
+// table, multi-column context output, cell Op=Prog, COLLECT sum, literal-expr.
 const richSrc = `model "rich" {}
 input score : number in [300..850]
 input cat : string in { "a", "b" }
@@ -108,8 +108,8 @@ func compileRich(t *testing.T) *ir.CompiledModel {
 	return cm
 }
 
-// Encode->Decode->Encode est stable bit-à-bit (le codec est canonique et déterministe,
-// y compris pour les décimaux exacts via MarshalText et l'ordre trié des maps).
+// Encode->Decode->Encode is bit-for-bit stable (the codec is canonical and deterministic,
+// including for exact decimals via MarshalText and the sorted order of maps).
 func TestEncodeDecodeRoundTripStable(t *testing.T) {
 	cm := compileRich(t)
 	enc1, err := ir.Encode(cm)
@@ -125,12 +125,12 @@ func TestEncodeDecodeRoundTripStable(t *testing.T) {
 		t.Fatalf("re-Encode: %v", err)
 	}
 	if !bytes.Equal(enc1, enc2) {
-		t.Fatalf("encodage non stable au round-trip (%d vs %d octets)", len(enc1), len(enc2))
+		t.Fatalf("encoding not stable on round-trip (%d vs %d bytes)", len(enc1), len(enc2))
 	}
 }
 
-// Encode est déterministe sur deux compilations indépendantes de la MÊME source
-// (ordre des maps trié → pas d'aléa).
+// Encode is deterministic across two independent compilations of the SAME source
+// (sorted map order → no randomness).
 func TestEncodeDeterministicAcrossCompiles(t *testing.T) {
 	a, err := ir.Encode(compileRich(t))
 	if err != nil {
@@ -141,11 +141,11 @@ func TestEncodeDeterministicAcrossCompiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(a, b) {
-		t.Fatal("deux compilations de la même source produisent des encodages différents")
+		t.Fatal("two compilations of the same source produce different encodings")
 	}
 }
 
-// Hash est stable et reflète l'IR (décodé == original).
+// Hash is stable and reflects the IR (decoded == original).
 func TestHashStableAndReflectsDecoded(t *testing.T) {
 	cm := compileRich(t)
 	h1, err := ir.Hash(cm)
@@ -159,11 +159,11 @@ func TestHashStableAndReflectsDecoded(t *testing.T) {
 		t.Fatal(err)
 	}
 	if h1 != h2 {
-		t.Fatalf("hash original %x != hash décodé %x", h1, h2)
+		t.Fatalf("original hash %x != decoded hash %x", h1, h2)
 	}
 }
 
-// Une modification sémantique du modèle change le hash.
+// A semantic change to the model changes the hash.
 func TestHashChangesWithModel(t *testing.T) {
 	cm := compileRich(t)
 	h1, _ := ir.Hash(cm)
@@ -181,16 +181,16 @@ decision band : string {
 	cm2, _ := compiler.Compile(m)
 	h2, _ := ir.Hash(cm2)
 	if h1 == h2 {
-		t.Fatal("deux modèles différents ont le même hash")
+		t.Fatal("two different models have the same hash")
 	}
 }
 
-// Un mauvais magic est rejeté proprement (jamais conformer en silence).
+// A bad magic is rejected cleanly (never conform silently).
 func TestDecodeRejectsBadMagic(t *testing.T) {
 	if _, err := ir.Decode([]byte("garbage data here")); err == nil {
-		t.Fatal("Decode aurait dû rejeter un blob non-feelc")
+		t.Fatal("Decode should have rejected a non-feelc blob")
 	}
 	if _, err := ir.Decode(nil); err == nil {
-		t.Fatal("Decode(nil) aurait dû échouer")
+		t.Fatal("Decode(nil) should have failed")
 	}
 }

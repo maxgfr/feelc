@@ -1,8 +1,8 @@
-// Package loader lit les sources .rules, applique le pipeline COMPILE-VERIFY-THEN-SWAP,
-// et surveille le fichier (fsnotify + debounce) pour le hot-reload.
+// Package loader reads .rules sources, applies the COMPILE-VERIFY-THEN-SWAP pipeline,
+// and watches the file (fsnotify + debounce) for hot-reload.
 //
-// RÈGLE D'OR : on ne publie JAMAIS un modèle invalide. Une source qui ne compile pas (ou, en
-// mode strict, qui a des bloqueurs de vérification) laisse le service sur l'ancien modèle sain.
+// GOLDEN RULE: we NEVER publish an invalid model. A source that does not compile (or, in
+// strict mode, that has verification blockers) leaves the service on the previous healthy model.
 package loader
 
 import (
@@ -22,25 +22,25 @@ import (
 	"github.com/maxgfr/feelc/internal/verify"
 )
 
-// Compile parse + compile + vérifie une source (sans nom de fichier).
+// Compile parses + compiles + verifies a source (without a file name).
 func Compile(src []byte) (*ir.CompiledModel, string, *verify.Report, error) {
 	return CompileFile("", src)
 }
 
-// CompileFile est Compile avec un nom de fichier propagé sur les erreurs structurées
-// (diag.Error.File), pour des diagnostics « file:line:col: ... » exploitables.
+// CompileFile is Compile with a file name propagated onto structured errors
+// (diag.Error.File), for usable "file:line:col: ..." diagnostics.
 func CompileFile(path string, src []byte) (*ir.CompiledModel, string, *verify.Report, error) {
 	m, err := dsl.ParseFile(path, string(src))
 	if err != nil {
-		return nil, "", nil, err // déjà stampé par ParseFile
+		return nil, "", nil, err // already stamped by ParseFile
 	}
 	cm, err := compiler.Compile(m)
 	if err != nil {
 		return nil, "", nil, diag.WithFileIfDiag(err, path)
 	}
 	rep := verify.Verify(cm)
-	// Hash = identité CANONIQUE du modèle compilé (hex(ir.Hash)), pas du texte source :
-	// deux sources qui compilent vers le même IR partagent le hash (breaking voulu, ADR 0006).
+	// Hash = CANONICAL identity of the compiled model (hex(ir.Hash)), not of the source text:
+	// two sources that compile to the same IR share the hash (intended breaking change, ADR 0006).
 	h, err := ir.Hash(cm)
 	if err != nil {
 		return nil, "", nil, err
@@ -48,8 +48,8 @@ func CompileFile(path string, src []byte) (*ir.CompiledModel, string, *verify.Re
 	return cm, hex.EncodeToString(h[:]), rep, nil
 }
 
-// Reload lit un fichier et le publie dans reg SI valide. En mode strict, des bloqueurs de
-// vérification empêchent la publication. Sur erreur, le modèle courant est conservé.
+// Reload reads a file and publishes it into reg IF valid. In strict mode, verification
+// blockers prevent publication. On error, the current model is kept.
 func Reload(path string, reg *registry.Registry, strict bool) (*registry.Entry, *verify.Report, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
@@ -57,16 +57,16 @@ func Reload(path string, reg *registry.Registry, strict bool) (*registry.Entry, 
 	}
 	cm, hash, rep, err := CompileFile(path, src)
 	if err != nil {
-		return nil, nil, err // erreur de compilation -> pas de swap
+		return nil, nil, err // compilation error -> no swap
 	}
 	if strict && rep.Blockers() > 0 {
-		return nil, rep, fmt.Errorf("%d bloqueur(s) de vérification (mode strict) — modèle non publié", rep.Blockers())
+		return nil, rep, fmt.Errorf("%d verification blocker(s) (strict mode) — model not published", rep.Blockers())
 	}
 	return reg.StoreWithSource(cm, hash, src), rep, nil
 }
 
-// Watch surveille le fichier (via son répertoire, pour survivre aux write-rename des éditeurs)
-// et déclenche Reload après un debounce. Renvoie une fonction d'arrêt.
+// Watch watches the file (via its directory, to survive editor write-rename operations)
+// and triggers Reload after a debounce. Returns a stop function.
 func Watch(path string, reg *registry.Registry, strict bool, onReload func(*registry.Entry, *verify.Report, error)) (func() error, error) {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {

@@ -1,7 +1,7 @@
 {
   "name": "feelc-rules",
   "version": "0.2.0",
-  "description": "Skill portable : rédiger, vérifier et tester des règles métier dans le langage feelc (DMN/FEEL compilé, déterministe). L'IA écrit le DSL ; le binaire feelc est l'oracle.",
+  "description": "Portable skill: write, verify and test business rules in the feelc language (compiled DMN/FEEL, deterministic). The AI writes the DSL; the feelc binary is the oracle.",
   "license": "Apache-2.0",
   "type": "module",
   "author": "maxgfr",

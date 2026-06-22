@@ -42,8 +42,8 @@ func cell(tr *explain.Trace, input string) *struct {
 	return nil
 }
 
-// La règle gagnante et la cellule justifiante d'un refus (score insuffisant) sont remontées,
-// avec la position source et la valeur de la colonne.
+// The winning rule and the justifying cell of a rejection (insufficient score) are surfaced,
+// along with the source position and the column value.
 func TestExplainCreditRejectedLowScore(t *testing.T) {
 	cm := loadCredit(t)
 	tr, err := explain.Explain(cm, "eligibility", map[string]any{
@@ -53,28 +53,28 @@ func TestExplainCreditRejectedLowScore(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !tr.Matched || tr.Fallback {
-		t.Fatalf("attendu un match (pas de fallback), trace=%+v", tr)
+		t.Fatalf("expected a match (no fallback), trace=%+v", tr)
 	}
 	if tr.HitPolicy != "first" {
-		t.Errorf("hitPolicy = %q, attendu first", tr.HitPolicy)
+		t.Errorf("hitPolicy = %q, expected first", tr.HitPolicy)
 	}
 	out, ok := tr.Output.(map[string]any)
-	if !ok || out["reason"] != "score insuffisant" || out["eligible"] != false {
-		t.Errorf("sortie = %+v, attendu eligible=false reason=\"score insuffisant\"", tr.Output)
+	if !ok || out["reason"] != "insufficient score" || out["eligible"] != false {
+		t.Errorf("output = %+v, expected eligible=false reason=\"insufficient score\"", tr.Output)
 	}
 	c := cell(tr, "credit_score")
 	if c == nil {
-		t.Fatalf("cellule justifiante credit_score absente, cells=%+v", tr.Cells)
+		t.Fatalf("justifying cell credit_score missing, cells=%+v", tr.Cells)
 	}
 	if c.Value != "500" {
-		t.Errorf("valeur credit_score = %q, attendu 500", c.Value)
+		t.Errorf("credit_score value = %q, expected 500", c.Value)
 	}
 	if c.Src == "" {
-		t.Errorf("la cellule justifiante doit porter son texte source (Src)")
+		t.Errorf("the justifying cell must carry its source text (Src)")
 	}
 }
 
-// Cas approuvé : la règle gagnante diffère.
+// Approved case: the winning rule differs.
 func TestExplainCreditApproved(t *testing.T) {
 	cm := loadCredit(t)
 	tr, err := explain.Explain(cm, "eligibility", map[string]any{
@@ -84,14 +84,14 @@ func TestExplainCreditApproved(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, _ := tr.Output.(map[string]any)
-	if out["eligible"] != true || out["reason"] != "approuvé" {
-		t.Errorf("sortie = %+v, attendu eligible=true reason=\"approuvé\"", tr.Output)
+	if out["eligible"] != true || out["reason"] != "approved" {
+		t.Errorf("output = %+v, expected eligible=true reason=\"approved\"", tr.Output)
 	}
 }
 
-// Régression (revue adverse) : sous FIRST, Trace doit COURT-CIRCUITER comme Eval. La règle 1
-// (géométrique) matche pour x=0 ; la règle 2 a une cellule Op=Prog qui erre (division par zéro).
-// Eval renvoie "zero" sans toucher la règle 2 → Trace ne doit PAS errer non plus.
+// Regression (adversarial review): under FIRST, Trace must SHORT-CIRCUIT like Eval. Rule 1
+// (geometric) matches for x=0; rule 2 has a cell Op=Prog that errors (division by zero).
+// Eval returns "zero" without touching rule 2 -> Trace must NOT error either.
 func TestExplainFirstShortCircuitsBeforeErroringRule(t *testing.T) {
 	m, err := dsl.Parse(`model "m" {}
 input x : number
@@ -110,14 +110,14 @@ decision d : string {
 	}
 	tr, err := explain.Explain(cm, "d", map[string]any{"x": 0})
 	if err != nil {
-		t.Fatalf("Trace a erré là où Eval réussit (divergence FIRST): %v", err)
+		t.Fatalf("Trace errored where Eval succeeds (FIRST divergence): %v", err)
 	}
 	if tr.RuleIndex != 1 || tr.Output != "zero" {
-		t.Errorf("attendu règle #1 -> \"zero\", obtenu #%d -> %v", tr.RuleIndex, tr.Output)
+		t.Errorf("expected rule #1 -> \"zero\", got #%d -> %v", tr.RuleIndex, tr.Output)
 	}
 }
 
-// Une décision literal-expression (dti) est marquée 'non géométrique' sans mentir, avec sa source.
+// A literal-expression decision (dti) is marked 'not geometric' without lying, with its source.
 func TestExplainLiteralExprIsHonest(t *testing.T) {
 	cm := loadCredit(t)
 	tr, err := explain.Explain(cm, "dti", map[string]any{
@@ -127,12 +127,12 @@ func TestExplainLiteralExprIsHonest(t *testing.T) {
 		t.Fatal(err)
 	}
 	if tr.Kind != "literal-expr" {
-		t.Errorf("kind = %q, attendu literal-expr", tr.Kind)
+		t.Errorf("kind = %q, expected literal-expr", tr.Kind)
 	}
 	if !tr.NotGeometric {
-		t.Errorf("une expression doit être marquée non géométrique (honnêteté)")
+		t.Errorf("an expression must be marked not geometric (honesty)")
 	}
 	if tr.ExprSrc == "" {
-		t.Errorf("la source de l'expression (ExprSrc) doit être renseignée")
+		t.Errorf("the expression source (ExprSrc) must be set")
 	}
 }

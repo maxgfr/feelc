@@ -1,6 +1,6 @@
-// Package registry conserve le modèle compilé courant et permet un swap ATOMIQUE et
-// lock-free (atomic.Pointer). Les requêtes en vol terminent sur leur snapshot (pas de tearing) ;
-// un historique borné permet le rollback.
+// Package registry holds the current compiled model and allows an ATOMIC, lock-free
+// swap (atomic.Pointer). In-flight requests complete on their snapshot (no tearing);
+// a bounded history enables rollback.
 package registry
 
 import (
@@ -12,15 +12,15 @@ import (
 
 const maxHistory = 8
 
-// Entry : un modèle compilé estampillé (version monotone + hash de contenu pour l'audit/repro).
+// Entry: a stamped compiled model (monotonic version + content hash for audit/repro).
 type Entry struct {
 	Model   *ir.CompiledModel
 	Version int64
 	Hash    string
-	Source  []byte // source .rules à l'origine du modèle (pour GET /v1/source ; nil si inconnue)
+	Source  []byte // .rules source the model came from (for GET /v1/source; nil if unknown)
 }
 
-// Registry : porteur thread-safe du modèle courant.
+// Registry: thread-safe holder of the current model.
 type Registry struct {
 	cur     atomic.Pointer[Entry]
 	ver     atomic.Int64
@@ -30,15 +30,15 @@ type Registry struct {
 
 func New() *Registry { return &Registry{} }
 
-// Current renvoie le modèle courant (lecture lock-free ; nil si aucun chargé).
+// Current returns the current model (lock-free read; nil if none loaded).
 func (r *Registry) Current() *Entry { return r.cur.Load() }
 
-// Store publie un nouveau modèle (swap O(1) lock-free) et l'ajoute à l'historique.
+// Store publishes a new model (O(1) lock-free swap) and adds it to the history.
 func (r *Registry) Store(cm *ir.CompiledModel, hash string) *Entry {
 	return r.StoreWithSource(cm, hash, nil)
 }
 
-// StoreWithSource est Store en conservant aussi la source .rules (servie par GET /v1/source).
+// StoreWithSource is Store while also keeping the .rules source (served by GET /v1/source).
 func (r *Registry) StoreWithSource(cm *ir.CompiledModel, hash string, src []byte) *Entry {
 	e := &Entry{Model: cm, Version: r.ver.Add(1), Hash: hash, Source: src}
 	r.cur.Store(e)
@@ -51,7 +51,7 @@ func (r *Registry) StoreWithSource(cm *ir.CompiledModel, hash string, src []byte
 	return e
 }
 
-// Rollback republie l'avant-dernier modèle de l'historique (nouvelle version).
+// Rollback republishes the second-to-last model in the history (new version).
 func (r *Registry) Rollback() (*Entry, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

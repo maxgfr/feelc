@@ -1,6 +1,6 @@
 # ADR 0002 — Decimal arithmetic: cockroachdb/apd vs in-house int128
 
-- **Status**: accepted (Tranche 0, 2026-06-22)
+- **Status**: accepted (Slice 0, 2026-06-22)
 - **Deciders**: maxgfr
 
 ## Context
@@ -37,4 +37,4 @@ rounding + parsing/formatting = a project in itself, a source of subtle determin
 - Determinism and exactness **acquired immediately**, without weeks of fragile numerical code.
 - One more Apache-2.0 dependency (compatible with feelc's Apache-2.0 license).
 - The VM's `Value` will carry an apd decimal (or a compact view of it); the allocation cost
-  of apd in the hot path will be **measured** in Tranche 4/5 and optimized if necessary (pooling, or int128).
+  of apd in the hot path will be **measured** in Slice 4/5 and optimized if necessary (pooling, or int128).

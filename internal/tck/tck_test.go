@@ -10,9 +10,9 @@ import (
 	"github.com/maxgfr/feelc/internal/tck"
 )
 
-// Régression (revue adverse) : une erreur d'exécution sur un modèle COMPILÉ (ex: division par
-// zéro) est une NON-CONFORMITÉ → FAIL, pas un skip (sinon on gonfle le % en silence). Seules les
-// dépendances non câblées par l'import sont skippées.
+// Regression (adversarial review): a runtime error on a COMPILED model (e.g. division by
+// zero) is a NON-CONFORMANCE -> FAIL, not a skip (otherwise we silently inflate the %). Only
+// dependencies not wired by the import are skipped.
 func TestRunClassifiesEvalErrorAsFail(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "dz")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -37,31 +37,31 @@ func TestRunClassifiesEvalErrorAsFail(t *testing.T) {
 		t.Fatal(err)
 	}
 	if rep.Failed != 1 || rep.Skipped != 0 {
-		t.Errorf("division par zéro = NON-CONFORMITÉ : attendu 1 fail / 0 skip, obtenu %d fail / %d skip ; %+v",
+		t.Errorf("division by zero = NON-CONFORMANCE: expected 1 fail / 0 skip, got %d fail / %d skip ; %+v",
 			rep.Failed, rep.Skipped, rep.Cases)
 	}
 }
 
-// Décodeur de valeur TCK : exactitude décimale (json.Number), types de base, et skip honnête
-// des types non supportés.
+// TCK value decoder: decimal exactness (json.Number), basic types, and honest skip
+// of unsupported types.
 func TestRunGradeFixture(t *testing.T) {
 	rep, err := tck.Run("../../testdata/dmn-tck")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if rep.Passed != 3 {
-		t.Errorf("passed = %d, attendu 3 (F/B/A) ; rapport=%+v", rep.Passed, rep.Cases)
+		t.Errorf("passed = %d, expected 3 (F/B/A) ; report=%+v", rep.Passed, rep.Cases)
 	}
 	if rep.Failed != 0 {
-		t.Errorf("failed = %d, attendu 0 ; rapport=%+v", rep.Failed, rep.Cases)
+		t.Errorf("failed = %d, expected 0 ; report=%+v", rep.Failed, rep.Cases)
 	}
 	if rep.Skipped != 1 {
-		t.Errorf("skipped = %d, attendu 1 (valeur date) ; rapport=%+v", rep.Skipped, rep.Cases)
+		t.Errorf("skipped = %d, expected 1 (date value) ; report=%+v", rep.Skipped, rep.Cases)
 	}
 	if c := rep.Conformance(); c != 100 {
-		t.Errorf("conformité = %.1f, attendu 100 (les skips ne comptent pas)", c)
+		t.Errorf("conformance = %.1f, expected 100 (skips do not count)", c)
 	}
-	// Le skip porte une raison (jamais silencieux).
+	// The skip carries a reason (never silent).
 	var skipReason string
 	for _, c := range rep.Cases {
 		if c.Status == tck.Skipped {
@@ -69,11 +69,11 @@ func TestRunGradeFixture(t *testing.T) {
 		}
 	}
 	if skipReason == "" || !strings.Contains(skipReason, "date") {
-		t.Errorf("le skip doit mentionner le type date, obtenu %q", skipReason)
+		t.Errorf("the skip must mention the date type, got %q", skipReason)
 	}
 }
 
-// Le rapport est sérialisable en JSON (consommé par --json).
+// The report is JSON-serializable (consumed by --json).
 func TestReportJSON(t *testing.T) {
 	rep, err := tck.Run("../../testdata/dmn-tck")
 	if err != nil {
@@ -84,6 +84,6 @@ func TestReportJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(b), `"passed"`) || !strings.Contains(string(b), `"cases"`) {
-		t.Errorf("JSON inattendu: %s", b)
+		t.Errorf("unexpected JSON: %s", b)
 	}
 }

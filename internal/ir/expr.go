@@ -1,18 +1,18 @@
 package ir
 
-// Opcode : jeu d'instructions de la VM d'expressions FEEL (couche 3 de l'IR).
-// Bytecode plat -> jamais de tree-walking au runtime (cf. plan). Étendu au fil des tranches.
+// Opcode: instruction set of the FEEL expression VM (layer 3 of the IR).
+// Flat bytecode -> never tree-walking at runtime (cf. plan). Extended as slices are added.
 type Opcode uint8
 
 const (
-	OpPushConst Opcode = iota // empile Consts[Arg]
-	OpLoadVar                 // empile la valeur de Vars[Arg] (input ou décision amont)
-	OpLoadInput               // empile la valeur de colonne courante '?' (cellules Op=Prog)
+	OpPushConst Opcode = iota // push Consts[Arg]
+	OpLoadVar                 // push the value of Vars[Arg] (input or upstream decision)
+	OpLoadInput               // push the value of the current column '?' (Op=Prog cells)
 	OpAdd
 	OpSub
 	OpMul
-	OpDivOp // division décimale exacte
-	OpNeg   // négation arithmétique unaire
+	OpDivOp // exact decimal division
+	OpNeg   // unary arithmetic negation
 	OpEqOp
 	OpNeOp
 	OpLtOp
@@ -22,23 +22,23 @@ const (
 	OpAnd
 	OpOr
 	OpNot
-	OpJmpFalse // saut conditionnel (if) : dépile un booléen, saute à Arg si faux
-	OpJmp      // saut inconditionnel à Arg
-	OpFloor    // arrondi vers -∞ (built-in floor, mono-arg)
-	OpCeil     // arrondi vers +∞ (built-in ceiling, mono-arg)
-	OpRound    // arrondi à l'entier le plus proche, HALF_EVEN (built-in round, mono-arg)
+	OpJmpFalse // conditional jump (if): pops a boolean, jumps to Arg if false
+	OpJmp      // unconditional jump to Arg
+	OpFloor    // round toward -∞ (built-in floor, single-arg)
+	OpCeil     // round toward +∞ (built-in ceiling, single-arg)
+	OpRound    // round to the nearest integer, HALF_EVEN (built-in round, single-arg)
 )
 
-// Instr : une instruction (opcode + argument entier dense).
+// Instr: an instruction (opcode + dense integer argument).
 type Instr struct {
 	Op  Opcode
 	Arg uint32
 }
 
-// ExprProgram : programme bytecode d'une expression FEEL (cellule Op=Prog ou décision literal-expr).
+// ExprProgram: bytecode program of a FEEL expression (Op=Prog cell or literal-expr decision).
 type ExprProgram struct {
 	Code     []Instr
 	Consts   []Value
-	Vars     []string // noms référencés ; l'Arg de OpLoadVar indexe ici
+	Vars     []string // referenced names; the Arg of OpLoadVar indexes here
 	MaxStack int
 }

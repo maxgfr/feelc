@@ -24,17 +24,17 @@ const gradeDMN = `<?xml version="1.0" encoding="UTF-8"?>
   </decision>
 </definitions>`
 
-// Round-trip : DMN XML -> import -> DSL -> (parse+compile+exécution) via engine.Run.
+// Round-trip: DMN XML -> import -> DSL -> (parse+compile+execution) via engine.Run.
 func TestImportRoundTrip(t *testing.T) {
 	rules, warns, err := dmnxml.Import([]byte(gradeDMN))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(warns) != 0 {
-		t.Logf("avertissements: %v", warns)
+		t.Logf("warnings: %v", warns)
 	}
 	if !strings.Contains(rules, "decision grade : string") || !strings.Contains(rules, "hit: first") {
-		t.Fatalf("DSL généré inattendu:\n%s", rules)
+		t.Fatalf("unexpected generated DSL:\n%s", rules)
 	}
 	for _, c := range []struct {
 		score int
@@ -42,10 +42,10 @@ func TestImportRoundTrip(t *testing.T) {
 	}{{30, "F"}, {65, "B"}, {90, "A"}} {
 		got, err := engine.Run(rules, "grade", map[string]any{"score": c.score})
 		if err != nil {
-			t.Fatalf("score=%d sur DSL importé: %v\n%s", c.score, err, rules)
+			t.Fatalf("score=%d on imported DSL: %v\n%s", c.score, err, rules)
 		}
 		if got != c.want {
-			t.Errorf("grade(%d) = %v, attendu %q", c.score, got, c.want)
+			t.Errorf("grade(%d) = %v, expected %q", c.score, got, c.want)
 		}
 	}
 }

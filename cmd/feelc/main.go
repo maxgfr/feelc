@@ -1,6 +1,6 @@
-// Command feelc : le binaire du moteur de règles feelc.
-// Tranche 1 : sous-commande `run` (évaluer une décision sur des entrées). Les autres
-// sous-commandes (compile/verify/check/explain/fmt/serve...) arrivent dans les tranches suivantes.
+// Command feelc: the feelc rules engine binary.
+// Slice 1: `run` subcommand (evaluate a decision against inputs). The other
+// subcommands (compile/verify/check/explain/fmt/serve...) arrive in later slices.
 package main
 
 import (
@@ -34,14 +34,14 @@ import (
 	"github.com/maxgfr/feelc/internal/verify"
 )
 
-// errAlreadyReported signale à main() qu'une erreur a déjà été rendue (ex: JSON
-// structuré sur stdout) : exit 1 sans réémettre de texte.
+// errAlreadyReported signals to main() that an error has already been rendered (e.g. structured
+// JSON on stdout): exit 1 without re-emitting any text.
 var errAlreadyReported = errors.New("")
 
-// reportCompileErr rend une erreur de compilation. En mode --json, si l'erreur est un
-// *diag.Error, l'émet en objet JSON {file,line,col,code,message,suggestion} sur stdout
-// (consommable par la skill) et renvoie errAlreadyReported ; sinon renvoie l'erreur telle
-// quelle (rendue en texte « file:line:col: message » par main).
+// reportCompileErr renders a compilation error. In --json mode, if the error is a
+// *diag.Error, it emits it as a JSON object {file,line,col,code,message,suggestion} on stdout
+// (consumable by the skill) and returns errAlreadyReported; otherwise it returns the error as
+// is (rendered as text "file:line:col: message" by main).
 func reportCompileErr(err error, asJSON bool) error {
 	var de *diag.Error
 	if asJSON && errors.As(err, &de) {
@@ -53,10 +53,10 @@ func reportCompileErr(err error, asJSON bool) error {
 	return err
 }
 
-// loadModel lit un modèle depuis un chemin : soit une source .rules (parse + compile, avec
-// erreurs positionnées), soit un .ir.bin déjà compilé (décodage direct de l'IR canonique).
-// Renvoie aussi le rapport de vérification (recalculé pour un binaire). En cas d'erreur de
-// compilation et --json, l'erreur structurée a déjà été rendue (errAlreadyReported).
+// loadModel reads a model from a path: either a .rules source (parse + compile, with positioned
+// errors), or an already-compiled .ir.bin (direct decoding of the canonical IR).
+// It also returns the verification report (recomputed for a binary). On compilation error with
+// --json, the structured error has already been rendered (errAlreadyReported).
 func loadModel(path string, asJSON bool) (*ir.CompiledModel, *verify.Report, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -76,17 +76,17 @@ func loadModel(path string, asJSON bool) (*ir.CompiledModel, *verify.Report, err
 	return cm, rep, nil
 }
 
-// cmdCompile compile une source .rules en IR canonique sérialisé (.ir.bin) et affiche le hash.
+// cmdCompile compiles a .rules source into serialized canonical IR (.ir.bin) and prints the hash.
 func cmdCompile(args []string) error {
 	fs := flag.NewFlagSet("compile", flag.ContinueOnError)
-	rulesPath := fs.String("rules", "", "chemin du fichier .rules")
-	out := fs.String("o", "", "fichier .ir.bin de sortie (stdout si absent)")
-	asJSON := fs.Bool("json", false, "sortie au format JSON pour les erreurs")
+	rulesPath := fs.String("rules", "", "path to the .rules file")
+	out := fs.String("o", "", "output .ir.bin file (stdout if absent)")
+	asJSON := fs.Bool("json", false, "JSON output format for errors")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *rulesPath == "" {
-		return fmt.Errorf("--rules est requis")
+		return fmt.Errorf("--rules is required")
 	}
 	src, err := os.ReadFile(*rulesPath)
 	if err != nil {
@@ -104,7 +104,7 @@ func cmdCompile(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "modèle %q compilé — %d octets — hash %s\n", cm.Name, len(blob), hex.EncodeToString(h[:]))
+	fmt.Fprintf(os.Stderr, "model %q compiled — %d bytes — hash %s\n", cm.Name, len(blob), hex.EncodeToString(h[:]))
 	if *out == "" {
 		_, err = os.Stdout.Write(blob)
 		return err
@@ -112,7 +112,7 @@ func cmdCompile(args []string) error {
 	return os.WriteFile(*out, blob, 0o644)
 }
 
-// Version est injectée au build (ldflags) ; valeur par défaut pour le dev.
+// Version is injected at build time (ldflags); default value for dev.
 var Version = "0.0.0-dev"
 
 func main() {
@@ -149,27 +149,27 @@ func main() {
 	case "help", "--help", "-h":
 		usage()
 	default:
-		fmt.Fprintf(os.Stderr, "feelc: sous-commande inconnue %q\n\n", cmd)
+		fmt.Fprintf(os.Stderr, "feelc: unknown subcommand %q\n\n", cmd)
 		usage()
 		os.Exit(2)
 	}
 	if err != nil {
 		if !errors.Is(err, errAlreadyReported) {
-			fmt.Fprintln(os.Stderr, "erreur:", err)
+			fmt.Fprintln(os.Stderr, "error:", err)
 		}
 		os.Exit(1)
 	}
 }
 
-// applyMemoryLimit borne la RAM du process (garde-fou : un .rules pathologique ne doit jamais
-// faire exploser la mémoire). Soft limit GC (runtime/debug). Si l'utilisateur a déjà fixé
-// GOMEMLIMIT, le runtime l'applique nativement et on ne le surcharge pas ; sinon on impose un
-// plafond par défaut (généreux : invisible en usage normal), ajustable via FEELC_MEMLIMIT (octets).
+// applyMemoryLimit bounds the process RAM (safeguard: a pathological .rules must never blow up
+// memory). GC soft limit (runtime/debug). If the user has already set GOMEMLIMIT, the runtime
+// applies it natively and we do not override it; otherwise we impose a default ceiling (generous:
+// invisible in normal usage), adjustable via FEELC_MEMLIMIT (bytes).
 func applyMemoryLimit() {
 	if os.Getenv("GOMEMLIMIT") != "" {
-		return // déjà appliqué nativement par le runtime
+		return // already applied natively by the runtime
 	}
-	limit := int64(2 << 30) // 2 GiB par défaut
+	limit := int64(2 << 30) // 2 GiB by default
 	if v := os.Getenv("FEELC_MEMLIMIT"); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
 			limit = n
@@ -179,37 +179,37 @@ func applyMemoryLimit() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `feelc — moteur de règles métier (DMN/FEEL) compilé
+	fmt.Fprint(os.Stderr, `feelc — compiled business rules engine (DMN/FEEL)
 
 Usage:
-  feelc run     --rules <fichier.rules|.ir.bin> --decision <nom> --input '<json>' [--json]
-  feelc compile --rules <fichier.rules> [-o <model.ir.bin>] [--json]
-  feelc verify  --rules <fichier.rules|.ir.bin> [--json]
-  feelc explain --rules <fichier.rules|.ir.bin> --decision <nom> --input '<json>' [--json]
-  feelc check  --rules <fichier.rules> --claims <claims.json> [--json]
-  feelc fmt    --rules <fichier.rules> [-w] [--check]
-  feelc import --in <modele.dmn> [-o <sortie.rules>]
-  feelc export --rules <fichier.rules> [-o <sortie.dmn>]
+  feelc run     --rules <file.rules|.ir.bin> --decision <name> --input '<json>' [--json]
+  feelc compile --rules <file.rules> [-o <model.ir.bin>] [--json]
+  feelc verify  --rules <file.rules|.ir.bin> [--json]
+  feelc explain --rules <file.rules|.ir.bin> --decision <name> --input '<json>' [--json]
+  feelc check  --rules <file.rules> --claims <claims.json> [--json]
+  feelc fmt    --rules <file.rules> [-w] [--check]
+  feelc import --in <model.dmn> [-o <output.rules>]
+  feelc export --rules <file.rules> [-o <output.dmn>]
   feelc tck    --suite <dir-tck> [--json] [--min <pct>]
-  feelc serve  --rules <fichier.rules> [--addr :8080] [--watch] [--strict]
+  feelc serve  --rules <file.rules> [--addr :8080] [--watch] [--strict]
   feelc version
 
-Environnement:
-  FEELC_MEMLIMIT  plafond mémoire (octets) du process (défaut 2 GiB ; GOMEMLIMIT a priorité)
+Environment:
+  FEELC_MEMLIMIT  process memory ceiling (bytes) (default 2 GiB; GOMEMLIMIT takes priority)
 
 `)
 }
 
 func cmdFmt(args []string) error {
 	fs := flag.NewFlagSet("fmt", flag.ContinueOnError)
-	rulesPath := fs.String("rules", "", "chemin du fichier .rules")
-	write := fs.Bool("w", false, "réécrire le fichier en place")
-	check := fs.Bool("check", false, "échoue (exit≠0) si le fichier n'est pas déjà formaté ; n'écrit pas")
+	rulesPath := fs.String("rules", "", "path to the .rules file")
+	write := fs.Bool("w", false, "rewrite the file in place")
+	check := fs.Bool("check", false, "fail (exit≠0) if the file is not already formatted; does not write")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *rulesPath == "" {
-		return fmt.Errorf("--rules est requis")
+		return fmt.Errorf("--rules is required")
 	}
 	src, err := os.ReadFile(*rulesPath)
 	if err != nil {
@@ -219,14 +219,14 @@ func cmdFmt(args []string) error {
 	if err != nil {
 		return err
 	}
-	// Signaler les pertes (jamais conformer en silence) — sur stderr, pas dans la sortie.
+	// Report losses (never silently conform) — on stderr, not in the output.
 	if strings.Contains(string(src), "#") || strings.Contains(string(src), "rounding:") {
-		fmt.Fprintln(os.Stderr, "note: `feelc fmt` ne préserve pas les commentaires ni le corps du bloc `model { ... }`")
+		fmt.Fprintln(os.Stderr, "note: `feelc fmt` does not preserve comments or the body of the `model { ... }` block")
 	}
 	switch {
 	case *check:
 		if string(src) != formatted {
-			return fmt.Errorf("%s n'est pas formaté (lancez `feelc fmt -w %s`)", *rulesPath, *rulesPath)
+			return fmt.Errorf("%s is not formatted (run `feelc fmt -w %s`)", *rulesPath, *rulesPath)
 		}
 		return nil
 	case *write:
@@ -239,13 +239,13 @@ func cmdFmt(args []string) error {
 
 func cmdImport(args []string) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
-	in := fs.String("in", "", "chemin du fichier DMN XML à importer")
-	out := fs.String("o", "", "fichier .rules de sortie (stdout si absent)")
+	in := fs.String("in", "", "path to the DMN XML file to import")
+	out := fs.String("o", "", "output .rules file (stdout if absent)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *in == "" {
-		return fmt.Errorf("--in est requis")
+		return fmt.Errorf("--in is required")
 	}
 	data, err := os.ReadFile(*in)
 	if err != nil {
@@ -256,7 +256,7 @@ func cmdImport(args []string) error {
 		return err
 	}
 	for _, w := range warns {
-		fmt.Fprintln(os.Stderr, "avertissement:", w)
+		fmt.Fprintln(os.Stderr, "warning:", w)
 	}
 	if *out == "" {
 		fmt.Print(rules)
@@ -267,14 +267,14 @@ func cmdImport(args []string) error {
 
 func cmdTck(args []string) error {
 	fs := flag.NewFlagSet("tck", flag.ContinueOnError)
-	suite := fs.String("suite", "", "répertoire de la suite DMN TCK")
-	asJSON := fs.Bool("json", false, "sortie au format JSON")
-	min := fs.Float64("min", 0, "seuil de conformité minimal (%) ; exit≠0 si en-dessous")
+	suite := fs.String("suite", "", "directory of the DMN TCK suite")
+	asJSON := fs.Bool("json", false, "JSON output format")
+	min := fs.Float64("min", 0, "minimum conformance threshold (%); exit≠0 if below")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *suite == "" {
-		return fmt.Errorf("--suite est requis")
+		return fmt.Errorf("--suite is required")
 	}
 	rep, err := tck.Run(*suite)
 	if err != nil {
@@ -290,36 +290,36 @@ func cmdTck(args []string) error {
 		renderTckReport(rep)
 	}
 	if rep.Failed > 0 {
-		return fmt.Errorf("%d cas TCK en échec", rep.Failed)
+		return fmt.Errorf("%d TCK cases failed", rep.Failed)
 	}
 	if *min > 0 && rep.Conformance() < *min {
-		return fmt.Errorf("conformité %.1f%% < seuil %.1f%%", rep.Conformance(), *min)
+		return fmt.Errorf("conformance %.1f%% < threshold %.1f%%", rep.Conformance(), *min)
 	}
 	return nil
 }
 
 func renderTckReport(rep *tck.Report) {
-	fmt.Printf("TCK : %d passés, %d échecs, %d skippés — conformité %.1f%%\n",
+	fmt.Printf("TCK: %d passed, %d failed, %d skipped — conformance %.1f%%\n",
 		rep.Passed, rep.Failed, rep.Skipped, rep.Conformance())
 	for _, c := range rep.Cases {
 		switch c.Status {
 		case tck.Fail:
-			fmt.Printf("  ✗ %s/%s [%s] attendu %s, obtenu %s\n", c.Model, c.Case, c.Decision, c.Expected, c.Got)
+			fmt.Printf("  ✗ %s/%s [%s] expected %s, got %s\n", c.Model, c.Case, c.Decision, c.Expected, c.Got)
 		case tck.Skipped:
-			fmt.Printf("  ⊘ %s/%s [%s] skippé : %s\n", c.Model, c.Case, c.Decision, c.Reason)
+			fmt.Printf("  ⊘ %s/%s [%s] skipped: %s\n", c.Model, c.Case, c.Decision, c.Reason)
 		}
 	}
 }
 
 func cmdExport(args []string) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
-	rulesPath := fs.String("rules", "", "chemin du fichier .rules à exporter en DMN")
-	out := fs.String("o", "", "fichier .dmn de sortie (stdout si absent)")
+	rulesPath := fs.String("rules", "", "path to the .rules file to export to DMN")
+	out := fs.String("o", "", "output .dmn file (stdout if absent)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *rulesPath == "" {
-		return fmt.Errorf("--rules est requis")
+		return fmt.Errorf("--rules is required")
 	}
 	src, err := os.ReadFile(*rulesPath)
 	if err != nil {
@@ -334,7 +334,7 @@ func cmdExport(args []string) error {
 		return err
 	}
 	for _, w := range warns {
-		fmt.Fprintln(os.Stderr, "avertissement:", w)
+		fmt.Fprintln(os.Stderr, "warning:", w)
 	}
 	if *out == "" {
 		_, err = os.Stdout.Write(xmlOut)
@@ -345,14 +345,14 @@ func cmdExport(args []string) error {
 
 func cmdCheck(args []string) error {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
-	rulesPath := fs.String("rules", "", "chemin du fichier .rules")
-	claimsPath := fs.String("claims", "", "chemin du fichier de claims JSON (produit par l'IA)")
-	asJSON := fs.Bool("json", false, "sortie au format JSON")
+	rulesPath := fs.String("rules", "", "path to the .rules file")
+	claimsPath := fs.String("claims", "", "path to the JSON claims file (produced by the AI)")
+	asJSON := fs.Bool("json", false, "JSON output format")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *rulesPath == "" || *claimsPath == "" {
-		return fmt.Errorf("--rules et --claims sont requis")
+		return fmt.Errorf("--rules and --claims are required")
 	}
 	cm, _, err := loadModel(*rulesPath, *asJSON)
 	if err != nil {
@@ -363,12 +363,12 @@ func cmdCheck(args []string) error {
 		return err
 	}
 	dec := json.NewDecoder(bytes.NewReader(cf))
-	dec.UseNumber() // exactitude des nombres attendus
+	dec.UseNumber() // exactness of expected numbers
 	var doc struct {
 		Claims []check.Claim `json:"claims"`
 	}
 	if err := dec.Decode(&doc); err != nil {
-		return fmt.Errorf("claims invalides: %w", err)
+		return fmt.Errorf("invalid claims: %w", err)
 	}
 	rep := check.Check(cm, doc.Claims)
 
@@ -391,40 +391,40 @@ func cmdCheck(args []string) error {
 		}
 	}
 	if n := rep.Blockers(); n > 0 {
-		return fmt.Errorf("%d claim(s) non supporté(s)", n)
+		return fmt.Errorf("%d claim(s) not supported", n)
 	}
 	return nil
 }
 
 func cmdServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	rulesPath := fs.String("rules", "", "chemin du fichier .rules à servir")
-	addr := fs.String("addr", ":8080", "adresse d'écoute HTTP")
-	watch := fs.Bool("watch", false, "recharger à chaud sur modification du fichier")
-	strict := fs.Bool("strict", false, "refuser le (re)chargement si la vérification a des bloqueurs")
+	rulesPath := fs.String("rules", "", "path to the .rules file to serve")
+	addr := fs.String("addr", ":8080", "HTTP listen address")
+	watch := fs.Bool("watch", false, "hot reload on file modification")
+	strict := fs.Bool("strict", false, "refuse (re)loading if verification has blockers")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *rulesPath == "" {
-		return fmt.Errorf("--rules est requis")
+		return fmt.Errorf("--rules is required")
 	}
 
 	reg := registry.New()
 	logReload := func(e *registry.Entry, rep *verify.Report, err error) {
 		switch {
 		case err != nil:
-			fmt.Fprintln(os.Stderr, "reload refusé (modèle courant conservé):", err)
+			fmt.Fprintln(os.Stderr, "reload refused (current model kept):", err)
 		case rep != nil && len(rep.Findings) > 0:
-			fmt.Fprintf(os.Stderr, "modèle v%d chargé (%s) — %d remarque(s) de vérification\n", e.Version, e.Hash, len(rep.Findings))
+			fmt.Fprintf(os.Stderr, "model v%d loaded (%s) — %d verification finding(s)\n", e.Version, e.Hash, len(rep.Findings))
 		default:
-			fmt.Fprintf(os.Stderr, "modèle v%d chargé (%s) — vérification propre\n", e.Version, e.Hash)
+			fmt.Fprintf(os.Stderr, "model v%d loaded (%s) — clean verification\n", e.Version, e.Hash)
 		}
 	}
 
-	// Chargement initial : doit réussir.
+	// Initial load: must succeed.
 	e, rep, err := loader.Reload(*rulesPath, reg, *strict)
 	if err != nil {
-		return fmt.Errorf("chargement initial: %w", err)
+		return fmt.Errorf("initial load: %w", err)
 	}
 	logReload(e, rep, nil)
 
@@ -442,19 +442,19 @@ func cmdServe(args []string) error {
 		return err
 	}
 	srv := service.New(reg, audit.New(os.Stderr), reloadFn)
-	fmt.Fprintf(os.Stderr, "feelc serve sur %s (modèle %q)\n", *addr, e.Model.Name)
+	fmt.Fprintf(os.Stderr, "feelc serve on %s (model %q)\n", *addr, e.Model.Name)
 	return http.ListenAndServe(*addr, srv.Handler())
 }
 
 func cmdVerify(args []string) error {
 	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
-	rulesPath := fs.String("rules", "", "chemin du fichier .rules")
-	asJSON := fs.Bool("json", false, "sortie au format JSON")
+	rulesPath := fs.String("rules", "", "path to the .rules file")
+	asJSON := fs.Bool("json", false, "JSON output format")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *rulesPath == "" {
-		return fmt.Errorf("--rules est requis")
+		return fmt.Errorf("--rules is required")
 	}
 	_, rep, err := loadModel(*rulesPath, *asJSON)
 	if err != nil {
@@ -471,35 +471,35 @@ func cmdVerify(args []string) error {
 		renderReport(rep)
 	}
 	if n := rep.Blockers(); n > 0 {
-		return fmt.Errorf("%d bloqueur(s) de vérification", n)
+		return fmt.Errorf("%d verification blocker(s)", n)
 	}
 	return nil
 }
 
 func renderReport(rep *verify.Report) {
 	if len(rep.Findings) == 0 {
-		fmt.Println("✓ aucune anomalie détectée (table prouvée complète et cohérente)")
+		fmt.Println("✓ no anomaly detected (table proven complete and consistent)")
 		return
 	}
 	for _, f := range rep.Findings {
 		fmt.Printf("[%s] %s — %s\n", f.Severity, f.Decision, f.Message)
 		if len(f.Witness) > 0 {
-			fmt.Printf("        contre-exemple: %v\n", f.Witness)
+			fmt.Printf("        counter-example: %v\n", f.Witness)
 		}
 	}
 }
 
 func cmdRun(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	rulesPath := fs.String("rules", "", "chemin du fichier .rules")
-	decision := fs.String("decision", "", "nom de la décision à évaluer")
-	inputJSON := fs.String("input", "{}", "données d'entrée au format JSON")
-	asJSON := fs.Bool("json", false, "sortie au format JSON")
+	rulesPath := fs.String("rules", "", "path to the .rules file")
+	decision := fs.String("decision", "", "name of the decision to evaluate")
+	inputJSON := fs.String("input", "{}", "input data in JSON format")
+	asJSON := fs.Bool("json", false, "JSON output format")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *rulesPath == "" || *decision == "" {
-		return fmt.Errorf("--rules et --decision sont requis")
+		return fmt.Errorf("--rules and --decision are required")
 	}
 	inputs, err := decodeInputs(*inputJSON)
 	if err != nil {
@@ -521,19 +521,17 @@ func cmdRun(args []string) error {
 	return nil
 }
 
-
-
 func cmdExplain(args []string) error {
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
-	rulesPath := fs.String("rules", "", "chemin du fichier .rules ou .ir.bin")
-	decision := fs.String("decision", "", "nom de la décision à expliquer")
-	inputJSON := fs.String("input", "{}", "données d'entrée au format JSON")
-	asJSON := fs.Bool("json", false, "sortie au format JSON")
+	rulesPath := fs.String("rules", "", "path to the .rules or .ir.bin file")
+	decision := fs.String("decision", "", "name of the decision to explain")
+	inputJSON := fs.String("input", "{}", "input data in JSON format")
+	asJSON := fs.Bool("json", false, "JSON output format")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *rulesPath == "" || *decision == "" {
-		return fmt.Errorf("--rules et --decision sont requis")
+		return fmt.Errorf("--rules and --decision are required")
 	}
 	inputs, err := decodeInputs(*inputJSON)
 	if err != nil {
@@ -556,31 +554,31 @@ func cmdExplain(args []string) error {
 	return nil
 }
 
-// renderTrace rend une trace de justification de façon lisible.
+// renderTrace renders a justification trace in a readable way.
 func renderTrace(tr *explain.Trace) {
-	fmt.Printf("décision %q = %v\n", tr.Decision, display(tr.Output))
+	fmt.Printf("decision %q = %v\n", tr.Decision, display(tr.Output))
 	switch {
 	case tr.Kind == "literal-expr":
-		fmt.Printf("  expression : %s  (évaluée, justification non géométrique)\n", tr.ExprSrc)
+		fmt.Printf("  expression: %s  (evaluated, non-geometric justification)\n", tr.ExprSrc)
 	case len(tr.Contributors) > 0:
-		fmt.Printf("  hit policy %s — règles contributrices :\n", tr.HitPolicy)
+		fmt.Printf("  hit policy %s — contributing rules:\n", tr.HitPolicy)
 		for _, c := range tr.Contributors {
-			fmt.Printf("    • règle #%d (ligne %d)\n", c.Index, c.Line)
+			fmt.Printf("    • rule #%d (line %d)\n", c.Index, c.Line)
 		}
 	case tr.Fallback:
-		fmt.Println("  aucune règle ne matche → ligne `default` (ou null)")
+		fmt.Println("  no rule matches → `default` line (or null)")
 	case tr.Matched:
-		fmt.Printf("  règle #%d (ligne %d) — hit policy %s\n", tr.RuleIndex, tr.RuleLine, tr.HitPolicy)
+		fmt.Printf("  rule #%d (line %d) — hit policy %s\n", tr.RuleIndex, tr.RuleLine, tr.HitPolicy)
 		for _, c := range tr.Cells {
-			fmt.Printf("    • %s %s  (valeur: %s, ligne %d)\n", c.Input, c.Src, c.Value, c.Line)
+			fmt.Printf("    • %s %s  (value: %s, line %d)\n", c.Input, c.Src, c.Value, c.Line)
 		}
 		if tr.NotGeometric {
-			fmt.Println("    (une cellule est une expression : justification évaluée, non géométrique)")
+			fmt.Println("    (a cell is an expression: justification evaluated, non-geometric)")
 		}
 	}
 }
 
-// decodeInputs lit le JSON d'entrée en préservant l'exactitude des nombres (UseNumber).
+// decodeInputs reads the input JSON preserving number exactness (UseNumber).
 func decodeInputs(s string) (map[string]any, error) {
 	dec := json.NewDecoder(bytes.NewReader([]byte(s)))
 	dec.UseNumber()
@@ -591,7 +589,7 @@ func decodeInputs(s string) (map[string]any, error) {
 	return m, nil
 }
 
-// display rend une valeur de sortie sous forme lisible/sérialisable.
+// display renders an output value in a readable/serializable form.
 func display(v any) any {
 	if d, ok := v.(*apd.Decimal); ok {
 		return d.Text('f')

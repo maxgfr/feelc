@@ -9,11 +9,11 @@ import (
 	"github.com/maxgfr/feelc/internal/verify"
 )
 
-// Sous `-tags smt`, le backend SMT est branché : une table à cellule Op=Prog est routée vers lui
-// (et non plus le générique "résidu non vérifié"). Selon la présence de z3 : preuve, trou, ou
-// dégradation honnête "z3 introuvable" — dans tous les cas le message mentionne SMT/z3.
+// Under `-tags smt`, the SMT backend is wired in: a table with an Op=Prog cell is routed to it
+// (and no longer the generic "unverified residual"). Depending on the presence of z3: proof, gap, or
+// honest degradation "z3 not found" — in all cases the message mentions SMT/z3.
 func TestSMTBackendHandlesOpProg(t *testing.T) {
-	// `? < other` référence un autre input -> cellule Op=Prog (non géométrique).
+	// `? < other` references another input -> Op=Prog cell (non-geometric).
 	rep := verify.Verify(compile(t, `model "m" {}
 input x : number in [0..100]
 input other : number in [0..100]
@@ -31,9 +31,9 @@ decision d : string {
 	} else if g != nil {
 		msg = g.Message
 	} else {
-		t.Fatalf("attendu un finding du backend SMT, rapport=%+v", rep.Findings)
+		t.Fatalf("expected a finding from the SMT backend, report=%+v", rep.Findings)
 	}
 	if !strings.Contains(msg, "SMT") && !strings.Contains(msg, "z3") {
-		t.Errorf("le backend SMT aurait dû traiter Op=Prog ; message=%q", msg)
+		t.Errorf("the SMT backend should have handled Op=Prog; message=%q", msg)
 	}
 }

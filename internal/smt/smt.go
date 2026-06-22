@@ -1,13 +1,13 @@
-// Package smt traduit la couche géométrique + bytecode de feelc en SMT-LIB2 (théorie des Reals
-// et Bools), pour qu'un solveur (Z3) puisse décider des propriétés (complétude, conflits) sur les
-// tables à cellules non géométriques (Op=Prog), là où l'algèbre d'hyper-rectangles s'arrête.
+// Package smt translates feelc's geometric layer + bytecode into SMT-LIB2 (Reals and Bools
+// theories), so that a solver (Z3) can decide properties (completeness, conflicts) on tables
+// with non-geometric cells (Op=Prog), where the hyper-rectangle algebra stops.
 //
-// CE PAQUET EST PUR (aucune dépendance à un binaire externe) et donc UNITAIREMENT TESTABLE sans
-// Z3. L'invocation du solveur et le câblage dans la vérification vivent derrière le build tag
-// `smt` (internal/verify/verify_smt.go). Sous-ensemble encodable : arithmétique +-*/, comparaisons,
-// and/or/not, intervalles, ensembles, négation ; colonnes number (Real) / boolean (Bool). Tout le
-// reste (if/then/else compilé en sauts, floor/ceiling/round, colonnes string, références à des
-// décisions) est REFUSÉ proprement (ok=false) → la vérification reste honnête (not-verifiable).
+// THIS PACKAGE IS PURE (no dependency on an external binary) and therefore UNIT-TESTABLE without
+// Z3. Solver invocation and the wiring into verification live behind the build tag
+// `smt` (internal/verify/verify_smt.go). Encodable subset: arithmetic +-*/, comparisons,
+// and/or/not, ranges, sets, negation; number (Real) / boolean (Bool) columns. Everything
+// else (if/then/else compiled into jumps, floor/ceiling/round, string columns, references to
+// decisions) is REFUSED cleanly (ok=false) → verification stays honest (not-verifiable).
 package smt
 
 import (
@@ -19,12 +19,12 @@ import (
 	"github.com/maxgfr/feelc/internal/ir"
 )
 
-// VarResolver renvoie le nom de variable SMT d'un nom feelc (input), et false s'il n'est pas
-// encodable (ex: une référence à une décision plutôt qu'à un input scalaire).
+// VarResolver returns the SMT variable name for a feelc name (input), and false if it is not
+// encodable (e.g. a reference to a decision rather than a scalar input).
 type VarResolver func(name string) (string, bool)
 
-// Literal encode une Value scalaire en littéral SMT-LIB (Real/Bool). Les négatifs deviennent
-// `(- x)` (SMT-LIB n'a pas de littéral négatif). Les chaînes ne sont pas encodables.
+// Literal encodes a scalar Value into an SMT-LIB literal (Real/Bool). Negatives become
+// `(- x)` (SMT-LIB has no negative literal). Strings are not encodable.
 func Literal(v ir.Value) (string, bool) {
 	switch v.Tag {
 	case ir.TagNumber:
@@ -41,13 +41,13 @@ func Literal(v ir.Value) (string, bool) {
 		}
 		return "false", true
 	default:
-		return "", false // string / null : non encodable en Real/Bool
+		return "", false // string / null: not encodable as Real/Bool
 	}
 }
 
-// Program encode un ExprProgram STRAIGHT-LINE (sans saut) en s-expression SMT-LIB. colVar est la
-// variable de la colonne courante (`?`), "" si hors cellule. ok=false si un opcode est hors
-// sous-ensemble (sauts/if, floor/ceiling/round, etc.).
+// Program encodes a STRAIGHT-LINE ExprProgram (no jumps) into an SMT-LIB s-expression. colVar is
+// the current column variable (`?`), "" if outside a cell. ok=false if an opcode is out of the
+// subset (jumps/if, floor/ceiling/round, etc.).
 func Program(p *ir.ExprProgram, colVar string, resolve VarResolver) (string, bool) {
 	var st []string
 	push := func(s string) { st = append(st, s) }
@@ -142,7 +142,7 @@ func Program(p *ir.ExprProgram, colVar string, resolve VarResolver) (string, boo
 			}
 			st[len(st)-1] = "(not " + st[len(st)-1] + ")"
 		default:
-			// OpJmp/OpJmpFalse (if/then/else), OpFloor/OpCeil/OpRound, OpNeg : hors sous-ensemble.
+			// OpJmp/OpJmpFalse (if/then/else), OpFloor/OpCeil/OpRound, OpNeg: out of subset.
 			return "", false
 		}
 	}
@@ -152,8 +152,8 @@ func Program(p *ir.ExprProgram, colVar string, resolve VarResolver) (string, boo
 	return st[0], true
 }
 
-// Cell encode une CellTest en contrainte booléenne SMT sur colVar (true si la cellule matche).
-// ok=false si la cellule contient un littéral/opcode non encodable.
+// Cell encodes a CellTest into an SMT boolean constraint over colVar (true if the cell matches).
+// ok=false if the cell contains a non-encodable literal/opcode.
 func Cell(ct ir.CellTest, colVar string, resolve VarResolver) (string, bool) {
 	expr, ok := cellBase(ct, colVar, resolve)
 	if !ok {

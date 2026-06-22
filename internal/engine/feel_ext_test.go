@@ -11,8 +11,8 @@ import (
 	"github.com/maxgfr/feelc/internal/verify"
 )
 
-// not(<test>) reste GÉOMÉTRIQUE : le vérificateur l'analyse (pas de dégradation Op=Prog).
-// Une table `"urban"` + `not("urban")` couvre tout le domaine -> aucun trou bloquant.
+// not(<test>) stays GEOMETRIC: the verifier analyzes it (no Op=Prog degradation).
+// A table `"urban"` + `not("urban")` covers the whole domain -> no blocking gap.
 func TestNotCellStaysVerifiable(t *testing.T) {
 	src := `model "m" {}
 input region : string in {"urban", "suburban", "rural"}
@@ -33,31 +33,31 @@ decision z : string {
 	rep := verify.Verify(cm)
 	for _, f := range rep.Findings {
 		if f.Kind == verify.KindNotVerifiable {
-			t.Errorf("not() ne doit PAS dégrader en non-vérifiable: %+v", f)
+			t.Errorf("not() must NOT degrade to not-verifiable: %+v", f)
 		}
 		if f.Severity == verify.SevError {
-			t.Errorf("table complète via not() : aucun bloqueur attendu, obtenu %+v", f)
+			t.Errorf("complete table via not(): no blocker expected, got %+v", f)
 		}
 	}
 }
 
-// jn passe un nombre d'entrée EXACT (json.Number) — pas de float64 lossy.
+// jn passes an EXACT input number (json.Number) — no lossy float64.
 func jn(s string) any { return json.Number(s) }
 
-// if/then/else en décision literal-expression (backpatch OpJmpFalse/OpJmp).
+// if/then/else in a literal-expression decision (backpatch OpJmpFalse/OpJmp).
 func TestIfThenElse(t *testing.T) {
 	src := `model "m" {}
 input score : number
 decision tier : number = if score >= 700 then 1 else 0`
 	if got, err := engine.Run(src, "tier", map[string]any{"score": jn("750")}); err != nil || numText(t, got) != "1" {
-		t.Fatalf("if(score=750) = %v (err %v), attendu 1", got, err)
+		t.Fatalf("if(score=750) = %v (err %v), expected 1", got, err)
 	}
 	if got, err := engine.Run(src, "tier", map[string]any{"score": jn("600")}); err != nil || numText(t, got) != "0" {
-		t.Fatalf("if(score=600) = %v (err %v), attendu 0", got, err)
+		t.Fatalf("if(score=600) = %v (err %v), expected 0", got, err)
 	}
 }
 
-// Built-ins mono-arg floor / ceiling / round (round = HALF_EVEN, déterministe).
+// Mono-arg built-ins floor / ceiling / round (round = HALF_EVEN, deterministic).
 func TestMonoArgBuiltins(t *testing.T) {
 	src := `model "m" {}
 input x : number
@@ -79,13 +79,13 @@ decision rd : number = round(x)`
 			t.Fatalf("%s(%s): %v", c.dec, c.x, err)
 		}
 		if numText(t, got) != c.want {
-			t.Errorf("%s(%s) = %s, attendu %s", c.dec, c.x, numText(t, got), c.want)
+			t.Errorf("%s(%s) = %s, expected %s", c.dec, c.x, numText(t, got), c.want)
 		}
 	}
 }
 
-// not(<test>) en cellule : négation géométrique (équivalence valeur, intervalle, comparaison),
-// + multi-tests not(a, b) = hors ensemble.
+// not(<test>) in a cell: geometric negation (value equivalence, interval, comparison),
+// + multi-test not(a, b) = outside the set.
 func TestNotCellNegation(t *testing.T) {
 	src := `model "m" {}
 input region : string in {"urban", "suburban", "rural"}
@@ -120,7 +120,7 @@ decision set : string {
 			t.Fatalf("%s%v: %v", dec, in, err)
 		}
 		if got != want {
-			t.Errorf("%s%v = %v, attendu %q", dec, in, got, want)
+			t.Errorf("%s%v = %v, expected %q", dec, in, got, want)
 		}
 	}
 	check("zone", map[string]any{"region": "rural"}, "other")
@@ -133,26 +133,26 @@ decision set : string {
 	check("set", map[string]any{"n": jn("2")}, "small")
 }
 
-// Échecs FRANCS : multi-arg built-in, et `?` hors cellule (literal-expr, direct ou via BKM).
+// HARD failures: multi-arg built-in, and `?` outside a cell (literal-expr, direct or via BKM).
 func TestFeelExtHardFailures(t *testing.T) {
 	cases := []struct {
 		name, src, wantSub string
 	}{
 		{"round multi-arg",
 			"model \"m\" {}\ninput x : number\ndecision d : number = round(x, 1)", "argument"},
-		{"? dans literal-expr direct",
-			"model \"m\" {}\ninput n : number\ndecision d : number = ? + n", "cellule"},
-		{"? via argument de BKM dans literal-expr",
-			"model \"m\" {}\ninput n : number\nbkm f(y:number):number = y * 2\ndecision d : number = f(?) + n", "cellule"},
+		{"? in direct literal-expr",
+			"model \"m\" {}\ninput n : number\ndecision d : number = ? + n", "cell"},
+		{"? via BKM argument in literal-expr",
+			"model \"m\" {}\ninput n : number\nbkm f(y:number):number = y * 2\ndecision d : number = f(?) + n", "cell"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := engine.Run(c.src, "d", map[string]any{"n": jn("1"), "x": jn("1")})
 			if err == nil {
-				t.Fatalf("erreur de compilation attendue (%q)", c.wantSub)
+				t.Fatalf("expected compilation error (%q)", c.wantSub)
 			}
 			if !strings.Contains(err.Error(), c.wantSub) {
-				t.Errorf("erreur = %q, attendu contenir %q", err.Error(), c.wantSub)
+				t.Errorf("error = %q, expected to contain %q", err.Error(), c.wantSub)
 			}
 		})
 	}

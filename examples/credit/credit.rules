@@ -9,18 +9,18 @@ input age           : number in [0..120]
 
 type Eligibility = context { eligible: boolean, reason: string }
 
-# Décision intermédiaire : taux d'endettement (debt-to-income), expression FEEL.
+# Intermediate decision: debt-to-income ratio, FEEL expression.
 decision dti : number = monthly_debt / (annual_income / 12)
 
-# Décision finale : table, hit policy FIRST (refus prioritaires d'abord).
+# Final decision: table, FIRST hit policy (rejections take priority).
 decision eligibility : Eligibility {
   needs: credit_score, dti, age
   hit: first
   #  credit_score | dti     | age   => eligible | reason
-     < 580        | -       | -     => false    | "score insuffisant"
-     -            | > 0.43  | -     => false    | "endettement trop élevé"
-     -            | -       | < 18  => false    | "mineur"
-     [580..680)   | <= 0.43 | >= 18 => true     | "approuvé sous conditions"
-     >= 680       | <= 0.43 | >= 18 => true     | "approuvé"
-     default      |         |       => false    | "non couvert"
+     < 580        | -       | -     => false    | "insufficient score"
+     -            | > 0.43  | -     => false    | "debt too high"
+     -            | -       | < 18  => false    | "minor"
+     [580..680)   | <= 0.43 | >= 18 => true     | "approved with conditions"
+     >= 680       | <= 0.43 | >= 18 => true     | "approved"
+     default      |         |       => false    | "not covered"
 }

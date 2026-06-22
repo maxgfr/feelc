@@ -8,7 +8,7 @@
 feelc sells **bit-for-bit cross-platform determinism**. It was missing (1) a distribution
 format for the **already-compiled** model (`.ir.bin`) to execute without re-parsing/re-compiling,
 and (2) a **canonical identity** of the compiled model to freeze non-regression goldens
-(Tranche 19). The service hash was until now `sha256(source)`: sensitive to text formatting,
+(Slice 19). The service hash was until now `sha256(source)`: sensitive to text formatting,
 not to semantics.
 
 ## Decision
@@ -34,7 +34,7 @@ accept either a source or an `.ir.bin` interchangeably.
 ## Consequences
 
 - Distribution/execution of a compiled model without the parsing chain.
-- Basis for the deterministic goldens (ADR/Tranche 19): `modelHash` replayable amd64 + arm64.
+- Basis for the deterministic goldens (ADR/Slice 19): `modelHash` replayable amd64 + arm64.
 - Round-trip proven stable (`Encode→Decode→Encode` bit-for-bit identical); invalid magic rejected
   (never conform silently).
 - The `.ir.bin` does **not** carry source positions (`Src`/`Line`/`Col`): `explain` on a binary
@@ -43,4 +43,4 @@ accept either a source or an `.ir.bin` interchangeably.
   bounds (a) every length-prefixed length to the remaining bytes (`count()`) — no giant
   `make(..., n)` from a corrupt size → no OOM; (b) recursion depth
   (`maxDecodeDepth`) — no fatal stack overflow on a deep TagList/Sub nesting.
-  Any overrun fails outright (never conform silently). Cf. adversarial review Tranche 4.
+  Any overrun fails outright (never conform silently). Cf. adversarial review Slice 4.

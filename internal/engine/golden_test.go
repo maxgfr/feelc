@@ -16,25 +16,25 @@ import (
 	"github.com/maxgfr/feelc/internal/ir"
 )
 
-// Goldens de déterminisme (Tranche 19). On fige, par (modèle, décision, input) :
-//   - model_hash : hex(ir.Hash) du modèle compilé (identité canonique, ADR 0006) ;
-//   - out_canon  : la sortie sous forme canonique JSON (décimaux via Text('f')) ;
+// Determinism goldens (Slice 19). We freeze, per (model, decision, input):
+//   - model_hash : hex(ir.Hash) of the compiled model (canonical identity, ADR 0006);
+//   - out_canon  : the output in canonical JSON form (decimals via Text('f'));
 //   - out_hash   : sha256(out_canon).
-// Le test REJOUE ces goldens. En CI ils sont rejoués sur amd64 ET arm64 (matrice
-// ubuntu/macos) : l'égalité bit-à-bit inter-plateforme est la thèse centrale du projet.
+// The test REPLAYS these goldens. In CI they are replayed on amd64 AND arm64 (the
+// ubuntu/macos matrix): bit-for-bit cross-platform equality is the project's core thesis.
 //
-// `out_canon` attendu est en plus HAND-SPÉCIFIÉ dans chaque cas (ExpectCanon) : le golden
-// n'est donc pas régénéré « en aveugle » — la correction sémantique est ancrée par des
-// valeurs écrites à la main, le golden ne fige que l'invariance (hash + plateforme).
+// The expected `out_canon` is additionally HAND-SPECIFIED in each case (ExpectCanon): the
+// golden is therefore not regenerated "blindly" — semantic correctness is anchored by
+// hand-written values, while the golden only freezes the invariance (hash + platform).
 //
-// Régénération : `FEELC_REGEN_GOLDEN=1 go test ./internal/engine -run Golden`.
+// Regeneration: `FEELC_REGEN_GOLDEN=1 go test ./internal/engine -run Golden`.
 
 type goldenCase struct {
 	Name        string
-	Rules       string // chemin relatif depuis internal/engine
+	Rules       string // path relative to internal/engine
 	Decision    string
 	Input       map[string]any
-	ExpectCanon string // sortie canonique attendue (ancre de correction, écrite à la main)
+	ExpectCanon string // expected canonical output (correctness anchor, hand-written)
 }
 
 type goldenEntry struct {
@@ -46,10 +46,10 @@ type goldenEntry struct {
 var goldenCases = []goldenCase{
 	{"credit/eligibility/approved", "../../examples/credit/credit.rules", "eligibility",
 		map[string]any{"credit_score": 700, "annual_income": 60000, "monthly_debt": 1500, "age": 40},
-		`{"eligible":true,"reason":"approuvé"}`},
+		`{"eligible":true,"reason":"approved"}`},
 	{"credit/eligibility/low_score", "../../examples/credit/credit.rules", "eligibility",
 		map[string]any{"credit_score": 500, "annual_income": 60000, "monthly_debt": 1500, "age": 40},
-		`{"eligible":false,"reason":"score insuffisant"}`},
+		`{"eligible":false,"reason":"insufficient score"}`},
 	{"credit/dti", "../../examples/credit/credit.rules", "dti",
 		map[string]any{"credit_score": 700, "annual_income": 60000, "monthly_debt": 1500, "age": 40},
 		`"0.3"`},
@@ -71,7 +71,7 @@ func loadGoldenModel(t *testing.T, path string) *ir.CompiledModel {
 	t.Helper()
 	src, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("lecture %s: %v", path, err)
+		t.Fatalf("read %s: %v", path, err)
 	}
 	m, err := dsl.Parse(string(src))
 	if err != nil {
@@ -84,7 +84,7 @@ func loadGoldenModel(t *testing.T, path string) *ir.CompiledModel {
 	return cm
 }
 
-// canon rend une sortie sous forme déterministe : décimaux -> Text('f'), récursivement.
+// canon renders an output in deterministic form: decimals -> Text('f'), recursively.
 func canon(v any) any {
 	switch x := v.(type) {
 	case *apd.Decimal:
@@ -130,9 +130,9 @@ func TestGoldenDeterminism(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: marshal: %v", c.Name, err)
 		}
-		// Ancre de correction sémantique (hand-spécifiée), indépendante du golden figé.
+		// Semantic correctness anchor (hand-specified), independent of the frozen golden.
 		if string(b) != c.ExpectCanon {
-			t.Errorf("%s: sortie %s, attendu %s", c.Name, b, c.ExpectCanon)
+			t.Errorf("%s: output %s, expected %s", c.Name, b, c.ExpectCanon)
 		}
 		oh := sha256.Sum256(b)
 		got[c.Name] = goldenEntry{
@@ -153,31 +153,31 @@ func TestGoldenDeterminism(t *testing.T) {
 		if err := os.WriteFile(goldenPath, append(blob, '\n'), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("golden régénéré : %d cas dans %s", len(got), goldenPath)
+		t.Logf("golden regenerated: %d cases in %s", len(got), goldenPath)
 		return
 	}
 
 	raw, err := os.ReadFile(goldenPath)
 	if err != nil {
-		t.Fatalf("golden manquant (%v) — régénère avec FEELC_REGEN_GOLDEN=1", err)
+		t.Fatalf("golden missing (%v) — regenerate with FEELC_REGEN_GOLDEN=1", err)
 	}
 	var want map[string]goldenEntry
 	if err := json.Unmarshal(raw, &want); err != nil {
-		t.Fatalf("golden illisible: %v", err)
+		t.Fatalf("golden unreadable: %v", err)
 	}
 	for name, g := range got {
 		w, ok := want[name]
 		if !ok {
-			t.Errorf("cas %q absent du golden (régénère avec FEELC_REGEN_GOLDEN=1)", name)
+			t.Errorf("case %q absent from golden (regenerate with FEELC_REGEN_GOLDEN=1)", name)
 			continue
 		}
 		if g != w {
-			t.Errorf("cas %q : déterminisme rompu\n  got  = %+v\n  want = %+v", name, g, w)
+			t.Errorf("case %q: determinism broken\n  got  = %+v\n  want = %+v", name, g, w)
 		}
 	}
 	for name := range want {
 		if _, ok := got[name]; !ok {
-			t.Errorf("cas %q présent dans le golden mais absent des cas (nettoie le golden)", name)
+			t.Errorf("case %q present in golden but absent from cases (clean up the golden)", name)
 		}
 	}
 }

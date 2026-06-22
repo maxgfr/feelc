@@ -1,9 +1,9 @@
 //go:build smt
 
-// Backend SMT (Z3) — compilé UNIQUEMENT avec `-tags smt` (ADR 0007). Branche smtProve : les tables
-// à cellules Op=Prog (non géométriques), que l'algèbre d'hyper-rectangles ne peut décider, sont
-// routées vers Z3 pour une preuve de complétude. Dégradation HONNÊTE (jamais conformer en silence) :
-// z3 absent du PATH, ou forme hors sous-ensemble encodable → `not-verifiable` avec la raison.
+// SMT backend (Z3) — compiled ONLY with `-tags smt` (ADR 0007). smtProve branch: tables
+// with Op=Prog cells (non-geometric), which the hyper-rectangle algebra cannot decide, are
+// routed to Z3 for a completeness proof. HONEST degradation (never conform silently):
+// z3 absent from PATH, or a form outside the encodable subset → `not-verifiable` with the reason.
 package verify
 
 import (
@@ -21,29 +21,29 @@ func proveSMT(cm *ir.CompiledModel, d *ir.Decision, rep *Report) bool {
 	query, ok := buildCompletenessQuery(cm, d)
 	if !ok {
 		rep.add(Finding{Decision: d.Name, Kind: KindNotVerifiable, Severity: SevWarning,
-			Message: "résidu Op=Prog : forme non encodable en SMT (if/then/else, floor/ceiling/round, colonne string, ou dépendance décision)"})
+			Message: "Op=Prog residual: form not encodable in SMT (if/then/else, floor/ceiling/round, string column, or decision dependency)"})
 		return true
 	}
 	z3, err := exec.LookPath("z3")
 	if err != nil {
 		rep.add(Finding{Decision: d.Name, Kind: KindNotVerifiable, Severity: SevWarning,
-			Message: "résidu Op=Prog : z3 introuvable dans le PATH (installez z3 pour la preuve SMT)"})
+			Message: "Op=Prog residual: z3 not found in PATH (install z3 for the SMT proof)"})
 		return true
 	}
 	out, runErr := runZ3(z3, query)
 	switch {
 	case runErr != nil:
 		rep.add(Finding{Decision: d.Name, Kind: KindNotVerifiable, Severity: SevWarning,
-			Message: "résidu Op=Prog : exécution z3 (SMT) échouée: " + runErr.Error()})
+			Message: "Op=Prog residual: z3 (SMT) execution failed: " + runErr.Error()})
 	case strings.HasPrefix(out, "unsat"):
 		rep.add(Finding{Decision: d.Name, Kind: KindNotVerifiable, Severity: SevInfo,
-			Message: "table à cellules Op=Prog : complétude PROUVÉE par SMT (aucun trou) — résidu levé"})
+			Message: "table with Op=Prog cells: completeness PROVEN by SMT (no gap) — residual cleared"})
 	case strings.HasPrefix(out, "sat"):
 		rep.add(Finding{Decision: d.Name, Kind: KindGap, Severity: SevError,
-			Message: "trou de complétude PROUVÉ par SMT (Op=Prog) : il existe une entrée couverte par aucune règle"})
+			Message: "completeness gap PROVEN by SMT (Op=Prog): there exists an input covered by no rule"})
 	default:
 		rep.add(Finding{Decision: d.Name, Kind: KindNotVerifiable, Severity: SevWarning,
-			Message: "résidu Op=Prog : SMT indécis (" + strings.TrimSpace(out) + ")"})
+			Message: "Op=Prog residual: SMT undecided (" + strings.TrimSpace(out) + ")"})
 	}
 	return true
 }
@@ -55,22 +55,22 @@ func runZ3(z3, query string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-// buildCompletenessQuery encode « il existe une entrée dans le domaine couverte par AUCUNE règle »
-// (unsat ⇒ table complète). Seulement pour les politiques single-hit (la complétude n'a de sens
-// que là). ok=false si une cellule/colonne est hors sous-ensemble encodable.
+// buildCompletenessQuery encodes "there exists an input in the domain covered by NO rule"
+// (unsat ⇒ complete table). Only for single-hit policies (completeness only makes sense
+// there). ok=false if a cell/column is outside the encodable subset.
 func buildCompletenessQuery(cm *ir.CompiledModel, d *ir.Decision) (string, bool) {
 	t := d.Table
 	switch t.HitPolicy {
 	case ir.HitFirst, ir.HitUnique, ir.HitAny, ir.HitPriority:
 	default:
-		return "", false // COLLECT / RULE ORDER : pas de notion de trou
+		return "", false // COLLECT / RULE ORDER: no notion of a gap
 	}
 	vars := map[string]string{}
 	names := make([]string, 0, len(cm.Inputs))
 	for n := range cm.Inputs {
 		names = append(names, n)
 	}
-	sort.Strings(names) // déterminisme du script
+	sort.Strings(names) // script determinism
 	var decls strings.Builder
 	for _, n := range names {
 		switch cm.Inputs[n] {
@@ -86,7 +86,7 @@ func buildCompletenessQuery(cm *ir.CompiledModel, d *ir.Decision) (string, bool)
 
 	for _, col := range t.Inputs {
 		if _, ok := vars[col]; !ok {
-			return "", false // colonne non encodable (string, ou décision dépendante)
+			return "", false // non-encodable column (string, or dependent decision)
 		}
 	}
 

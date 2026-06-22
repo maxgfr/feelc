@@ -10,8 +10,8 @@ permissions:
 
 jobs:
   test:
-    # Matrice multi-arch : ubuntu = amd64, macos-14+ = arm64.
-    # C'est ce qui prouve le déterminisme bit-à-bit inter-plateforme (thèse centrale du projet).
+    # Multi-arch matrix: ubuntu = amd64, macos-14+ = arm64.
+    # This proves the bit-for-bit cross-platform determinism (the project's core thesis).
     strategy:
       fail-fast: false
       matrix:

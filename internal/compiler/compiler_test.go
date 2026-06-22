@@ -20,39 +20,39 @@ func compileSrc(t *testing.T, src string) error {
 	return err
 }
 
-// Une référence `needs` non déclarée doit produire un diag.Error positionné (ligne de la
-// décision) et de code stable CMP001, en conservant la sous-chaîne "non déclaré".
+// An undeclared `needs` reference must produce a positioned diag.Error (line of the
+// decision) with stable code CMP001, while preserving the substring "not declared".
 func TestNeedsUndeclaredStructured(t *testing.T) {
 	src := "model \"m\" {}\n" +
 		"input a : number\n" +
-		"decision d : string {\n" + // ligne 3
+		"decision d : string {\n" + // line 3
 		"  needs: b\n" +
 		"  hit: first\n" +
 		"  - => \"x\"\n" +
 		"}\n"
 	err := compileSrc(t, src)
 	if err == nil {
-		t.Fatal("erreur attendue")
+		t.Fatal("expected error")
 	}
 	var de *diag.Error
 	if !errors.As(err, &de) {
-		t.Fatalf("erreur non structurée: %T %v", err, err)
+		t.Fatalf("unstructured error: %T %v", err, err)
 	}
 	if de.Code != diag.CodeUndeclared {
-		t.Errorf("Code = %q, attendu %q", de.Code, diag.CodeUndeclared)
+		t.Errorf("Code = %q, expected %q", de.Code, diag.CodeUndeclared)
 	}
 	if de.Line != 3 {
-		t.Errorf("Line = %d, attendu 3 (ligne de la décision)", de.Line)
+		t.Errorf("Line = %d, expected 3 (line of the decision)", de.Line)
 	}
-	if !strings.Contains(err.Error(), "non déclaré") {
-		t.Errorf("la sous-chaîne historique \"non déclaré\" doit être préservée: %q", err.Error())
+	if !strings.Contains(err.Error(), "not declared") {
+		t.Errorf("the historical substring \"not declared\" must be preserved: %q", err.Error())
 	}
 	if de.Suggestion == "" {
-		t.Errorf("une suggestion (noms valides) est attendue")
+		t.Errorf("a suggestion (valid names) is expected")
 	}
 }
 
-// Une hit policy non supportée doit produire CMP002 et conserver "hit policy non supportée".
+// An unsupported hit policy must produce CMP002 and preserve "unsupported hit policy".
 func TestHitPolicyUnsupportedStructured(t *testing.T) {
 	src := "model \"m\" {}\n" +
 		"input a : number\n" +
@@ -64,12 +64,12 @@ func TestHitPolicyUnsupportedStructured(t *testing.T) {
 	err := compileSrc(t, src)
 	var de *diag.Error
 	if !errors.As(err, &de) {
-		t.Fatalf("erreur non structurée: %T %v", err, err)
+		t.Fatalf("unstructured error: %T %v", err, err)
 	}
 	if de.Code != diag.CodeHitPolicy {
-		t.Errorf("Code = %q, attendu %q", de.Code, diag.CodeHitPolicy)
+		t.Errorf("Code = %q, expected %q", de.Code, diag.CodeHitPolicy)
 	}
-	if !strings.Contains(err.Error(), "hit policy non supportée") {
-		t.Errorf("sous-chaîne historique attendue: %q", err.Error())
+	if !strings.Contains(err.Error(), "unsupported hit policy") {
+		t.Errorf("historical substring expected: %q", err.Error())
 	}
 }

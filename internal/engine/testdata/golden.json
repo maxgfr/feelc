@@ -5,19 +5,19 @@
     "out_canon": "[\"housing\",\"family\",\"student_grant\"]"
   },
   "credit/dti": {
-    "model_hash": "74a1768eb849ccd5ba33ae38ca9f15401d3b417d3ecf8225ba71a7b5f3df5943",
+    "model_hash": "00d1d958532820e3bdc7b9af9ef059063f27eeee9158d76de390af6d20a609dc",
     "out_hash": "59d720a1ab8d6974a057e11e4b77890669f8d6177371630c78eab78f0065f9cf",
     "out_canon": "\"0.3\""
   },
   "credit/eligibility/approved": {
-    "model_hash": "74a1768eb849ccd5ba33ae38ca9f15401d3b417d3ecf8225ba71a7b5f3df5943",
-    "out_hash": "09c57dc25225afd5687b6d278d4747765b001506c0de2e08734620ae9b18548b",
-    "out_canon": "{\"eligible\":true,\"reason\":\"approuvé\"}"
+    "model_hash": "00d1d958532820e3bdc7b9af9ef059063f27eeee9158d76de390af6d20a609dc",
+    "out_hash": "2fe7b686b67e8cbc7c54d3739282c8d9dc3bb23e01d670fd18ee41d6088c5d7e",
+    "out_canon": "{\"eligible\":true,\"reason\":\"approved\"}"
   },
   "credit/eligibility/low_score": {
-    "model_hash": "74a1768eb849ccd5ba33ae38ca9f15401d3b417d3ecf8225ba71a7b5f3df5943",
-    "out_hash": "3d68e4227b526a8b1426aa05faf5c52b2facfd6e340b61c75e87d8b111139c3f",
-    "out_canon": "{\"eligible\":false,\"reason\":\"score insuffisant\"}"
+    "model_hash": "00d1d958532820e3bdc7b9af9ef059063f27eeee9158d76de390af6d20a609dc",
+    "out_hash": "26a5928fb328cc53a69b4f255999dcf3a4b0665e38bf63ea041ad48ae89354f6",
+    "out_canon": "{\"eligible\":false,\"reason\":\"insufficient score\"}"
   },
   "insurance/premium": {
     "model_hash": "313f3bd4419165be8f4df6f64b36c324a5f1612c20d7ce567c93b85fdc038eb2",

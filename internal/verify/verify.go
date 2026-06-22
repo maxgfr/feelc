@@ -1,18 +1,18 @@
-// Package verify est le différenciateur de feelc : il PROUVE des propriétés d'une table de
-// décision par décomposition géométrique en cellules atomiques.
+// Package verify is feelc's differentiator: it PROVES properties of a decision
+// table by geometric decomposition into atomic cells.
 //
-// Principe : sur chaque dimension (colonne d'entrée) on collecte les points de coupure (bornes
-// des cellules + bornes du domaine). Le produit cartésien de points-témoins représentatifs
-// couvre exhaustivement l'espace ; pour chaque point on compte les règles qui matchent (via la
-// MÊME fonction ir.MatchCell que la VM -> preuve et exécution s'accordent). On en déduit :
-//   - complétude : un point couvert par 0 règle = TROU (avec contre-exemple concret) ;
-//   - conflits   : selon la hit policy (UNIQUE -> tout chevauchement ; ANY -> sorties divergentes) ;
-//   - règles mortes / masquées (FIRST/PRIORITY) ; ligne `default` inutile ;
-//   - subsumption (ANY/PRIORITY) : règle dont la région est incluse dans une autre avec la même
-//     sortie -> REDONDANTE (supprimable), via une matrice d'inclusion (bitset) sur la même grille.
+// Principle: on each dimension (input column) we collect the cut points (cell
+// boundaries + domain boundaries). The cartesian product of representative witness
+// points exhaustively covers the space; for each point we count the rules that match
+// (via the SAME ir.MatchCell function as the VM -> proof and execution agree). From this we derive:
+//   - completeness: a point covered by 0 rules = GAP (with a concrete counterexample);
+//   - conflicts   : depending on the hit policy (UNIQUE -> any overlap; ANY -> divergent outputs);
+//   - dead / masked rules (FIRST/PRIORITY); useless `default` line;
+//   - subsumption (ANY/PRIORITY): a rule whose region is included in another with the same
+//     output -> REDUNDANT (removable), via an inclusion matrix (bitset) on the same grid.
 //
-// Dégradation honnête : une table avec une cellule Op=Prog (non géométrique) ou une grille trop
-// grande est signalée « non prouvée formellement » — jamais conformée en silence.
+// Honest degradation: a table with an Op=Prog (non-geometric) cell or a grid that is too
+// large is reported "not formally proven" — never silently conformed.
 package verify
 
 import (
@@ -26,10 +26,10 @@ import (
 	"github.com/maxgfr/feelc/internal/ir"
 )
 
-// gridBudget borne la taille de la grille atomique (garde-fou anti-explosion).
+// gridBudget bounds the size of the atomic grid (anti-explosion guard).
 const gridBudget = 500_000
 
-// maxWitnessesPerKind limite le nombre de contre-exemples rapportés par catégorie.
+// maxWitnessesPerKind limits the number of counterexamples reported per category.
 const maxWitnessesPerKind = 5
 
 type Kind string
@@ -40,11 +40,11 @@ const (
 	KindDeadRule           Kind = "dead-rule"
 	KindUnreachableDefault Kind = "unreachable-default"
 	KindNotVerifiable      Kind = "not-verifiable"
-	KindSubsumed           Kind = "subsumed" // règle dont la région est incluse dans une autre
+	KindSubsumed           Kind = "subsumed" // rule whose region is included in another
 )
 
-// maxSubsumeRules : la matrice de subsumption tient dans un bitset uint64 jusqu'à 64 règles
-// (la table 8×50 du bench y tient). Au-delà, l'analyse de subsumption est honnêtement omise.
+// maxSubsumeRules: the subsumption matrix fits in a uint64 bitset up to 64 rules
+// (the 8×50 bench table fits). Beyond that, subsumption analysis is honestly omitted.
 const maxSubsumeRules = 64
 
 type Severity string
@@ -55,24 +55,24 @@ const (
 	SevInfo    Severity = "info"
 )
 
-// Finding : un diagnostic de vérification.
+// Finding: a verification diagnostic.
 type Finding struct {
 	Decision string            `json:"decision"`
 	Kind     Kind              `json:"kind"`
 	Severity Severity          `json:"severity"`
 	Message  string            `json:"message"`
-	Witness  map[string]string `json:"witness,omitempty"` // point-témoin (entrée -> valeur)
-	Rules    []int             `json:"rules,omitempty"`   // règles concernées (1-based)
+	Witness  map[string]string `json:"witness,omitempty"` // witness point (input -> value)
+	Rules    []int             `json:"rules,omitempty"`   // rules concerned (1-based)
 }
 
-// Report : l'ensemble des diagnostics.
+// Report: the set of diagnostics.
 type Report struct {
 	Findings []Finding `json:"findings"`
 }
 
 func (r *Report) add(f Finding) { r.Findings = append(r.Findings, f) }
 
-// Blockers compte les findings bloquants (sévérité error).
+// Blockers counts the blocking findings (error severity).
 func (r *Report) Blockers() int {
 	n := 0
 	for _, f := range r.Findings {
@@ -83,7 +83,7 @@ func (r *Report) Blockers() int {
 	return n
 }
 
-// Verify analyse toutes les décisions-tables d'un modèle compilé.
+// Verify analyzes all decision tables of a compiled model.
 func Verify(cm *ir.CompiledModel) *Report {
 	rep := &Report{}
 	for i := range cm.Decisions {
@@ -100,17 +100,17 @@ type dim struct {
 	witnesses []ir.Value
 }
 
-// smtProve est le POINT D'EXTENSION pour un backend SMT (Z3), activé par le build tag `smt`
-// (cf. verify_smt.go, ADR 0007). Par défaut nil : les tables à cellules Op=Prog (non géométriques)
-// restent en dégradation honnête `not-verifiable`. Un backend doit renvoyer true s'il a TRAITÉ la
-// décision (ajouté ses findings), false pour laisser le not-verifiable par défaut.
+// smtProve is the EXTENSION POINT for an SMT backend (z3), enabled by the build tag `smt`
+// (cf. verify_smt.go, ADR 0007). nil by default: tables with Op=Prog cells (non-geometric)
+// stay in honest degradation `not-verifiable`. A backend must return true if it HANDLED the
+// decision (added its findings), false to leave the default not-verifiable.
 var smtProve func(cm *ir.CompiledModel, d *ir.Decision, rep *Report) bool
 
 func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 	t := d.Table
 
-	// Cellule Op=Prog (non géométrique) : router vers le backend SMT s'il est branché, sinon
-	// dégradation honnête `not-verifiable`.
+	// Op=Prog (non-geometric) cell: route to the SMT backend if it is plugged in, otherwise
+	// honest degradation `not-verifiable`.
 	for _, r := range t.Rules {
 		for _, c := range r.Conds {
 			if c.Op == ir.OpProg {
@@ -118,7 +118,7 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 					return
 				}
 				rep.add(Finding{Decision: d.Name, Kind: KindNotVerifiable, Severity: SevWarning,
-					Message: "table non prouvable géométriquement (cellule expression Op=Prog) — résidu non vérifié"})
+					Message: "table not provable geometrically (expression cell Op=Prog) — residue not verified"})
 				return
 			}
 		}
@@ -132,13 +132,13 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 		size *= len(dm.witnesses)
 		if size > gridBudget {
 			rep.add(Finding{Decision: d.Name, Kind: KindNotVerifiable, Severity: SevWarning,
-				Message: fmt.Sprintf("grille de vérification trop grande (> %d) — non prouvée exhaustivement", gridBudget)})
+				Message: fmt.Sprintf("verification grid too large (> %d) — not proven exhaustively", gridBudget)})
 			return
 		}
 	}
 
-	// La complétude (absence de trou) n'a de sens que pour les politiques single-hit :
-	// pour COLLECT / RULE ORDER, une région couverte par 0 règle donne un résultat vide attendu.
+	// Completeness (absence of gaps) only makes sense for single-hit policies:
+	// for COLLECT / RULE ORDER, a region covered by 0 rules gives an expected empty result.
 	singleHit := t.HitPolicy == ir.HitFirst || t.HitPolicy == ir.HitUnique ||
 		t.HitPolicy == ir.HitAny || t.HitPolicy == ir.HitPriority
 
@@ -148,11 +148,11 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 	gaps := 0
 	conflicts := map[string]Finding{}
 
-	// Matrice de subsumption (bitset) : subset[a] a le bit b si "A ⊆ B" reste possible. Initialisée
-	// tout-à-vrai, on efface le bit b dès qu'un point-témoin couvert par A ne l'est PAS par B.
-	// Pertinente pour ANY / PRIORITY (chevauchement à sorties identiques = règle redondante, non
-	// signalé par ailleurs). UNIQUE = déjà conflit ; COLLECT/RULE ORDER = chevauchements voulus ;
-	// FIRST = déjà couvert par dead-rule. Bitset uint64 -> O(1) par règle couvrante et par point.
+	// Subsumption matrix (bitset): subset[a] has bit b set if "A ⊆ B" remains possible. Initialized
+	// all-true, we clear bit b as soon as a witness point covered by A is NOT covered by B.
+	// Relevant for ANY / PRIORITY (overlap with identical outputs = redundant rule, not
+	// reported elsewhere). UNIQUE = already a conflict; COLLECT/RULE ORDER = intended overlaps;
+	// FIRST = already covered by dead-rule. uint64 bitset -> O(1) per covering rule and per point.
 	trackSub := len(t.Rules) >= 2 && len(t.Rules) <= maxSubsumeRules &&
 		(t.HitPolicy == ir.HitAny || t.HitPolicy == ir.HitPriority)
 	var subset []uint64
@@ -184,15 +184,15 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 				coverMask |= 1 << uint(ri)
 			}
 			for _, a := range covering {
-				subset[a] &= coverMask // tout b non couvert ici est un témoin que A⊄B
+				subset[a] &= coverMask // any b not covered here is a witness that A⊄B
 			}
 		}
 		if len(covering) == 0 {
 			allCovered = false
 			if singleHit && gaps < maxWitnessesPerKind {
-				sev, msg := SevError, "cas non couvert par aucune règle (trou de complétude)"
+				sev, msg := SevError, "case not covered by any rule (completeness gap)"
 				if t.Default != nil {
-					sev, msg = SevWarning, "cas non couvert par une règle explicite (rattrapé par la ligne `default`)"
+					sev, msg = SevWarning, "case not covered by an explicit rule (caught by the `default` line)"
 				}
 				rep.add(Finding{Decision: d.Name, Kind: KindGap, Severity: sev, Message: msg,
 					Witness: witnessMap(dims, point)})
@@ -213,71 +213,71 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 	})
 	if err != nil {
 		rep.add(Finding{Decision: d.Name, Kind: KindNotVerifiable, Severity: SevWarning,
-			Message: "analyse impossible (incohérence de type dans une cellule): " + err.Error()})
+			Message: "analysis impossible (type inconsistency in a cell): " + err.Error()})
 		return
 	}
 
 	if singleHit && gaps > maxWitnessesPerKind {
 		rep.add(Finding{Decision: d.Name, Kind: KindGap, Severity: SevInfo,
-			Message: fmt.Sprintf("(%d cas non couverts supplémentaires non listés)", gaps-maxWitnessesPerKind)})
+			Message: fmt.Sprintf("(%d additional uncovered cases not listed)", gaps-maxWitnessesPerKind)})
 	}
 	for _, f := range sortedConflicts(conflicts) {
 		rep.add(f)
 	}
 
-	// Règles mortes / masquées.
+	// Dead / masked rules.
 	for ri := range t.Rules {
 		switch {
 		case !everCovers[ri]:
 			rep.add(Finding{Decision: d.Name, Kind: KindDeadRule, Severity: SevWarning, Rules: []int{ri + 1},
-				Message: fmt.Sprintf("règle #%d jamais atteignable (conditions impossibles à satisfaire)", ri+1)})
+				Message: fmt.Sprintf("rule #%d never reachable (conditions impossible to satisfy)", ri+1)})
 		case t.HitPolicy == ir.HitFirst && !everFirst[ri]:
 			rep.add(Finding{Decision: d.Name, Kind: KindDeadRule, Severity: SevWarning, Rules: []int{ri + 1},
-				Message: fmt.Sprintf("règle #%d masquée : une règle antérieure couvre déjà tous ses cas (jamais la première à matcher)", ri+1)})
+				Message: fmt.Sprintf("rule #%d masked: an earlier rule already covers all its cases (never the first to match)", ri+1)})
 		}
 	}
 
-	// Subsumption : règle redondante (région incluse dans une autre, sortie identique).
+	// Subsumption: redundant rule (region included in another, identical output).
 	if trackSub {
 		reportSubsumption(d.Name, t, subset, everCovers, rep)
 	}
 
-	// Ligne `default` inutile.
+	// Useless `default` line.
 	if t.Default != nil && allCovered {
 		rep.add(Finding{Decision: d.Name, Kind: KindUnreachableDefault, Severity: SevInfo,
-			Message: "ligne `default` jamais utilisée : les règles couvrent déjà tous les cas"})
+			Message: "`default` line never used: the rules already cover all cases"})
 	}
 }
 
-// reportSubsumption signale les règles REDONDANTES : région incluse dans une autre règle avec
-// une sortie identique (donc supprimable sans changer la décision sous ANY/PRIORITY). subset[a]
-// porte le bit b ssi A⊆B sur la grille (inclusion EXACTE : les témoins couvrent toutes les
-// cellules atomiques). Les sorties différentes (dominance) sont hors périmètre v2 (trop
-// dépendantes de la politique) pour éviter le bruit. Plafonné à maxWitnessesPerKind.
+// reportSubsumption reports REDUNDANT rules: region included in another rule with
+// an identical output (thus removable without changing the decision under ANY/PRIORITY). subset[a]
+// carries bit b iff A⊆B on the grid (EXACT inclusion: the witnesses cover all
+// atomic cells). Different outputs (dominance) are out of v2 scope (too
+// policy-dependent) to avoid noise. Capped at maxWitnessesPerKind.
 func reportSubsumption(dec string, t *ir.DecisionTable, subset []uint64, everCovers []bool, rep *Report) {
 	reported := 0
 	for a := range t.Rules {
 		if !everCovers[a] {
-			continue // jamais couverte -> déjà signalée dead-rule
+			continue // never covered -> already reported as dead-rule
 		}
 		for b := range t.Rules {
 			if a == b || subset[a]&(1<<uint(b)) == 0 || !everCovers[b] {
 				continue
 			}
-			mutual := subset[b]&(1<<uint(a)) != 0 // régions identiques
+			mutual := subset[b]&(1<<uint(a)) != 0 // identical regions
 			if mutual && b < a {
-				continue // paire mutuelle signalée une seule fois (a<b)
+				continue // mutual pair reported only once (a<b)
 			}
 			if !outputsEqual(t.Rules[a].Outputs, t.Rules[b].Outputs) {
-				continue // sorties différentes : pas "redondant"
+				continue // different outputs: not "redundant"
 			}
 			if reported >= maxWitnessesPerKind {
 				return
 			}
 			reported++
-			msg := fmt.Sprintf("règle #%d redondante : région incluse dans la règle #%d avec une sortie identique (supprimable)", a+1, b+1)
+			msg := fmt.Sprintf("rule #%d redundant: region included in rule #%d with an identical output (removable)", a+1, b+1)
 			if mutual {
-				msg = fmt.Sprintf("règles #%d et #%d : régions et sorties identiques (l'une est redondante)", a+1, b+1)
+				msg = fmt.Sprintf("rules #%d and #%d: identical regions and outputs (one is redundant)", a+1, b+1)
 			}
 			rep.add(Finding{Decision: dec, Kind: KindSubsumed, Severity: SevWarning, Rules: []int{a + 1, b + 1}, Message: msg})
 		}
@@ -301,19 +301,19 @@ func recordConflict(dec string, t *ir.DecisionTable, covering []int, dims []dim,
 	switch t.HitPolicy {
 	case ir.HitUnique:
 		out[ruleKey(covering)] = Finding{Decision: dec, Kind: KindConflict, Severity: SevError,
-			Message: "hit policy UNIQUE : plusieurs règles se chevauchent", Witness: witnessMap(dims, point), Rules: oneBased(covering)}
+			Message: "hit policy UNIQUE: several rules overlap", Witness: witnessMap(dims, point), Rules: oneBased(covering)}
 	case ir.HitAny:
-		// Conflit seulement si les sorties divergent.
+		// Conflict only if the outputs diverge.
 		ref := t.Rules[covering[0]].Outputs
 		for _, ri := range covering[1:] {
 			if !outputsEqual(t.Rules[ri].Outputs, ref) {
 				out[ruleKey(covering)] = Finding{Decision: dec, Kind: KindConflict, Severity: SevError,
-					Message: "hit policy ANY : règles en chevauchement avec sorties divergentes", Witness: witnessMap(dims, point), Rules: oneBased(covering)}
+					Message: "hit policy ANY: overlapping rules with divergent outputs", Witness: witnessMap(dims, point), Rules: oneBased(covering)}
 				return
 			}
 		}
 	}
-	// FIRST/PRIORITY/COLLECT/RULE ORDER : le chevauchement est résolu/attendu -> pas de conflit.
+	// FIRST/PRIORITY/COLLECT/RULE ORDER: the overlap is resolved/expected -> no conflict.
 }
 
 func outputsEqual(a, b []ir.Value) bool {
@@ -328,7 +328,7 @@ func outputsEqual(a, b []ir.Value) bool {
 	return true
 }
 
-// --- construction des dimensions ---
+// --- dimension construction ---
 
 func buildDim(col string, rules []ir.Rule, idx int, dom ir.Domain) dim {
 	var nums []*apd.Decimal
@@ -397,7 +397,7 @@ func buildDim(col string, rules []ir.Rule, idx int, dom ir.Domain) dim {
 	case hasStr:
 		return dim{col: col, witnesses: discreteWitnesses(strVals, dom)}
 	default:
-		return dim{col: col, witnesses: []ir.Value{ir.Null()}} // colonne libre (toujours Any)
+		return dim{col: col, witnesses: []ir.Value{ir.Null()}} // free column (always Any)
 	}
 }
 
@@ -452,7 +452,7 @@ func discreteWitnesses(strVals map[string]bool, dom ir.Domain) []ir.Value {
 	for _, k := range keys {
 		out = append(out, ir.Str(k))
 	}
-	out = append(out, ir.Str("\x00__autre__")) // sentinelle « toute autre valeur »
+	out = append(out, ir.Str("\x00__autre__")) // sentinel "any other value"
 	return out
 }
 
@@ -475,7 +475,7 @@ func inNumericDomain(dom ir.Domain, v *apd.Decimal) bool {
 	return true
 }
 
-// --- énumération de la grille ---
+// --- grid enumeration ---
 
 func eachPoint(dims []dim, fn func([]ir.Value) error) error {
 	if len(dims) == 0 {
@@ -506,7 +506,7 @@ func eachPoint(dims []dim, fn func([]ir.Value) error) error {
 	return nil
 }
 
-// --- helpers décimaux ---
+// --- decimal helpers ---
 
 func sortUnique(xs []*apd.Decimal) []*apd.Decimal {
 	sort.Slice(xs, func(i, j int) bool { return decimal.Cmp(xs[i], xs[j]) < 0 })
@@ -557,7 +557,7 @@ func valueStr(v ir.Value) string {
 		return r.Text('f')
 	case ir.TagString:
 		if v.Str == "\x00__autre__" {
-			return "<toute autre valeur>"
+			return "<any other value>"
 		}
 		return fmt.Sprintf("%q", v.Str)
 	case ir.TagBool:

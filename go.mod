@@ -14,6 +14,6 @@ require (
 	golang.org/x/sys v0.13.0 // indirect
 )
 
-// Fork vendorisé : exporte FunCall.Args (FunCallArg{Name, Arg}) pour lire les arguments
-// d'invocation (inlining BKM, ADR 0004 §1). Épinglé localement, pas de drift amont silencieux.
+// Vendored fork: exports FunCall.Args (FunCallArg{Name, Arg}) to read invocation arguments
+// (BKM inlining, ADR 0004 §1). Pinned locally, no silent upstream drift.
 replace github.com/pbinitiative/feel => ./third_party/feel

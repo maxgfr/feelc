@@ -4,11 +4,11 @@ input income     : number >= 0
 input children   : number in [0..15]
 input is_student : boolean
 
-# Aides cumulables -> liste des aides accordées (COLLECT brut).
+# Cumulative benefits -> list of granted benefits (raw COLLECT).
 decision aids : string {
   needs: income, children, is_student
   hit: collect
-  #  income | children | is_student => aide
+  #  income | children | is_student => benefit
      < 1500 | -        | -          => "housing"
      -      | >= 1     | -          => "family"
      < 1000 | -        | true       => "student_grant"

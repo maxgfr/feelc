@@ -10,9 +10,9 @@ import (
 	"github.com/maxgfr/feelc/internal/dsl"
 )
 
-// Régression (fork parser) : un `?` explicite dans une expression faisait boucler le parseur
-// FEEL amont à l'infini (croissance non bornée → OOM ~100 Go). Le fork consomme le token.
-// On garde un timeout court pour que toute régression ÉCHOUE VITE plutôt que de saturer la RAM.
+// Regression (fork parser): an explicit `?` in an expression made the upstream
+// FEEL parser loop forever (unbounded growth → OOM ~100 GB). The fork consumes the token.
+// We keep a short timeout so any regression FAILS FAST rather than saturating RAM.
 func TestParseDoesNotHangOnExplicitQuestionMark(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
@@ -22,12 +22,12 @@ func TestParseDoesNotHangOnExplicitQuestionMark(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("dsl.Parse a bouclé sur un `?` explicite — régression du correctif fork parser.go")
+		t.Fatal("dsl.Parse looped on an explicit `?` — regression of the fork parser.go fix")
 	}
 }
 
-// Col doit être renseigné (1-based) pour chaque cellule, calculé au split DSL :
-// la colonne pointe le 1er caractère du contenu trimé dans la ligne source.
+// Col must be set (1-based) for each cell, computed at DSL split time:
+// the column points to the first character of the trimmed content in the source line.
 func TestCellColumnsFilled(t *testing.T) {
 	const ruleLine = "  >= 1 | < 2 => 10"
 	src := "model \"m\" {}\n" +
@@ -45,50 +45,50 @@ func TestCellColumnsFilled(t *testing.T) {
 	}
 	r := m.Decisions[0].Rules[0]
 	if len(r.Conds) != 2 || len(r.Outputs) != 1 {
-		t.Fatalf("structure inattendue: %d conds, %d outputs", len(r.Conds), len(r.Outputs))
+		t.Fatalf("unexpected structure: %d conds, %d outputs", len(r.Conds), len(r.Outputs))
 	}
 	if want := strings.Index(ruleLine, ">=") + 1; r.Conds[0].Col != want {
-		t.Errorf("Conds[0].Col = %d, attendu %d", r.Conds[0].Col, want)
+		t.Errorf("Conds[0].Col = %d, expected %d", r.Conds[0].Col, want)
 	}
 	if want := strings.Index(ruleLine, "<") + 1; r.Conds[1].Col != want {
-		t.Errorf("Conds[1].Col = %d, attendu %d", r.Conds[1].Col, want)
+		t.Errorf("Conds[1].Col = %d, expected %d", r.Conds[1].Col, want)
 	}
 	if want := strings.Index(ruleLine, "10") + 1; r.Outputs[0].Col != want {
-		t.Errorf("Outputs[0].Col = %d, attendu %d", r.Outputs[0].Col, want)
+		t.Errorf("Outputs[0].Col = %d, expected %d", r.Outputs[0].Col, want)
 	}
 }
 
-// ParseFile stampille le nom de fichier sur l'erreur structurée, avec un code stable
-// et une suggestion exploitable.
+// ParseFile stamps the file name onto the structured error, with a stable code
+// and an actionable suggestion.
 func TestParseFileStampsStructuredError(t *testing.T) {
 	_, err := dsl.ParseFile("m.rules", "model \"m\" {}\nbogus instruction\n")
 	if err == nil {
-		t.Fatal("erreur attendue")
+		t.Fatal("expected error")
 	}
 	var de *diag.Error
 	if !errors.As(err, &de) {
-		t.Fatalf("erreur non structurée: %T %v", err, err)
+		t.Fatalf("unstructured error: %T %v", err, err)
 	}
 	if de.File != "m.rules" {
-		t.Errorf("File = %q, attendu m.rules", de.File)
+		t.Errorf("File = %q, expected m.rules", de.File)
 	}
 	if de.Line != 2 {
-		t.Errorf("Line = %d, attendu 2", de.Line)
+		t.Errorf("Line = %d, expected 2", de.Line)
 	}
 	if de.Code != diag.CodeUnknownStmt {
-		t.Errorf("Code = %q, attendu %q", de.Code, diag.CodeUnknownStmt)
+		t.Errorf("Code = %q, expected %q", de.Code, diag.CodeUnknownStmt)
 	}
 	if de.Suggestion == "" {
-		t.Errorf("suggestion attendue non vide")
+		t.Errorf("expected non-empty suggestion")
 	}
-	// Compat texte : sans fichier, préfixe "ligne N:" historique.
+	// Text compat: without a file, the historical "line N:" prefix.
 	_, err2 := dsl.Parse("model \"m\" {}\nbogus instruction\n")
-	if !strings.HasPrefix(err2.Error(), "ligne 2: ") {
-		t.Errorf("format texte historique attendu, obtenu %q", err2.Error())
+	if !strings.HasPrefix(err2.Error(), "line 2: ") {
+		t.Errorf("expected historical text format, got %q", err2.Error())
 	}
 }
 
-// Une cellule FEEL invalide produit un diag.Error de code DSL002 enveloppant la cause FEEL.
+// An invalid FEEL cell produces a diag.Error with code DSL002 wrapping the FEEL cause.
 func TestInvalidFeelCellWrapped(t *testing.T) {
 	src := "model \"m\" {}\n" +
 		"input a : number\n" +
@@ -99,16 +99,16 @@ func TestInvalidFeelCellWrapped(t *testing.T) {
 		"}\n"
 	_, err := dsl.Parse(src)
 	if err == nil {
-		t.Fatal("erreur attendue sur cellule FEEL invalide")
+		t.Fatal("expected error on invalid FEEL cell")
 	}
 	var de *diag.Error
 	if !errors.As(err, &de) {
-		t.Fatalf("erreur non structurée: %T", err)
+		t.Fatalf("unstructured error: %T", err)
 	}
 	if de.Code != diag.CodeFeelSyntax {
-		t.Errorf("Code = %q, attendu %q", de.Code, diag.CodeFeelSyntax)
+		t.Errorf("Code = %q, expected %q", de.Code, diag.CodeFeelSyntax)
 	}
 	if de.Cause == nil {
-		t.Errorf("la cause FEEL doit être enveloppée")
+		t.Errorf("the FEEL cause must be wrapped")
 	}
 }

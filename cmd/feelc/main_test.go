@@ -13,7 +13,7 @@ import (
 	"github.com/maxgfr/feelc/internal/ir"
 )
 
-// feelc tck : succès sur les fixtures (3 passés, 1 skip), et --min trop haut échoue.
+// feelc tck: succeeds on the fixtures (3 passed, 1 skip), and --min too high fails.
 func TestCmdTck(t *testing.T) {
 	suite := filepath.Join("..", "..", "testdata", "dmn-tck")
 	out := captureStdout(t, func() {
@@ -21,19 +21,19 @@ func TestCmdTck(t *testing.T) {
 			t.Fatalf("tck: %v", err)
 		}
 	})
-	if !strings.Contains(out, "3 passés") || !strings.Contains(out, "100.0%") {
-		t.Errorf("sortie tck inattendue: %q", out)
+	if !strings.Contains(out, "3 passed") || !strings.Contains(out, "100.0%") {
+		t.Errorf("unexpected tck output: %q", out)
 	}
-	// --min 100 passe (conformité 100%) ; un seuil au-dessus est impossible -> on teste l'échec via
-	// un seuil > 100 (jamais atteignable) pour vérifier le gate.
+	// --min 100 passes (conformance 100%); a threshold above is impossible -> we test the failure via
+	// a threshold > 100 (never reachable) to verify the gate.
 	_ = captureStdout(t, func() {
 		if err := cmdTck([]string{"--suite", suite, "--min", "100.5"}); err == nil {
-			t.Errorf("--min 100.5 devrait échouer (conformité 100%%)")
+			t.Errorf("--min 100.5 should fail (conformance 100%%)")
 		}
 	})
 }
 
-// feelc fmt : stdout par défaut, -w idempotent, --check exit≠0 si non formaté.
+// feelc fmt: stdout by default, -w idempotent, --check exit≠0 if not formatted.
 func TestCmdFmt(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "m.rules")
@@ -41,16 +41,16 @@ func TestCmdFmt(t *testing.T) {
 	if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// stdout : produit une sortie non vide qui reparse.
+	// stdout: produces a non-empty output that reparses.
 	out := captureStdout(t, func() {
 		if err := cmdFmt([]string{"--rules", p}); err != nil {
 			t.Fatalf("fmt stdout: %v", err)
 		}
 	})
 	if !strings.Contains(out, "decision d : number") {
-		t.Fatalf("sortie fmt inattendue: %q", out)
+		t.Fatalf("unexpected fmt output: %q", out)
 	}
-	// -w deux fois : le fichier est stable au 2e passage (idempotence).
+	// -w twice: the file is stable on the 2nd pass (idempotence).
 	if err := cmdFmt([]string{"--rules", p, "-w"}); err != nil {
 		t.Fatal(err)
 	}
@@ -60,22 +60,22 @@ func TestCmdFmt(t *testing.T) {
 	}
 	after2, _ := os.ReadFile(p)
 	if string(after1) != string(after2) {
-		t.Errorf("fmt -w non idempotent:\n%s\n---\n%s", after1, after2)
+		t.Errorf("fmt -w not idempotent:\n%s\n---\n%s", after1, after2)
 	}
-	// --check : sur un fichier déjà formaté -> exit 0 ; sinon erreur.
+	// --check: on an already formatted file -> exit 0; otherwise error.
 	if err := cmdFmt([]string{"--rules", p, "--check"}); err != nil {
-		t.Errorf("--check sur fichier formaté devrait réussir: %v", err)
+		t.Errorf("--check on formatted file should succeed: %v", err)
 	}
-	if err := os.WriteFile(p, []byte(src), 0o644); err != nil { // remet la version non-canonique
+	if err := os.WriteFile(p, []byte(src), 0o644); err != nil { // restore the non-canonical version
 		t.Fatal(err)
 	}
 	if err := cmdFmt([]string{"--rules", p, "--check"}); err == nil {
-		t.Errorf("--check sur fichier non formaté devrait échouer")
+		t.Errorf("--check on non-formatted file should fail")
 	}
 }
 
-// feelc compile produit un .ir.bin canonique, et run/verify savent le recharger
-// (chargement direct de l'IR, sans recompilation).
+// feelc compile produces a canonical .ir.bin, and run/verify can reload it
+// (direct loading of the IR, without recompilation).
 func TestCompileThenRunFromBinary(t *testing.T) {
 	dir := t.TempDir()
 	srcPath := filepath.Join(dir, "m.rules")
@@ -96,19 +96,19 @@ decision d : string {
 	}
 	data, err := os.ReadFile(binPath)
 	if err != nil || !ir.IsEncoded(data) {
-		t.Fatalf("le .ir.bin n'a pas le magic feelc (err=%v)", err)
+		t.Fatalf("the .ir.bin does not have the feelc magic (err=%v)", err)
 	}
 	out := captureStdout(t, func() {
 		if err := cmdRun([]string{"--rules", binPath, "--decision", "d", "--input", `{"n": -5}`}); err != nil {
-			t.Fatalf("run depuis .ir.bin: %v", err)
+			t.Fatalf("run from .ir.bin: %v", err)
 		}
 	})
 	if strings.TrimSpace(out) != "neg" {
-		t.Fatalf("run depuis .ir.bin = %q, attendu \"neg\"", strings.TrimSpace(out))
+		t.Fatalf("run from .ir.bin = %q, expected \"neg\"", strings.TrimSpace(out))
 	}
 }
 
-// captureStdout redirige os.Stdout pendant l'exécution de fn et renvoie ce qui y a été écrit.
+// captureStdout redirects os.Stdout during the execution of fn and returns what was written to it.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	old := os.Stdout
@@ -125,8 +125,8 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-// Avec --json, une erreur de compilation est rendue en objet JSON structuré
-// {file,line,col,code,message,suggestion} sur stdout (consommable par la skill).
+// With --json, a compilation error is rendered as a structured JSON object
+// {file,line,col,code,message,suggestion} on stdout (consumable by the skill).
 func TestCmdVerifyJSONErrorStructured(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "bad.rules")
 	if err := os.WriteFile(p, []byte("model \"m\" {}\nbogus instruction\n"), 0o644); err != nil {
@@ -137,26 +137,26 @@ func TestCmdVerifyJSONErrorStructured(t *testing.T) {
 		got = cmdVerify([]string{"--rules", p, "--json"})
 	})
 	if got == nil {
-		t.Fatal("erreur attendue")
+		t.Fatal("expected error")
 	}
 	var obj map[string]any
 	if err := json.Unmarshal([]byte(out), &obj); err != nil {
-		t.Fatalf("sortie JSON invalide: %q (%v)", out, err)
+		t.Fatalf("invalid JSON output: %q (%v)", out, err)
 	}
 	if obj["message"] == nil {
-		t.Errorf("champ message attendu, obtenu %v", obj)
+		t.Errorf("expected message field, got %v", obj)
 	}
 	if obj["file"] != p {
-		t.Errorf("champ file = %v, attendu %q", obj["file"], p)
+		t.Errorf("file field = %v, expected %q", obj["file"], p)
 	}
 	if obj["line"] == nil {
-		t.Errorf("champ line attendu, obtenu %v", obj)
+		t.Errorf("expected line field, got %v", obj)
 	}
 }
 
-// Prouve que la lecture des entrées préserve l'EXACTITUDE : 2^53+1 n'est pas représentable
-// exactement en float64. Si decodeInputs passait par float64, l'égalité échouerait ("miss").
-// Avec UseNumber + décimal exact, elle réussit ("exact").
+// Proves that reading the inputs preserves EXACTNESS: 2^53+1 is not representable
+// exactly in float64. If decodeInputs went through float64, the equality would fail ("miss").
+// With UseNumber + exact decimal, it succeeds ("exact").
 func TestDecodeInputsExactBeyondFloat64(t *testing.T) {
 	in, err := decodeInputs(`{"score": 9007199254740993}`) // 2^53 + 1
 	if err != nil {
@@ -175,6 +175,6 @@ decision d : string {
 		t.Fatal(err)
 	}
 	if got != "exact" {
-		t.Errorf("got %v, attendu \"exact\" (perte de précision = entrée passée par float64)", got)
+		t.Errorf("got %v, expected \"exact\" (precision loss = input passed through float64)", got)
 	}
 }

@@ -1,12 +1,12 @@
-// Package diag fournit un type d'erreur de compilation STRUCTURÉ et sérialisable
-// ({file,line,col,code,message,suggestion}), tout en restant rétro-compatible avec
-// le format texte historique ("ligne N: <message>") attendu par les tests existants.
+// Package diag provides a STRUCTURED, serializable compilation error type
+// ({file,line,col,code,message,suggestion}), while remaining backward-compatible with
+// the historical text format ("line N: <message>") expected by existing tests.
 //
-// Discipline projet (jamais conformer en silence) : chaque site d'erreur du pipeline
-// parse->compile produit un diag.Error explicite, avec un Code stable (catalogue ci-dessous)
-// et, quand c'est utile, une Suggestion exploitable par la boucle red->green de la skill.
-// La Suggestion N'EST PAS rendue par Error() (pour ne pas casser les assertions sur
-// sous-chaînes) — uniquement dans le JSON et un rendu humain dédié.
+// Project discipline (never conform silently): every error site in the
+// parse->compile pipeline produces an explicit diag.Error, with a stable Code (catalogue below)
+// and, when useful, a Suggestion usable by the skill's red->green loop.
+// The Suggestion is NOT rendered by Error() (so as not to break substring assertions) —
+// only in the JSON and a dedicated human-readable rendering.
 package diag
 
 import (
@@ -15,80 +15,80 @@ import (
 	"fmt"
 )
 
-// Catalogue de codes STABLES (consommés par la skill et docs/error-schema.md).
-// Préfixe DSL = parseur ; CMP = compilateur. Ne pas renuméroter les codes existants.
+// Catalogue of STABLE codes (consumed by the skill and docs/error-schema.md).
+// Prefix DSL = parser; CMP = compiler. Do not renumber existing codes.
 const (
-	// DSL — parseur .rules
-	CodeUnknownStmt   = "DSL001" // instruction non reconnue
-	CodeFeelSyntax    = "DSL002" // cellule/expression FEEL invalide
-	CodeNoModel       = "DSL003" // modèle sans déclaration `model "..."`
-	CodeModelHeader   = "DSL004" // en-tête `model` malformé
-	CodeInputSyntax   = "DSL005" // `input` malformé
-	CodeDecisionHead  = "DSL006" // en-tête de décision malformé
-	CodeDecisionBody  = "DSL007" // ligne de corps de décision non reconnue
-	CodeRuleSyntax    = "DSL008" // règle malformée
-	CodeEmptyCell     = "DSL009" // cellule vide
-	CodeTypeDecl      = "DSL010" // déclaration `type` malformée
-	CodeUnknownType   = "DSL011" // type non supporté
-	CodeBraceTrailing = "DSL012" // contenu après `{` sur la ligne d'en-tête
-	CodeBKM           = "DSL013" // déclaration `bkm` malformée
+	// DSL — .rules parser
+	CodeUnknownStmt   = "DSL001" // unrecognized statement
+	CodeFeelSyntax    = "DSL002" // invalid FEEL cell/expression
+	CodeNoModel       = "DSL003" // model without a `model "..."` declaration
+	CodeModelHeader   = "DSL004" // malformed `model` header
+	CodeInputSyntax   = "DSL005" // malformed `input`
+	CodeDecisionHead  = "DSL006" // malformed decision header
+	CodeDecisionBody  = "DSL007" // unrecognized decision body line
+	CodeRuleSyntax    = "DSL008" // malformed rule
+	CodeEmptyCell     = "DSL009" // empty cell
+	CodeTypeDecl      = "DSL010" // malformed `type` declaration
+	CodeUnknownType   = "DSL011" // unsupported type
+	CodeBraceTrailing = "DSL012" // content after `{` on the header line
+	CodeBKM           = "DSL013" // malformed `bkm` declaration
 
-	// CMP — compilateur / typecheck
-	CodeUndeclared   = "CMP001" // référence à un nom non déclaré
-	CodeHitPolicy    = "CMP002" // hit policy non supportée
-	CodeUnknownType2 = "CMP003" // type de décision inconnu
-	CodeArity        = "CMP004" // mauvais nombre de conditions/sorties
-	CodePriority     = "CMP005" // contrainte PRIORITY non satisfaite
-	CodeCollect      = "CMP006" // contrainte COLLECT non satisfaite
-	CodeUnsupported  = "CMP007" // construct hors sous-ensemble v2
-	CodeLiteral      = "CMP008" // littéral attendu
+	// CMP — compiler / typecheck
+	CodeUndeclared   = "CMP001" // reference to a name not declared
+	CodeHitPolicy    = "CMP002" // unsupported hit policy
+	CodeUnknownType2 = "CMP003" // unknown decision type
+	CodeArity        = "CMP004" // wrong number of conditions/outputs
+	CodePriority     = "CMP005" // PRIORITY constraint not satisfied
+	CodeCollect      = "CMP006" // COLLECT constraint not satisfied
+	CodeUnsupported  = "CMP007" // construct outside the v2 subset
+	CodeLiteral      = "CMP008" // literal expected
 )
 
-// Error est un diagnostic de compilation structuré, positionné dans la source.
+// Error is a structured compilation diagnostic, positioned in the source.
 type Error struct {
-	File       string // chemin source ("" -> préfixe texte historique "ligne N:")
-	Line       int    // ligne 1-based (0 = inconnue -> pas de préfixe de position)
-	Col        int    // colonne 1-based dans la ligne source (0 = inconnue)
-	Code       string // code catalogue stable (ex: "DSL001")
-	Message    string // message humain (FR) ; identique au texte historique
-	Suggestion string // piste de correction (jamais dans Error(), seulement JSON/rendu humain)
-	Cause      error  // erreur sous-jacente enveloppée (équivalent du %w historique)
+	File       string // source path ("" -> historical text prefix "line N:")
+	Line       int    // 1-based line (0 = unknown -> no position prefix)
+	Col        int    // 1-based column in the source line (0 = unknown)
+	Code       string // stable catalogue code (e.g. "DSL001")
+	Message    string // human-readable message (EN); identical to the historical text
+	Suggestion string // fix hint (never in Error(), only JSON/human rendering)
+	Cause      error  // wrapped underlying error (equivalent of the historical %w)
 }
 
-// New crée un diagnostic positionné. line=0 si la position est inconnue.
+// New creates a positioned diagnostic. line=0 if the position is unknown.
 func New(code string, line int, message string) *Error {
 	return &Error{Code: code, Line: line, Message: message}
 }
 
-// Newf est la variante format de New.
+// Newf is the format variant of New.
 func Newf(code string, line int, format string, args ...any) *Error {
 	return &Error{Code: code, Line: line, Message: fmt.Sprintf(format, args...)}
 }
 
-// Wrap enveloppe une cause (équivalent de fmt.Errorf("...: %w")).
+// Wrap wraps a cause (equivalent of fmt.Errorf("...: %w")).
 func Wrap(code string, line int, message string, cause error) *Error {
 	return &Error{Code: code, Line: line, Message: message, Cause: cause}
 }
 
-// WithFile renseigne le fichier source (chaînable).
+// WithFile sets the source file (chainable).
 func (e *Error) WithFile(file string) *Error { e.File = file; return e }
 
-// WithCol renseigne la colonne 1-based (chaînable).
+// WithCol sets the 1-based column (chainable).
 func (e *Error) WithCol(col int) *Error { e.Col = col; return e }
 
-// WithSuggestion attache une piste de correction (chaînable).
+// WithSuggestion attaches a fix hint (chainable).
 func (e *Error) WithSuggestion(s string) *Error { e.Suggestion = s; return e }
 
-// WithCause attache une cause enveloppée (chaînable).
+// WithCause attaches a wrapped cause (chainable).
 func (e *Error) WithCause(c error) *Error { e.Cause = c; return e }
 
-// Error rend le diagnostic au format texte. Compatible historique :
-//   - File=="" et Line>0  -> "ligne N: <message>"
-//   - File!=""            -> "file:line[:col]: <message>"
-//   - Line==0 et File=="" -> "<message>" (erreur globale sans position)
+// Error renders the diagnostic in text format. Backward-compatible:
+//   - File=="" and Line>0  -> "line N: <message>"
+//   - File!=""             -> "file:line[:col]: <message>"
+//   - Line==0 and File=="" -> "<message>" (global error without position)
 //
-// La cause éventuelle est rendue après ": " (comme le %w historique). La suggestion
-// n'apparaît JAMAIS ici.
+// The eventual cause is rendered after ": " (like the historical %w). The suggestion
+// NEVER appears here.
 func (e *Error) Error() string {
 	prefix := ""
 	switch {
@@ -99,7 +99,7 @@ func (e *Error) Error() string {
 			prefix = fmt.Sprintf("%s:%d: ", e.File, e.Line)
 		}
 	case e.Line > 0:
-		prefix = fmt.Sprintf("ligne %d: ", e.Line)
+		prefix = fmt.Sprintf("line %d: ", e.Line)
 	}
 	msg := e.Message
 	if e.Cause != nil {
@@ -108,11 +108,11 @@ func (e *Error) Error() string {
 	return prefix + msg
 }
 
-// Unwrap expose la cause pour errors.Is / errors.As.
+// Unwrap exposes the cause for errors.Is / errors.As.
 func (e *Error) Unwrap() error { return e.Cause }
 
-// MarshalJSON sérialise {file,line,col,code,message,suggestion} (omitempty sur
-// file/col/code/suggestion ; line et message toujours présents).
+// MarshalJSON serializes {file,line,col,code,message,suggestion} (omitempty on
+// file/col/code/suggestion; line and message always present).
 func (e *Error) MarshalJSON() ([]byte, error) {
 	type jsonErr struct {
 		File       string `json:"file,omitempty"`
@@ -128,9 +128,9 @@ func (e *Error) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// WithFileIfDiag stampille le fichier sur le *diag.Error éventuel d'une chaîne
-// d'erreurs (no-op si err n'enveloppe pas de *diag.Error ou si File déjà renseigné).
-// Point unique de propagation du nom de fichier en remontée du pipeline.
+// WithFileIfDiag stamps the file on the eventual *diag.Error of an error
+// chain (no-op if err does not wrap a *diag.Error or if File is already set).
+// Single point of file-name propagation as the pipeline unwinds.
 func WithFileIfDiag(err error, file string) error {
 	if err == nil || file == "" {
 		return err

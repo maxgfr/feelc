@@ -1,13 +1,14 @@
-// Package fmtrules ré-émet une source .rules sous une forme CANONIQUE et IDEMPOTENTE, à partir
-// du *model.Model (PAS de l'AST FEEL : feel.Node.Repr() produit des S-expressions non-FEEL qui
-// ne reparsent pas). On réutilise les chaînes source verbatim (Cell.Src, Expr.Src, Input.Domain),
-// que le parseur ne fait que TrimSpace — d'où l'idempotence : fmt(fmt(x)) == fmt(x).
+// Package fmtrules re-emits a .rules source in a CANONICAL and IDEMPOTENT form, from
+// the *model.Model (NOT the FEEL AST: feel.Node.Repr() produces non-FEEL S-expressions that
+// do not reparse). We reuse the verbatim source strings (Cell.Src, Expr.Src, Input.Domain),
+// which the parser only TrimSpaces — hence idempotence: fmt(fmt(x)) == fmt(x).
 //
-// PERTES ASSUMÉES (le parseur ne les expose pas — jamais conformer en silence) :
-//   - les COMMENTAIRES (`# ...`, y compris les en-têtes de colonnes) : retirés à la lecture ;
-//   - le corps du bloc `model` (ex: `rounding: half_even`) : consommé, non stocké ;
-//   - l'alignement/espacement d'origine et Cell.Col.
-// Ces pertes sont documentées et verrouillées par un test ; `feelc fmt` les signale sur stderr.
+// ACCEPTED LOSSES (the parser does not expose them — never conform in silence):
+//   - COMMENTS (`# ...`, including column headers): dropped on read;
+//   - the body of the `model` block (e.g. `rounding: half_even`): consumed, not stored;
+//   - the original alignment/spacing and Cell.Col.
+//
+// These losses are documented and locked by a test; `feelc fmt` reports them on stderr.
 package fmtrules
 
 import (
@@ -18,7 +19,7 @@ import (
 	"github.com/maxgfr/feelc/internal/model"
 )
 
-// Source parse puis re-formate une source .rules.
+// Source parses then re-formats a .rules source.
 func Source(src string) (string, error) {
 	m, err := dsl.Parse(src)
 	if err != nil {
@@ -27,7 +28,7 @@ func Source(src string) (string, error) {
 	return Format(m), nil
 }
 
-// Format ré-émet un modèle sous forme canonique.
+// Format re-emits a model in canonical form.
 func Format(m *model.Model) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "model %q {}\n", m.Name)
@@ -82,7 +83,7 @@ func Format(m *model.Model) string {
 }
 
 func writeDecision(b *strings.Builder, d model.Decision) {
-	if d.Expr != nil { // décision literal-expression
+	if d.Expr != nil { // literal-expression decision
 		fmt.Fprintf(b, "decision %s : %s = %s\n", d.Name, d.TypeName, d.Expr.Src)
 		return
 	}
@@ -100,7 +101,7 @@ func writeDecision(b *strings.Builder, d model.Decision) {
 	}
 
 	nCond := len(d.Needs)
-	// Largeur max par colonne (conditions et sorties), alignement déterministe -> idempotent.
+	// Max width per column (conditions and outputs), deterministic alignment -> idempotent.
 	condW := make([]int, nCond)
 	hasDefault := false
 	var nOut int

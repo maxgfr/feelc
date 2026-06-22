@@ -20,11 +20,16 @@ the two:
 ## Commands
 
 ```sh
-feelc run    --rules m.rules --decision <nom> --input '{…}' [--json]   # évaluer une décision
-feelc verify --rules m.rules [--json]                                  # vérif formelle (trous/conflits)
-feelc check  --rules m.rules --claims claims.json [--json]             # gate sémantique NL↔règle
-feelc import --in modele.dmn [-o m.rules]                              # importer du DMN XML
-feelc serve  --rules m.rules [--addr :8080] [--watch] [--strict]       # service HTTP + hot-reload
+feelc run     --rules m.rules --decision <name> --input '{…}' [--json]  # evaluate a decision
+feelc compile --rules m.rules [-o m.ir.bin]                             # compile to canonical IR
+feelc verify  --rules m.rules [--json]                                  # formal check (gaps/conflicts)
+feelc explain --rules m.rules --decision <name> --input '{…}' [--json]  # justification trace
+feelc check   --rules m.rules --claims claims.json [--json]             # NL↔rule semantic gate
+feelc fmt     --rules m.rules [-w] [--check]                            # canonical pretty-printer
+feelc import  --in model.dmn  [-o m.rules]                              # import DMN XML
+feelc export  --rules m.rules [-o model.dmn]                            # export to DMN XML
+feelc tck     --suite <dir>   [--json] [--min <pct>]                    # DMN TCK conformance
+feelc serve   --rules m.rules [--addr :8080] [--watch] [--strict]       # HTTP service + hot-reload
 ```
 
 ## Status
@@ -62,12 +67,12 @@ decision eligibility : Eligibility {
   needs: credit_score, dti, age
   hit: first
   #  credit_score | dti     | age   => eligible | reason
-     < 580        | -       | -     => false    | "score insuffisant"
-     -            | > 0.43  | -     => false    | "endettement trop élevé"
-     -            | -       | < 18  => false    | "mineur"
-     [580..680)   | <= 0.43 | >= 18 => true     | "approuvé sous conditions"
-     >= 680       | <= 0.43 | >= 18 => true     | "approuvé"
-     default      |         |       => false    | "non couvert"
+     < 580        | -       | -     => false    | "insufficient score"
+     -            | > 0.43  | -     => false    | "debt too high"
+     -            | -       | < 18  => false    | "minor"
+     [580..680)   | <= 0.43 | >= 18 => true     | "approved with conditions"
+     >= 680       | <= 0.43 | >= 18 => true     | "approved"
+     default      |         |       => false    | "not covered"
 }
 ```
 

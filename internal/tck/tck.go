@@ -1,12 +1,12 @@
-// Package tck exécute des cas du DMN TCK (Technology Compatibility Kit) contre feelc et rapporte
-// un taux de conformité. Pipeline par modèle : .dmn -> dmnxml.Import -> dsl.Parse -> compiler.Compile,
-// puis pour chaque <testCase>/<resultNode> : engine.Eval + comparaison via check.Equal (MÊME
-// sémantique d'égalité décimale exacte que `feelc check`, zéro duplication).
+// Package tck runs cases from the DMN TCK (Technology Compatibility Kit) against feelc and reports
+// a conformance rate. Per-model pipeline: .dmn -> dmnxml.Import -> dsl.Parse -> compiler.Compile,
+// then for each <testCase>/<resultNode>: engine.Eval + comparison via check.Equal (SAME
+// exact-decimal equality semantics as `feelc check`, zero duplication).
 //
-// Dégradation HONNÊTE (jamais conformer en silence) : tout cas hors sous-ensemble est SKIPPÉ avec
-// une raison (type TCK non supporté date/time/duration, Import bloquant, Compile/Eval en échec —
-// ex: dépendance décision→décision non câblée par l'import). Le % de conformité = passed /
-// (passed+failed) ; les skips sont comptés et listés à part (couverture honnête).
+// HONEST degradation (never conform silently): any case outside the subset is SKIPPED with
+// a reason (unsupported TCK type date/time/duration, blocking Import, Compile/Eval failure —
+// e.g. decision->decision dependency not wired by the import). The conformance % = passed /
+// (passed+failed); skips are counted and listed separately (honest coverage).
 package tck
 
 import (
@@ -26,7 +26,7 @@ import (
 	"github.com/maxgfr/feelc/internal/engine"
 )
 
-// --- format <testCases> du DMN TCK ---
+// --- DMN TCK <testCases> format ---
 
 type tckSuite struct {
 	XMLName xml.Name  `xml:"testCases"`
@@ -50,7 +50,7 @@ type tckResult struct {
 }
 
 type tckValue struct {
-	Type       string         `xml:"type,attr"` // xsi:type (ex: "xsd:integer")
+	Type       string         `xml:"type,attr"` // xsi:type (e.g. "xsd:integer")
 	Nil        string         `xml:"nil,attr"`  // xsi:nil
 	Text       string         `xml:",chardata"`
 	List       *tckList       `xml:"list"`
@@ -66,7 +66,7 @@ type tckComponent struct {
 	Value tckValue `xml:"value"`
 }
 
-// --- rapport ---
+// --- report ---
 
 type Status string
 
@@ -76,15 +76,15 @@ const (
 	Skipped Status = "skipped"
 )
 
-// CaseResult : un (modèle, testCase, decision).
+// CaseResult: a (model, testCase, decision).
 type CaseResult struct {
 	Model    string `json:"model"`
 	Case     string `json:"case"`
 	Decision string `json:"decision"`
 	Status   Status `json:"status"`
-	Reason   string `json:"reason,omitempty"`   // si skipped/fail
-	Expected string `json:"expected,omitempty"` // si fail
-	Got      string `json:"got,omitempty"`      // si fail
+	Reason   string `json:"reason,omitempty"`   // if skipped/fail
+	Expected string `json:"expected,omitempty"` // if fail
+	Got      string `json:"got,omitempty"`      // if fail
 }
 
 type Report struct {
@@ -106,7 +106,7 @@ func (r *Report) add(c CaseResult) {
 	}
 }
 
-// Conformance renvoie le % de conformité = passed / (passed+failed) (les skips ne comptent pas).
+// Conformance returns the conformance % = passed / (passed+failed) (skips do not count).
 func (r *Report) Conformance() float64 {
 	den := r.Passed + r.Failed
 	if den == 0 {
@@ -115,7 +115,7 @@ func (r *Report) Conformance() float64 {
 	return 100 * float64(r.Passed) / float64(den)
 }
 
-// Run exécute toute la suite TCK d'un répertoire (récursif) et renvoie le rapport.
+// Run executes the entire TCK suite of a directory (recursive) and returns the report.
 func Run(suiteDir string) (*Report, error) {
 	rep := &Report{}
 	var dmnFiles []string
@@ -131,7 +131,7 @@ func Run(suiteDir string) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	sort.Strings(dmnFiles) // déterminisme
+	sort.Strings(dmnFiles) // determinism
 	for _, dmnPath := range dmnFiles {
 		runModel(dmnPath, rep)
 	}
@@ -158,16 +158,16 @@ func runModel(dmnPath string, rep *Report) {
 
 	data, err := os.ReadFile(dmnPath)
 	if err != nil {
-		skipAll("lecture .dmn impossible: " + err.Error())
+		skipAll("cannot read .dmn: " + err.Error())
 		return
 	}
 	rules, warns, err := dmnxml.Import(data)
 	if err != nil {
-		skipAll("import DMN: " + err.Error())
+		skipAll("DMN import: " + err.Error())
 		return
 	}
 	if blocker := blockingWarn(warns); blocker != "" {
-		skipAll("import bloquant: " + blocker)
+		skipAll("blocking import: " + blocker)
 		return
 	}
 	m, err := dsl.Parse(rules)
@@ -195,21 +195,21 @@ func runModel(dmnPath string, rep *Report) {
 				}
 				expect, err := decodeValue(rn.Expected)
 				if err != nil {
-					rep.add(CaseResult{Model: model, Case: c.ID, Decision: rn.Name, Status: Skipped, Reason: "résultat: " + err.Error()})
+					rep.add(CaseResult{Model: model, Case: c.ID, Decision: rn.Name, Status: Skipped, Reason: "result: " + err.Error()})
 					continue
 				}
 				got, err := engine.Eval(cm, rn.Name, inputs)
 				if err != nil {
-					// Distinguer une dépendance hors-périmètre (non câblée par l'import → SKIP honnête)
-					// d'un VRAI bug d'exécution sur un modèle compilé (division par zéro, conflit de
-					// hit policy…) qui est une NON-CONFORMITÉ et doit compter comme FAIL (jamais conformer
-					// en silence en gonflant le %). (Revue adverse, Tranche 4.)
+					// Distinguish an out-of-scope dependency (not wired by the import -> honest SKIP)
+					// from a REAL execution bug on a compiled model (division by zero, hit policy
+					// conflict...) which is a NON-CONFORMANCE and must count as FAIL (never conform
+					// silently by inflating the %). (Adversarial review, Slice 4.)
 					if isUnwiredError(err) {
 						rep.add(CaseResult{Model: model, Case: c.ID, Decision: rn.Name, Status: Skipped,
-							Reason: "dépendance DRG / variable non câblée par l'import: " + err.Error()})
+							Reason: "DRG dependency / variable not wired by the import: " + err.Error()})
 					} else {
 						rep.add(CaseResult{Model: model, Case: c.ID, Decision: rn.Name, Status: Fail,
-							Reason: "erreur d'évaluation", Expected: fmt.Sprint(expect), Got: "erreur: " + err.Error()})
+							Reason: "evaluation error", Expected: fmt.Sprint(expect), Got: "error: " + err.Error()})
 					}
 					continue
 				}
@@ -224,8 +224,8 @@ func runModel(dmnPath string, rep *Report) {
 	}
 }
 
-// findTestFiles renvoie les XML de cas du MODÈLE (convention TCK `<modèle>-test-*.xml`), pour ne
-// PAS appliquer les cas d'un modèle à un autre dans un répertoire multi-modèles (revue adverse).
+// findTestFiles returns the case XML files of the MODEL (TCK convention `<model>-test-*.xml`), so as
+// NOT to apply the cases of one model to another in a multi-model directory (adversarial review).
 func findTestFiles(dmnPath string) []string {
 	dir := filepath.Dir(dmnPath)
 	base := strings.TrimSuffix(filepath.Base(dmnPath), ".dmn")
@@ -239,7 +239,7 @@ func findTestFiles(dmnPath string) []string {
 		if e.IsDir() || !strings.HasSuffix(n, ".xml") {
 			continue
 		}
-		// Associé au modèle : `<base>-test*.xml` ou `<base>-<...>.xml` (le `-` évite le préfixe partiel).
+		// Associated with the model: `<base>-test*.xml` or `<base>-<...>.xml` (the `-` avoids the partial prefix).
 		if strings.HasPrefix(n, base+"-") || strings.HasPrefix(n, base+"_") {
 			out = append(out, filepath.Join(dir, n))
 		}
@@ -248,10 +248,10 @@ func findTestFiles(dmnPath string) []string {
 	return out
 }
 
-// isUnwiredError distingue une erreur d'exécution due à une dépendance/variable NON câblée par
-// l'import DMN (hors-périmètre → skip honnête) d'un vrai bug d'évaluation (→ fail).
+// isUnwiredError distinguishes an execution error due to a dependency/variable NOT wired by the
+// DMN import (out-of-scope -> honest skip) from a real evaluation bug (-> fail).
 func isUnwiredError(err error) bool {
-	return strings.Contains(err.Error(), "inconnue") // "variable inconnue ..." / "décision inconnue ..."
+	return strings.Contains(err.Error(), "unknown") // "unknown variable ..." / "unknown decision ..."
 }
 
 func loadSuite(path string) (*tckSuite, error) {
@@ -271,15 +271,15 @@ func decodeInputs(nodes []tckNode) (map[string]any, string) {
 	for _, n := range nodes {
 		v, err := decodeValue(n.Value)
 		if err != nil {
-			return nil, fmt.Sprintf("entrée %q: %s", n.Name, err.Error())
+			return nil, fmt.Sprintf("input %q: %s", n.Name, err.Error())
 		}
 		inputs[n.Name] = v
 	}
 	return inputs, ""
 }
 
-// decodeValue convertit une valeur TCK en any JSON-ish. Les nombres restent en json.Number
-// (exactitude décimale, cf. gotcha). Types temporels / function -> non supportés (skip).
+// decodeValue converts a TCK value into a JSON-ish any. Numbers stay as json.Number
+// (decimal exactness, cf. gotcha). Temporal / function types -> not supported (skip).
 func decodeValue(v tckValue) (any, error) {
 	if strings.EqualFold(v.Nil, "true") {
 		return nil, nil
@@ -309,7 +309,7 @@ func decodeValue(v tckValue) (any, error) {
 	typ := localType(v.Type)
 	switch typ {
 	case "string":
-		return v.Text, nil // NE PAS trimmer : un xsd:string peut porter des espaces significatifs
+		return v.Text, nil // DO NOT trim: an xsd:string may carry significant spaces
 	case "":
 		if strings.TrimSpace(v.Text) == "" {
 			return nil, nil
@@ -318,19 +318,19 @@ func decodeValue(v tckValue) (any, error) {
 	case "boolean":
 		b, err := strconv.ParseBool(strings.TrimSpace(v.Text))
 		if err != nil {
-			return nil, fmt.Errorf("booléen invalide %q", v.Text)
+			return nil, fmt.Errorf("invalid boolean %q", v.Text)
 		}
 		return b, nil
 	case "integer", "int", "long", "short", "decimal", "double", "float":
 		return json.Number(strings.TrimSpace(v.Text)), nil
 	case "date", "time", "datetime", "duration", "dayTimeDuration", "yearMonthDuration", "function":
-		return nil, fmt.Errorf("type TCK %q non supporté", typ)
+		return nil, fmt.Errorf("unsupported TCK type %q", typ)
 	default:
-		return nil, fmt.Errorf("type TCK %q non supporté", v.Type)
+		return nil, fmt.Errorf("unsupported TCK type %q", v.Type)
 	}
 }
 
-// localType extrait le nom local d'un xsi:type (ex: "xsd:integer" -> "integer").
+// localType extracts the local name of an xsi:type (e.g. "xsd:integer" -> "integer").
 func localType(t string) string {
 	t = strings.TrimSpace(t)
 	if i := strings.LastIndexByte(t, ':'); i >= 0 {
@@ -339,7 +339,7 @@ func localType(t string) string {
 	return strings.ToLower(t)
 }
 
-// blockingWarn renvoie le 1er avertissement d'import structurellement bloquant (le reste est toléré).
+// blockingWarn returns the 1st structurally blocking import warning (the rest is tolerated).
 func blockingWarn(warns []string) string {
 	for _, w := range warns {
 		if strings.Contains(w, "invalide") || strings.Contains(w, "ni table ni") {

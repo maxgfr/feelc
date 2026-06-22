@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// Wrapper portable ZÉRO-DÉPENDANCE de la skill feelc-rules.
-// Rôle : localiser le binaire `feelc` puis lui relayer les arguments (run/verify/serve/version),
-// en héritant stdin/stdout/stderr et le code de sortie. Aucune logique métier ici : feelc est
-// l'oracle déterministe. Harness-agnostique (Claude Code, Codex, Cursor, CLI…).
+// Portable ZERO-DEPENDENCY wrapper for the feelc-rules skill.
+// Role: locate the `feelc` binary then relay arguments to it (run/verify/serve/version),
+// inheriting stdin/stdout/stderr and the exit code. No business logic here: feelc is
+// the deterministic oracle. Harness-agnostic (Claude Code, Codex, Cursor, CLI…).
 //
-// Découverte de feelc, dans l'ordre :
-//   1. $FEELC_BIN (chemin explicite)
-//   2. `feelc` sur le PATH
-//   3. binaire déjà buildé à la racine du dépôt : ../../feelc
-//   4. build depuis les sources du dépôt : `go build -o ../../feelc ./cmd/feelc`
-// (3 et 4 fonctionnent quand la skill tourne DANS le dépôt feelc ; en installation autonome,
-//  fournis $FEELC_BIN ou mets feelc sur le PATH — voir references/install.md.)
-// Sinon : message d'installation + exit 1.
+// feelc discovery, in order:
+//   1. $FEELC_BIN (explicit path)
+//   2. `feelc` on the PATH
+//   3. binary already built at the repo root: ../../feelc
+//   4. build from the repo sources: `go build -o ../../feelc ./cmd/feelc`
+// (3 and 4 work when the skill runs INSIDE the feelc repo; in a standalone install,
+//  provide $FEELC_BIN or put feelc on the PATH — see references/install.md.)
+// Otherwise: installation message + exit 1.
 
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(here, "..", ".."); // feelc/skill/scripts -> racine du dépôt feelc/
+const repoRoot = join(here, "..", ".."); // feelc/skill/scripts -> feelc/ repo root
 const localBin = join(repoRoot, "feelc");
 
 function onPath(cmd) {
@@ -45,12 +45,12 @@ function locate() {
 const bin = locate();
 if (!bin) {
   process.stderr.write(
-    "feelc-rules : binaire `feelc` introuvable.\n" +
-      "Fournis-le par l'un de ces moyens :\n" +
-      "  - export FEELC_BIN=/chemin/vers/feelc\n" +
-      "  - installe feelc sur le PATH\n" +
-      "  - place le dépôt feelc à côté de feelc-rules/ (build auto via `go build`)\n" +
-      "Voir references/install.md.\n"
+    "feelc-rules: `feelc` binary not found.\n" +
+      "Provide it via one of these means:\n" +
+      "  - export FEELC_BIN=/path/to/feelc\n" +
+      "  - install feelc on the PATH\n" +
+      "  - place the feelc repo next to feelc-rules/ (auto build via `go build`)\n" +
+      "See references/install.md.\n"
   );
   process.exit(1);
 }

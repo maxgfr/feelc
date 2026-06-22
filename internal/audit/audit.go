@@ -1,5 +1,5 @@
-// Package audit journalise chaque décision sous forme de ligne JSON rejouable
-// (entrée + version/hash du modèle + sortie + durée). Sink io.Writer pluggable.
+// Package audit logs each decision as a replayable JSON line
+// (input + model version/hash + output + duration). Pluggable io.Writer sink.
 package audit
 
 import (
@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-// Record : la trace d'une décision (rejouable).
+// Record: the trace of a decision (replayable).
 type Record struct {
 	Decision     string         `json:"decision"`
 	Input        map[string]any `json:"input"`
@@ -20,7 +20,7 @@ type Record struct {
 	Error        string         `json:"error,omitempty"`
 }
 
-// Logger écrit des Record en JSON-lines de façon thread-safe.
+// Logger writes Records as JSON lines in a thread-safe way.
 type Logger struct {
 	mu sync.Mutex
 	w  io.Writer
@@ -28,7 +28,7 @@ type Logger struct {
 
 func New(w io.Writer) *Logger { return &Logger{w: w} }
 
-// Log écrit un enregistrement (best-effort ; les erreurs d'écriture sont ignorées).
+// Log writes a record (best-effort; write errors are ignored).
 func (l *Logger) Log(r Record) {
 	if l == nil || l.w == nil {
 		return

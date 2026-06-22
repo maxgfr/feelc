@@ -37,8 +37,8 @@ func eqStrs(a, b []string) bool {
 	return true
 }
 
-// Round-trip : Parse -> Export(DMN) -> Import -> Parse conserve la structure (noms, règles,
-// Src des cellules). On évite domaines/default (pertes documentées) pour un round-trip net.
+// Round-trip: Parse -> Export(DMN) -> Import -> Parse preserves the structure (names, rules,
+// Src of cells). We avoid domains/default (documented losses) for a clean round-trip.
 func TestExportImportRoundTrip(t *testing.T) {
 	src := `model "rt" {}
 input score : number
@@ -68,7 +68,7 @@ decision dti : number = score / 12`
 	}
 	rules2, _, err := dmnxml.Import(xml)
 	if err != nil {
-		t.Fatalf("Import du XML exporté: %v\n%s", err, xml)
+		t.Fatalf("Import of exported XML: %v\n%s", err, xml)
 	}
 	b, err := dsl.Parse(rules2)
 	if err != nil {
@@ -87,34 +87,34 @@ decision dti : number = score / 12`
 	for i := range a.Decisions {
 		da, db := a.Decisions[i], b.Decisions[i]
 		if da.Name != db.Name {
-			t.Errorf("décision %d: nom %q != %q", i, da.Name, db.Name)
+			t.Errorf("decision %d: name %q != %q", i, da.Name, db.Name)
 		}
 		if (da.Expr == nil) != (db.Expr == nil) {
-			t.Errorf("décision %q: littéral-expr incohérent", da.Name)
+			t.Errorf("decision %q: literal-expr inconsistent", da.Name)
 			continue
 		}
 		if da.Expr != nil {
 			if da.Expr.Src != db.Expr.Src {
-				t.Errorf("décision %q: expr %q != %q", da.Name, da.Expr.Src, db.Expr.Src)
+				t.Errorf("decision %q: expr %q != %q", da.Name, da.Expr.Src, db.Expr.Src)
 			}
 			continue
 		}
 		if len(da.Rules) != len(db.Rules) {
-			t.Errorf("décision %q: règles %d != %d", da.Name, len(da.Rules), len(db.Rules))
+			t.Errorf("decision %q: rules %d != %d", da.Name, len(da.Rules), len(db.Rules))
 			continue
 		}
 		for k := range da.Rules {
 			if !eqStrs(condSrcs(da.Rules[k]), condSrcs(db.Rules[k])) {
-				t.Errorf("décision %q règle %d: conditions %v != %v", da.Name, k, condSrcs(da.Rules[k]), condSrcs(db.Rules[k]))
+				t.Errorf("decision %q rule %d: conditions %v != %v", da.Name, k, condSrcs(da.Rules[k]), condSrcs(db.Rules[k]))
 			}
 			if !eqStrs(outSrcs(da.Rules[k].Outputs), outSrcs(db.Rules[k].Outputs)) {
-				t.Errorf("décision %q règle %d: sorties %v != %v", da.Name, k, outSrcs(da.Rules[k].Outputs), outSrcs(db.Rules[k].Outputs))
+				t.Errorf("decision %q rule %d: outputs %v != %v", da.Name, k, outSrcs(da.Rules[k].Outputs), outSrcs(db.Rules[k].Outputs))
 			}
 		}
 	}
 }
 
-// Avertissements NON silencieux : domaine d'entrée non exporté (crédit en a).
+// Non-silent warnings: input domain not exported (credit has one).
 func TestExportWarnsOnDroppedDomain(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "examples", "credit", "credit.rules"))
 	if err != nil {
@@ -129,12 +129,12 @@ func TestExportWarnsOnDroppedDomain(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(warns, "\n")
-	if !strings.Contains(joined, "domaine") {
-		t.Errorf("attendu un avertissement de domaine non exporté, obtenu: %v", warns)
+	if !strings.Contains(joined, "domain") {
+		t.Errorf("expected a warning about a non-exported domain, got: %v", warns)
 	}
 }
 
-// Régression (revue adverse) : une ligne `default` doit être SIGNALÉE (DMN n'a pas de default).
+// Regression (adversarial review): a `default` row must be REPORTED (DMN has no default).
 func TestExportWarnsOnDefaultRow(t *testing.T) {
 	m, err := dsl.Parse(`model "m" {}
 input a : number
@@ -149,11 +149,11 @@ decision d : number {
 	}
 	_, warns, _ := dmnxml.Export(m)
 	if !strings.Contains(strings.Join(warns, "\n"), "default") {
-		t.Errorf("attendu un avertissement sur la ligne `default`, obtenu: %v", warns)
+		t.Errorf("expected a warning about the `default` row, got: %v", warns)
 	}
 }
 
-// Régression (revue adverse) : les valeurs d'attribut sont échappées en XML (pas via %q Go).
+// Regression (adversarial review): attribute values are XML-escaped (not via Go %q).
 func TestExportEscapesAttributes(t *testing.T) {
 	m, err := dsl.Parse("model \"a&b\" {}\ninput x : number\n")
 	if err != nil {
@@ -164,9 +164,9 @@ func TestExportEscapesAttributes(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(xml), `name="a&amp;b"`) {
-		t.Errorf("le `&` du nom de modèle doit être échappé `&amp;`:\n%s", xml)
+		t.Errorf("the `&` in the model name must be escaped as `&amp;`:\n%s", xml)
 	}
 	if strings.Contains(string(xml), `name="a&b"`) {
-		t.Errorf("attribut non échappé (XML invalide):\n%s", xml)
+		t.Errorf("unescaped attribute (invalid XML):\n%s", xml)
 	}
 }

@@ -27,37 +27,37 @@ func creditModel(t *testing.T) *ir.CompiledModel {
 	return cm
 }
 
-// La VM est l'oracle : un claim conforme est supporté, un claim faux est contredit.
+// The VM is the oracle: a conforming claim is supported, a false claim is contradicted.
 func TestCheckOracle(t *testing.T) {
 	cm := creditModel(t)
 	claims := []check.Claim{
-		{Desc: "bon dossier -> approuvé", Decision: "eligibility",
+		{Desc: "good application -> approved", Decision: "eligibility",
 			Input:  map[string]any{"credit_score": 700, "annual_income": 60000, "monthly_debt": 1500, "age": 40},
-			Expect: map[string]any{"eligible": true, "reason": "approuvé"}},
-		{Desc: "score faible -> refus", Decision: "eligibility",
+			Expect: map[string]any{"eligible": true, "reason": "approved"}},
+		{Desc: "low score -> rejection", Decision: "eligibility",
 			Input:  map[string]any{"credit_score": 500, "annual_income": 60000, "monthly_debt": 1500, "age": 40},
-			Expect: map[string]any{"eligible": false, "reason": "score insuffisant"}},
+			Expect: map[string]any{"eligible": false, "reason": "insufficient score"}},
 		{Desc: "dti exact", Decision: "dti",
 			Input:  map[string]any{"monthly_debt": 1500, "annual_income": 60000},
 			Expect: float64(0.3)},
-		{Desc: "claim FAUX (raison erronée)", Decision: "eligibility",
+		{Desc: "FALSE claim (wrong reason)", Decision: "eligibility",
 			Input:  map[string]any{"credit_score": 700, "annual_income": 60000, "monthly_debt": 1500, "age": 40},
 			Expect: map[string]any{"eligible": true, "reason": "mauvaise raison"}},
 	}
 	rep := check.Check(cm, claims)
 	if rep.Verdicts[0].Status != check.Supported {
-		t.Errorf("claim 0 = %s, attendu supported (%s)", rep.Verdicts[0].Status, rep.Verdicts[0].Detail)
+		t.Errorf("claim 0 = %s, expected supported (%s)", rep.Verdicts[0].Status, rep.Verdicts[0].Detail)
 	}
 	if rep.Verdicts[1].Status != check.Supported {
-		t.Errorf("claim 1 = %s, attendu supported", rep.Verdicts[1].Status)
+		t.Errorf("claim 1 = %s, expected supported", rep.Verdicts[1].Status)
 	}
 	if rep.Verdicts[2].Status != check.Supported {
-		t.Errorf("claim 2 (dti) = %s, attendu supported (%s)", rep.Verdicts[2].Status, rep.Verdicts[2].Detail)
+		t.Errorf("claim 2 (dti) = %s, expected supported (%s)", rep.Verdicts[2].Status, rep.Verdicts[2].Detail)
 	}
 	if rep.Verdicts[3].Status != check.Contradicted {
-		t.Errorf("claim 3 = %s, attendu contradicted", rep.Verdicts[3].Status)
+		t.Errorf("claim 3 = %s, expected contradicted", rep.Verdicts[3].Status)
 	}
 	if rep.Blockers() != 1 {
-		t.Errorf("blockers = %d, attendu 1", rep.Blockers())
+		t.Errorf("blockers = %d, expected 1", rep.Blockers())
 	}
 }

@@ -9,8 +9,8 @@ import (
 	"github.com/maxgfr/feelc/internal/ir"
 )
 
-// evalExpr exécute un programme bytecode. input != nil pour une cellule Op=Prog
-// (valeur de la colonne `?`). Les OpLoadVar passent par le resolver demand-driven.
+// evalExpr executes a bytecode program. input != nil for an Op=Prog cell
+// (value of the `?` column). OpLoadVar goes through the demand-driven resolver.
 func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (ir.Value, error) {
 	stack := make([]ir.Value, 0, p.MaxStack+1)
 	push := func(v ir.Value) { stack = append(stack, v) }
@@ -19,7 +19,7 @@ func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (ir.Value, erro
 		stack = stack[:len(stack)-1]
 		return v
 	}
-	// PC indexé (et non un simple range) : les sauts OpJmp/OpJmpFalse (if/then/else) déplacent pc.
+	// Indexed PC (not a plain range): OpJmp/OpJmpFalse jumps (if/then/else) move pc.
 	for pc := 0; pc < len(p.Code); pc++ {
 		in := p.Code[pc]
 		switch in.Op {
@@ -33,7 +33,7 @@ func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (ir.Value, erro
 			push(v)
 		case ir.OpLoadInput:
 			if input == nil {
-				return ir.Value{}, fmt.Errorf("`?` utilisé hors d'une cellule de table")
+				return ir.Value{}, fmt.Errorf("`?` used outside a table cell")
 			}
 			push(*input)
 		case ir.OpAdd, ir.OpSub, ir.OpMul, ir.OpDivOp:
@@ -59,7 +59,7 @@ func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (ir.Value, erro
 		case ir.OpAnd, ir.OpOr:
 			b, a := pop(), pop()
 			if a.Tag != ir.TagBool || b.Tag != ir.TagBool {
-				return ir.Value{}, fmt.Errorf("opérateur logique sur une valeur non booléenne")
+				return ir.Value{}, fmt.Errorf("logical operator on a non-boolean value")
 			}
 			if in.Op == ir.OpAnd {
 				push(ir.Bool(a.Bool && b.Bool))
@@ -69,7 +69,7 @@ func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (ir.Value, erro
 		case ir.OpNot:
 			a := pop()
 			if a.Tag != ir.TagBool {
-				return ir.Value{}, fmt.Errorf("`not` sur une valeur non booléenne")
+				return ir.Value{}, fmt.Errorf("`not` on a non-boolean value")
 			}
 			push(ir.Bool(!a.Bool))
 		case ir.OpFloor, ir.OpCeil, ir.OpRound:
@@ -79,31 +79,31 @@ func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (ir.Value, erro
 			}
 			push(r)
 		case ir.OpJmp:
-			pc = int(in.Arg) - 1 // -1 : le pc++ de la boucle atterrira sur Arg
+			pc = int(in.Arg) - 1 // -1: the loop's pc++ will land on Arg
 		case ir.OpJmpFalse:
 			c := pop()
 			if c.Tag != ir.TagBool {
-				return ir.Value{}, fmt.Errorf("condition `if` non booléenne")
+				return ir.Value{}, fmt.Errorf("non-boolean `if` condition")
 			}
 			if !c.Bool {
 				pc = int(in.Arg) - 1
 			}
 		default:
-			return ir.Value{}, fmt.Errorf("opcode non supporté à l'exécution: %d", in.Op)
+			return ir.Value{}, fmt.Errorf("unsupported opcode at execution: %d", in.Op)
 		}
 	}
 	if len(stack) != 1 {
-		return ir.Value{}, fmt.Errorf("pile d'expression incohérente (taille %d)", len(stack))
+		return ir.Value{}, fmt.Errorf("inconsistent expression stack (size %d)", len(stack))
 	}
 	return stack[0], nil
 }
 
 func arith(op ir.Opcode, a, b ir.Value) (ir.Value, error) {
 	if a.Tag == ir.TagNull || b.Tag == ir.TagNull {
-		return ir.Null(), nil // propagation de null (trivalent, cf. ADR 0003)
+		return ir.Null(), nil // null propagation (three-valued, cf. ADR 0003)
 	}
 	if a.Tag != ir.TagNumber || b.Tag != ir.TagNumber {
-		return ir.Value{}, fmt.Errorf("opération arithmétique sur une valeur non numérique")
+		return ir.Value{}, fmt.Errorf("arithmetic operation on a non-numeric value")
 	}
 	r := new(apd.Decimal)
 	var err error
@@ -116,7 +116,7 @@ func arith(op ir.Opcode, a, b ir.Value) (ir.Value, error) {
 		_, err = decimal.Ctx.Mul(r, a.Num, b.Num)
 	case ir.OpDivOp:
 		if b.Num.Sign() == 0 {
-			return ir.Value{}, fmt.Errorf("division par zéro")
+			return ir.Value{}, fmt.Errorf("division by zero")
 		}
 		_, err = decimal.Ctx.Quo(r, a.Num, b.Num)
 	}
@@ -126,14 +126,14 @@ func arith(op ir.Opcode, a, b ir.Value) (ir.Value, error) {
 	return ir.Num(r), nil
 }
 
-// unaryNum applique un built-in numérique mono-arg (floor/ceiling/round). Contexte décimal
-// figé (HALF_EVEN) -> déterminisme préservé (ADR 0002). null propagé (trivalent).
+// unaryNum applies a single-arg numeric built-in (floor/ceiling/round). Frozen
+// decimal context (HALF_EVEN) -> determinism preserved (ADR 0002). null propagated (three-valued).
 func unaryNum(op ir.Opcode, a ir.Value) (ir.Value, error) {
 	if a.Tag == ir.TagNull {
 		return ir.Null(), nil
 	}
 	if a.Tag != ir.TagNumber {
-		return ir.Value{}, fmt.Errorf("built-in numérique (floor/ceiling/round) sur une valeur non numérique")
+		return ir.Value{}, fmt.Errorf("numeric built-in (floor/ceiling/round) on a non-numeric value")
 	}
 	r := new(apd.Decimal)
 	var err error

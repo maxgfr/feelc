@@ -13,7 +13,7 @@ func load(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("lecture %s: %v", path, err)
+		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(b)
 }
@@ -22,12 +22,12 @@ func numText(t *testing.T, v any) string {
 	t.Helper()
 	d, ok := v.(*apd.Decimal)
 	if !ok {
-		t.Fatalf("attendu décimal, obtenu %T (%v)", v, v)
+		t.Fatalf("expected decimal, got %T (%v)", v, v)
 	}
 	return d.Text('f')
 }
 
-// Assurance : COLLECT sum + DRG (premium = base + surcharge).
+// Insurance: COLLECT sum + DRG (premium = base + surcharge).
 func TestExampleInsurance(t *testing.T) {
 	src := load(t, "../../examples/insurance/insurance.rules")
 	cases := []struct {
@@ -36,7 +36,7 @@ func TestExampleInsurance(t *testing.T) {
 		wantPremium       string
 	}{
 		{22, 4, 1000, "urban", "1950"}, // 300+150+500 = 950
-		{40, 0, 800, "rural", "800"},   // aucune surcharge
+		{40, 0, 800, "rural", "800"},   // no surcharge
 		{72, 0, 1000, "urban", "1350"}, // 150 + 200
 	}
 	for _, c := range cases {
@@ -47,21 +47,21 @@ func TestExampleInsurance(t *testing.T) {
 			t.Fatalf("%+v: %v", c, err)
 		}
 		if got := numText(t, out); got != c.wantPremium {
-			t.Errorf("premium(%+v) = %s, attendu %s", c, got, c.wantPremium)
+			t.Errorf("premium(%+v) = %s, expected %s", c, got, c.wantPremium)
 		}
 	}
 }
 
-// Aides : COLLECT brut (liste) + booléen.
+// Benefits: COLLECT raw (list) + boolean.
 func TestExampleBenefits(t *testing.T) {
 	src := load(t, "../../examples/benefits/benefits.rules")
 	cases := []struct {
 		income, children int
-		student           bool
-		wantLen           int
+		student          bool
+		wantLen          int
 	}{
-		{900, 2, true, 3},  // housing + family + student_grant
-		{2000, 0, false, 0}, // aucune
+		{900, 2, true, 3},   // housing + family + student_grant
+		{2000, 0, false, 0}, // none
 		{1200, 1, false, 2}, // housing + family
 	}
 	for _, c := range cases {
@@ -73,15 +73,15 @@ func TestExampleBenefits(t *testing.T) {
 		}
 		xs, ok := out.([]any)
 		if !ok {
-			t.Fatalf("aids attendu liste, obtenu %T", out)
+			t.Fatalf("aids expected list, got %T", out)
 		}
 		if len(xs) != c.wantLen {
-			t.Errorf("aids(%+v) = %v (len %d), attendu len %d", c, xs, len(xs), c.wantLen)
+			t.Errorf("aids(%+v) = %v (len %d), expected len %d", c, xs, len(xs), c.wantLen)
 		}
 	}
 }
 
-// Promos : COLLECT max (meilleure remise).
+// Promos: COLLECT max (best discount).
 func TestExamplePromo(t *testing.T) {
 	src := load(t, "../../examples/promo/promo.rules")
 	t.Run("max", func(t *testing.T) {
@@ -92,10 +92,10 @@ func TestExamplePromo(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := numText(t, out); got != "20" {
-			t.Errorf("discount = %s, attendu 20", got)
+			t.Errorf("discount = %s, expected 20", got)
 		}
 	})
-	t.Run("seuil bas", func(t *testing.T) {
+	t.Run("low threshold", func(t *testing.T) {
 		out, err := engine.Run(src, "discount_pct", map[string]any{
 			"cart_total": 60, "is_member": false, "promo_code": "none",
 		})
@@ -103,10 +103,10 @@ func TestExamplePromo(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := numText(t, out); got != "5" {
-			t.Errorf("discount = %s, attendu 5", got)
+			t.Errorf("discount = %s, expected 5", got)
 		}
 	})
-	t.Run("aucune remise -> null", func(t *testing.T) {
+	t.Run("no discount -> null", func(t *testing.T) {
 		out, err := engine.Run(src, "discount_pct", map[string]any{
 			"cart_total": 30, "is_member": false, "promo_code": "none",
 		})
@@ -114,7 +114,7 @@ func TestExamplePromo(t *testing.T) {
 			t.Fatal(err)
 		}
 		if out != nil {
-			t.Errorf("discount = %v, attendu null", out)
+			t.Errorf("discount = %v, expected null", out)
 		}
 	})
 }

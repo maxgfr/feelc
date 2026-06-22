@@ -15,13 +15,13 @@ func TestLiteral(t *testing.T) {
 		t.Errorf("Literal(5) = %q,%v", s, ok)
 	}
 	if s, ok := smt.Literal(num(-3)); !ok || s != "(- 3)" {
-		t.Errorf("Literal(-3) = %q,%v (négatif doit devenir (- 3))", s, ok)
+		t.Errorf("Literal(-3) = %q,%v (negative must become (- 3))", s, ok)
 	}
 	if s, ok := smt.Literal(ir.Bool(true)); !ok || s != "true" {
 		t.Errorf("Literal(true) = %q,%v", s, ok)
 	}
 	if _, ok := smt.Literal(ir.Str("x")); ok {
-		t.Errorf("Literal(string) doit être non encodable")
+		t.Errorf("Literal(string) must be non-encodable")
 	}
 }
 
@@ -41,12 +41,12 @@ func TestCellGeometric(t *testing.T) {
 	for _, c := range cases {
 		got, ok := smt.Cell(c.ct, "c", resolveNone)
 		if !ok || got != c.want {
-			t.Errorf("Cell(%+v) = %q,%v, attendu %q", c.ct, got, ok, c.want)
+			t.Errorf("Cell(%+v) = %q,%v, expected %q", c.ct, got, ok, c.want)
 		}
 	}
-	// Littéral string -> non encodable.
+	// String literal -> non-encodable.
 	if _, ok := smt.Cell(ir.CellTest{Op: ir.OpEq, A: ir.Str("urban")}, "c", resolveNone); ok {
-		t.Errorf("Cell avec littéral string doit être non encodable")
+		t.Errorf("Cell with string literal must be non-encodable")
 	}
 }
 
@@ -60,14 +60,14 @@ func TestProgramStraightLine(t *testing.T) {
 	if !ok || got != "(< c 5)" {
 		t.Errorf("Program(? < 5) = %q,%v", got, ok)
 	}
-	// Saut (if/then/else) -> hors sous-ensemble.
+	// Jump (if/then/else) -> outside the subset.
 	pj := &ir.ExprProgram{Code: []ir.Instr{{Op: ir.OpLoadInput}, {Op: ir.OpJmpFalse, Arg: 3}}}
 	if _, ok := smt.Program(pj, "c", resolveNone); ok {
-		t.Errorf("Program avec saut doit être non encodable (ok=false)")
+		t.Errorf("Program with jump must be non-encodable (ok=false)")
 	}
-	// floor/ceiling/round -> hors sous-ensemble.
+	// floor/ceiling/round -> outside the subset.
 	pf := &ir.ExprProgram{Code: []ir.Instr{{Op: ir.OpLoadInput}, {Op: ir.OpFloor}}}
 	if _, ok := smt.Program(pf, "c", resolveNone); ok {
-		t.Errorf("Program avec floor doit être non encodable (ok=false)")
+		t.Errorf("Program with floor must be non-encodable (ok=false)")
 	}
 }

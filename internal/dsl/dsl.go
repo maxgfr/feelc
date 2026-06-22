@@ -1,21 +1,21 @@
-// Package dsl parse le langage source .rules de feelc (la SOURCE DE VÉRITÉ) vers un
-// *model.Model. En Tranche 1 le DSL est volontairement minimal et orienté lignes :
+// Package dsl parses the feelc .rules source language (the SOURCE OF TRUTH) into a
+// *model.Model. In Slice 1 the DSL is deliberately minimal and line-oriented:
 //
 //	model "name" {}
 //	input <name> : <type>
 //	decision <name> : <type> {
 //	  needs: <a>, <b>
 //	  hit: first
-//	  <cellule> | <cellule> => <sortie> | <sortie>
+//	  <cell> | <cell> => <output> | <output>
 //	}
 //
-// Les cellules d'entrée/sortie sont confiées au parseur FEEL (pbinitiative/feel, cf. ADR 0001),
-// sauf "-" (any) traité ici. Tout construct hors sous-ensemble v1 échoue franchement
-// (discipline anti-scope-creep : le parseur refuse plutôt que d'accepter-puis-mal-interpréter).
+// Input/output cells are delegated to the FEEL parser (pbinitiative/feel, cf. ADR 0001),
+// except "-" (any) which is handled here. Any construct outside the v1 subset fails outright
+// (anti-scope-creep discipline: the parser refuses rather than accept-then-misinterpret).
 //
-// Erreurs : tout site d'échec produit un *diag.Error positionné (ligne + colonne 1-based,
-// calculée au split des cellules) avec un code stable et, quand utile, une suggestion.
-// ParseFile propage le nom de fichier ; Parse délègue avec file="" (compat texte historique).
+// Errors: every failure site produces a positioned *diag.Error (1-based line + column,
+// computed when splitting cells) with a stable code and, when useful, a suggestion.
+// ParseFile propagates the file name; Parse delegates with file="" (historical text compat).
 package dsl
 
 import (
@@ -28,15 +28,15 @@ import (
 	"github.com/maxgfr/feelc/internal/model"
 )
 
-// whitespace ASCII reconnu (équivalent unicode.IsSpace pour l'ASCII) pour le calcul d'offsets.
+// recognized ASCII whitespace (equivalent to unicode.IsSpace for ASCII) for offset computation.
 const wsCutset = " \t\v\f\r\n"
 
-// Parse lit une source .rules complète (sans nom de fichier ; erreurs au format "ligne N:").
+// Parse reads a complete .rules source (without a file name; errors formatted as "line N:").
 func Parse(src string) (*model.Model, error) {
 	return ParseFile("", src)
 }
 
-// ParseFile lit une source .rules en associant un nom de fichier (propagé sur les erreurs).
+// ParseFile reads a .rules source associating a file name (propagated onto errors).
 func ParseFile(file, src string) (*model.Model, error) {
 	p := &parser{lines: splitLines(src), file: file}
 	m, err := p.parse()
@@ -47,8 +47,8 @@ func ParseFile(file, src string) (*model.Model, error) {
 }
 
 type line struct {
-	text string // contenu sans commentaire, non trimé
-	no   int    // numéro de ligne 1-based
+	text string // content without comment, not trimmed
+	no   int    // 1-based line number
 }
 
 type parser struct {
@@ -57,7 +57,7 @@ type parser struct {
 	file  string
 }
 
-// cellSeg : une cellule trimée et sa colonne 1-based dans la ligne source.
+// cellSeg: a trimmed cell and its 1-based column in the source line.
 type cellSeg struct {
 	text string
 	col  int
@@ -72,7 +72,7 @@ func splitLines(src string) []line {
 	return out
 }
 
-// stripComment retire un commentaire '#...' hors chaîne de caractères.
+// stripComment removes a '#...' comment outside of a string.
 func stripComment(s string) string {
 	inStr := false
 	for i := 0; i < len(s); i++ {
@@ -88,8 +88,8 @@ func stripComment(s string) string {
 	return s
 }
 
-// indentOf renvoie le nombre de caractères blancs en tête de la ligne brute
-// (offset 0-based où commence le contenu trimé).
+// indentOf returns the number of leading whitespace characters of the raw line
+// (0-based offset where the trimmed content begins).
 func indentOf(raw string) int {
 	return len(raw) - len(strings.TrimLeft(raw, wsCutset))
 }
@@ -112,7 +112,7 @@ func (p *parser) parse() (*model.Model, error) {
 			}
 			m.Name = name
 			p.i++
-			// si la ligne n'est pas auto-fermée (pas de '}'), consommer le bloc jusqu'à '}'
+			// if the line is not self-closed (no '}'), consume the block until '}'
 			if !strings.Contains(t, "}") {
 				p.skipBlock()
 			}
@@ -139,32 +139,32 @@ func (p *parser) parse() (*model.Model, error) {
 			p.i++
 		case strings.HasPrefix(t, "decision "):
 			if strings.Contains(t, "{") {
-				dec, err := p.parseDecision(t, ln.no, indent) // table (avance p.i)
+				dec, err := p.parseDecision(t, ln.no, indent) // table (advances p.i)
 				if err != nil {
 					return nil, err
 				}
 				m.Decisions = append(m.Decisions, dec)
 				continue
 			}
-			dec, err := parseExprDecision(t, ln.no) // literal-expression (1 ligne)
+			dec, err := parseExprDecision(t, ln.no) // literal-expression (1 line)
 			if err != nil {
 				return nil, err
 			}
 			m.Decisions = append(m.Decisions, dec)
 			p.i++
 		default:
-			return nil, diag.Newf(diag.CodeUnknownStmt, ln.no, "instruction non reconnue: %q", t).
-				WithSuggestion("instructions valides : `model`, `input`, `type`, `decision`")
+			return nil, diag.Newf(diag.CodeUnknownStmt, ln.no, "unrecognized statement: %q", t).
+				WithSuggestion("valid statements: `model`, `input`, `type`, `decision`")
 		}
 	}
 	if m.Name == "" {
-		return nil, diag.New(diag.CodeNoModel, 0, `modèle sans déclaration `+"`model \"...\"`").
-			WithSuggestion("ajoutez une ligne `model \"nom\" {}` en tête du fichier")
+		return nil, diag.New(diag.CodeNoModel, 0, `model without a `+"`model \"...\"`"+` declaration`).
+			WithSuggestion("add a `model \"name\" {}` line at the top of the file")
 	}
 	return m, nil
 }
 
-// skipBlock consomme les lignes jusqu'à une ligne contenant '}' (incluse).
+// skipBlock consumes lines until a line containing '}' (inclusive).
 func (p *parser) skipBlock() {
 	for p.i < len(p.lines) {
 		if strings.Contains(p.lines[p.i].text, "}") {
@@ -178,8 +178,8 @@ func (p *parser) skipBlock() {
 func parseModelHeader(t string, no int) (string, error) {
 	name, ok := firstQuoted(t)
 	if !ok {
-		return "", diag.New(diag.CodeModelHeader, no, "`model` attend un nom entre guillemets").
-			WithSuggestion(`exemple : model "credit" {}`)
+		return "", diag.New(diag.CodeModelHeader, no, "`model` expects a quoted name").
+			WithSuggestion(`example: model "credit" {}`)
 	}
 	return name, nil
 }
@@ -188,13 +188,13 @@ func parseInput(t string, no int) (model.Input, error) {
 	rest := strings.TrimSpace(strings.TrimPrefix(t, "input"))
 	name, typespec, ok := splitColon(rest)
 	if !ok {
-		return model.Input{}, diag.New(diag.CodeInputSyntax, no, "`input` attend `nom : type`").
-			WithSuggestion("exemple : input credit_score : number")
+		return model.Input{}, diag.New(diag.CodeInputSyntax, no, "`input` expects `name : type`").
+			WithSuggestion("example: input credit_score : number")
 	}
-	// typespec = "<type>" éventuellement suivi d'un domaine ("number in [300..850]", "number >= 0").
+	// typespec = "<type>" optionally followed by a domain ("number in [300..850]", "number >= 0").
 	fields := strings.Fields(typespec)
 	if len(fields) == 0 {
-		return model.Input{}, diag.New(diag.CodeInputSyntax, no, "type d'entrée manquant")
+		return model.Input{}, diag.New(diag.CodeInputSyntax, no, "missing input type")
 	}
 	mt, err := parseType(fields[0], no)
 	if err != nil {
@@ -208,21 +208,21 @@ func (p *parser) parseDecision(header string, no, indent int) (model.Decision, e
 	dec := model.Decision{Line: no}
 	// `decision <name> : <type> {`
 	if !strings.Contains(header, "{") {
-		return dec, diag.New(diag.CodeDecisionHead, no, "`{` manquant en fin d'en-tête de décision")
+		return dec, diag.New(diag.CodeDecisionHead, no, "missing `{` at end of decision header")
 	}
 	if idx := strings.IndexByte(header, '{'); strings.TrimSpace(header[idx+1:]) != "" {
 		return dec, diag.New(diag.CodeBraceTrailing, no,
-			"placez `{` en fin de ligne ; le corps de la décision va sur les lignes suivantes")
+			"place `{` at end of line; the decision body goes on the following lines")
 	}
 	h := strings.TrimSpace(strings.TrimPrefix(header, "decision"))
 	h = strings.TrimSuffix(strings.TrimSpace(h), "{")
 	name, typ, ok := splitColon(h)
 	if !ok {
-		return dec, diag.New(diag.CodeDecisionHead, no, "en-tête de décision attendu `decision nom : type {`")
+		return dec, diag.New(diag.CodeDecisionHead, no, "expected decision header `decision name : type {`")
 	}
 	dec.Name = strings.TrimSpace(name)
-	dec.TypeName = strings.TrimSpace(typ) // builtin ou type context déclaré : résolu par le compilateur
-	p.i++                                 // consommer l'en-tête (le `{` en fin de ligne a déjà été validé plus haut)
+	dec.TypeName = strings.TrimSpace(typ) // builtin or declared context type: resolved by the compiler
+	p.i++                                 // consume the header (the trailing `{` was already validated above)
 
 	for p.i < len(p.lines) {
 		ln := p.lines[p.i]
@@ -256,24 +256,24 @@ func (p *parser) parseDecision(header string, no, indent int) (model.Decision, e
 			}
 			dec.Rules = append(dec.Rules, r)
 		default:
-			return dec, diag.Newf(diag.CodeDecisionBody, ln.no, "ligne de décision non reconnue: %q", t)
+			return dec, diag.Newf(diag.CodeDecisionBody, ln.no, "unrecognized decision line: %q", t)
 		}
 		p.i++
 	}
-	return dec, diag.Newf(diag.CodeDecisionBody, no, "`}` manquant pour la décision %q", dec.Name)
+	return dec, diag.Newf(diag.CodeDecisionBody, no, "missing `}` for decision %q", dec.Name)
 }
 
 func parseRule(t string, no, indent int) (model.Rule, error) {
 	idx := strings.Index(t, "=>")
 	if idx < 0 {
-		return model.Rule{}, diag.New(diag.CodeRuleSyntax, no, "règle sans `=>`")
+		return model.Rule{}, diag.New(diag.CodeRuleSyntax, no, "rule without `=>`")
 	}
 	lhs := t[:idx]
 	rhs := t[idx+2:]
 	r := model.Rule{Line: no}
 	condCells := splitCellsCol(lhs, 0, indent)
 	if isDefaultLHS(condCells) {
-		r.IsDefault = true // ligne `default` : pas de conditions
+		r.IsDefault = true // `default` line: no conditions
 	} else {
 		for _, c := range condCells {
 			cell, err := parseCell(c.text, no, c.col, false)
@@ -293,7 +293,7 @@ func parseRule(t string, no, indent int) (model.Rule, error) {
 	return r, nil
 }
 
-// isDefaultLHS reconnaît une ligne `default` (ses autres cellules ne sont que de l'alignement vide).
+// isDefaultLHS recognizes a `default` line (its other cells are only empty alignment).
 func isDefaultLHS(cells []cellSeg) bool {
 	if len(cells) == 0 || cells[0].text != "default" {
 		return false
@@ -306,23 +306,23 @@ func isDefaultLHS(cells []cellSeg) bool {
 	return true
 }
 
-// parseExprDecision parse `decision <name> : <type> = <expr FEEL>` (décision literal-expression).
+// parseExprDecision parses `decision <name> : <type> = <FEEL expr>` (literal-expression decision).
 func parseExprDecision(t string, no int) (model.Decision, error) {
 	h := strings.TrimSpace(strings.TrimPrefix(t, "decision"))
 	name, rest, ok := splitColon(h)
 	if !ok {
-		return model.Decision{}, diag.New(diag.CodeDecisionHead, no, "décision: `nom : type ...` attendu")
+		return model.Decision{}, diag.New(diag.CodeDecisionHead, no, "decision: expected `name : type ...`")
 	}
 	typeName, exprSrc, ok := strings.Cut(rest, "=")
 	if !ok {
 		return model.Decision{}, diag.Newf(diag.CodeDecisionHead, no,
-			"décision %q: attendu `{` (table) ou `= expression`", name)
+			"decision %q: expected `{` (table) or `= expression`", name)
 	}
 	exprSrc = strings.TrimSpace(exprSrc)
 	node, err := feel.ParseString(exprSrc)
 	if err != nil {
 		return model.Decision{}, diag.Wrap(diag.CodeFeelSyntax, no,
-			fmt.Sprintf("expression FEEL invalide %q", exprSrc), err)
+			fmt.Sprintf("invalid FEEL expression %q", exprSrc), err)
 	}
 	return model.Decision{
 		Name:     name,
@@ -332,27 +332,27 @@ func parseExprDecision(t string, no int) (model.Decision, error) {
 	}, nil
 }
 
-// parseBKM parse `bkm <name>(p1:t1, p2:t2):ret = <expr FEEL>`.
-// La signature `(p:t):ret` est de la syntaxe DSL feelc (pas du FEEL standard) — découpée ici ;
-// seul le corps `= expr` est confié au parseur FEEL.
+// parseBKM parses `bkm <name>(p1:t1, p2:t2):ret = <FEEL expr>`.
+// The `(p:t):ret` signature is feelc DSL syntax (not standard FEEL) — split here;
+// only the `= expr` body is delegated to the FEEL parser.
 func parseBKM(t string, no int) (model.BKM, error) {
 	rest := strings.TrimSpace(strings.TrimPrefix(t, "bkm"))
 	op := strings.IndexByte(rest, '(')
 	cp := strings.IndexByte(rest, ')')
 	if op < 0 || cp < 0 || cp < op {
 		return model.BKM{}, diag.New(diag.CodeBKM, no,
-			"`bkm` attend `nom(p1:t1, ...):type = expression`").
-			WithSuggestion("exemple : bkm dti(debt:number, income:number):number = debt / (income / 12)")
+			"`bkm` expects `name(p1:t1, ...):type = expression`").
+			WithSuggestion("example: bkm dti(debt:number, income:number):number = debt / (income / 12)")
 	}
 	name := strings.TrimSpace(rest[:op])
 	if name == "" {
-		return model.BKM{}, diag.New(diag.CodeBKM, no, "nom de BKM manquant avant `(`")
+		return model.BKM{}, diag.New(diag.CodeBKM, no, "missing BKM name before `(`")
 	}
 	bkm := model.BKM{Name: name, Line: no}
 	for _, p := range splitList(rest[op+1 : cp]) {
 		pn, pt, ok := splitColon(p)
 		if !ok {
-			return model.BKM{}, diag.Newf(diag.CodeBKM, no, "paramètre de BKM: `nom: type` attendu, obtenu %q", p)
+			return model.BKM{}, diag.Newf(diag.CodeBKM, no, "BKM parameter: expected `name: type`, got %q", p)
 		}
 		mt, err := parseType(pt, no)
 		if err != nil {
@@ -362,11 +362,11 @@ func parseBKM(t string, no int) (model.BKM, error) {
 	}
 	after := strings.TrimSpace(rest[cp+1:])
 	if !strings.HasPrefix(after, ":") {
-		return model.BKM{}, diag.New(diag.CodeBKM, no, "type de retour attendu après `)` : `):type = expr`")
+		return model.BKM{}, diag.New(diag.CodeBKM, no, "expected return type after `)`: `):type = expr`")
 	}
 	retName, bodySrc, ok := strings.Cut(after[1:], "=")
 	if !ok {
-		return model.BKM{}, diag.New(diag.CodeBKM, no, "corps de BKM attendu : `= expression`")
+		return model.BKM{}, diag.New(diag.CodeBKM, no, "expected BKM body: `= expression`")
 	}
 	ret, err := parseType(strings.TrimSpace(retName), no)
 	if err != nil {
@@ -377,28 +377,28 @@ func parseBKM(t string, no int) (model.BKM, error) {
 	node, err := feel.ParseString(bodySrc)
 	if err != nil {
 		return model.BKM{}, diag.Wrap(diag.CodeFeelSyntax, no,
-			fmt.Sprintf("corps de BKM FEEL invalide %q", bodySrc), err)
+			fmt.Sprintf("invalid FEEL BKM body %q", bodySrc), err)
 	}
 	bkm.Body = &model.Cell{Src: bodySrc, Node: node, Line: no}
 	return bkm, nil
 }
 
-// parseTypeDecl parse `type <Name> = context { f1: t1, f2: t2 }` (sur une ligne en v2).
+// parseTypeDecl parses `type <Name> = context { f1: t1, f2: t2 }` (on one line in v2).
 func parseTypeDecl(t string, no int) (model.TypeDecl, error) {
 	rest := strings.TrimSpace(strings.TrimPrefix(t, "type"))
 	name, rhs, ok := strings.Cut(rest, "=")
 	if !ok {
-		return model.TypeDecl{}, diag.New(diag.CodeTypeDecl, no, "`type Nom = context { ... }` attendu")
+		return model.TypeDecl{}, diag.New(diag.CodeTypeDecl, no, "expected `type Name = context { ... }`")
 	}
 	rhs = strings.TrimSpace(rhs)
 	if !strings.HasPrefix(rhs, "context") {
 		return model.TypeDecl{}, diag.New(diag.CodeTypeDecl, no,
-			"seuls les types `context { ... }` sont supportés en v2")
+			"only `context { ... }` types are supported in v2")
 	}
 	open := strings.IndexByte(rhs, '{')
 	closeB := strings.LastIndexByte(rhs, '}')
 	if open < 0 || closeB < 0 || closeB < open {
-		return model.TypeDecl{}, diag.New(diag.CodeTypeDecl, no, "type context : `{ ... }` attendu sur une ligne")
+		return model.TypeDecl{}, diag.New(diag.CodeTypeDecl, no, "context type: expected `{ ... }` on one line")
 	}
 	td := model.TypeDecl{Name: strings.TrimSpace(name), Line: no}
 	for _, f := range strings.Split(rhs[open+1:closeB], ",") {
@@ -409,7 +409,7 @@ func parseTypeDecl(t string, no int) (model.TypeDecl, error) {
 		fn, ft, ok := splitColon(f)
 		if !ok {
 			return model.TypeDecl{}, diag.Newf(diag.CodeTypeDecl, no,
-				"champ de context: `nom: type` attendu, obtenu %q", f)
+				"context field: expected `name: type`, got %q", f)
 		}
 		mt, err := parseType(ft, no)
 		if err != nil {
@@ -420,8 +420,8 @@ func parseTypeDecl(t string, no int) (model.TypeDecl, error) {
 	return td, nil
 }
 
-// parseCell normalise une cellule. isOutput=false pour une condition, true pour une sortie.
-// col est la colonne 1-based de la cellule dans la ligne source (0 si inconnue).
+// parseCell normalizes a cell. isOutput=false for a condition, true for an output.
+// col is the 1-based column of the cell in the source line (0 if unknown).
 func parseCell(src string, no, col int, isOutput bool) (model.Cell, error) {
 	s := strings.TrimSpace(src)
 	cell := model.Cell{Src: s, Line: no, Col: col}
@@ -430,22 +430,22 @@ func parseCell(src string, no, col int, isOutput bool) (model.Cell, error) {
 		return cell, nil
 	}
 	if s == "" {
-		return model.Cell{}, diag.New(diag.CodeEmptyCell, no, "cellule vide").WithCol(col)
+		return model.Cell{}, diag.New(diag.CodeEmptyCell, no, "empty cell").WithCol(col)
 	}
 	node, err := feel.ParseString(s)
 	if err != nil {
 		return model.Cell{}, diag.Wrap(diag.CodeFeelSyntax, no,
-			fmt.Sprintf("cellule FEEL invalide %q", s), err).WithCol(col)
+			fmt.Sprintf("invalid FEEL cell %q", s), err).WithCol(col)
 	}
 	cell.Node = node
 	return cell, nil
 }
 
-// --- helpers de découpe ---
+// --- splitting helpers ---
 
-// splitCellsCol découpe s par '|' et renvoie chaque cellule trimée avec sa colonne
-// 1-based dans la ligne source. baseOff = offset 0-based de s dans la ligne trimée ;
-// indent = nombre de blancs en tête de la ligne brute.
+// splitCellsCol splits s by '|' and returns each trimmed cell with its 1-based
+// column in the source line. baseOff = 0-based offset of s in the trimmed line;
+// indent = number of leading whitespace characters of the raw line.
 func splitCellsCol(s string, baseOff, indent int) []cellSeg {
 	var out []cellSeg
 	start := 0
@@ -469,7 +469,7 @@ func splitCellsCol(s string, baseOff, indent int) []cellSeg {
 	return out
 }
 
-// splitListCol découpe s par ',' (en ignorant les segments vides) avec colonnes 1-based.
+// splitListCol splits s by ',' (ignoring empty segments) with 1-based columns.
 func splitListCol(s string, baseOff, indent int) []cellSeg {
 	var out []cellSeg
 	start := 0
@@ -533,7 +533,7 @@ func parseType(s string, no int) (model.Type, error) {
 	case "boolean", "bool":
 		return model.TypeBool, nil
 	default:
-		return "", diag.Newf(diag.CodeUnknownType, no, "type non supporté en v1: %q", s).
-			WithSuggestion("types supportés : number, string, boolean")
+		return "", diag.Newf(diag.CodeUnknownType, no, "type not supported in v1: %q", s).
+			WithSuggestion("supported types: number, string, boolean")
 	}
 }

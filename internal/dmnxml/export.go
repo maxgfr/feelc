@@ -7,13 +7,13 @@ import (
 	"github.com/maxgfr/feelc/internal/model"
 )
 
-// Export est l'inverse de Import : un *model.Model -> DMN XML (interop de SORTIE). Reconstruit
-// depuis les chaînes source verbatim (Cell.Src, Expr.Src). Renvoie des avertissements pour tout
-// ce que le DMN standard ne capture PAS (jamais conformer en silence) :
-//   - domaines d'entrée (`in [..]`, `>= 0`) : hors decisionTable DMN ;
-//   - liste `priority:` : la PRIORITY DMN repose sur l'ordre des valeurs de sortie, non exprimé ici ;
-//   - BKM : inliné à la compilation, non mappé vers un businessKnowledgeModel DMN ;
-//   - ligne `default` : émise comme une règle « tout any » (DMN n'a pas de mot-clé default).
+// Export is the inverse of Import: a *model.Model -> DMN XML (OUTPUT interop). Reconstructed
+// from the verbatim source strings (Cell.Src, Expr.Src). Returns warnings for everything
+// the DMN standard does NOT capture (never conform silently):
+//   - input domains (`in [..]`, `>= 0`): outside the DMN decisionTable;
+//   - `priority:` list: DMN PRIORITY relies on the order of output values, not expressed here;
+//   - BKM: inlined at compile time, not mapped to a DMN businessKnowledgeModel;
+//   - `default` line: emitted as an "all any" rule (DMN has no default keyword).
 func Export(m *model.Model) ([]byte, []string, error) {
 	var warns []string
 	var b strings.Builder
@@ -23,11 +23,11 @@ func Export(m *model.Model) ([]byte, []string, error) {
 	for _, in := range m.Inputs {
 		fmt.Fprintf(&b, "  <inputData name=%s><variable typeRef=%s/></inputData>\n", xmlAttr(in.Name), xmlAttr(string(in.Type)))
 		if in.Domain != "" {
-			warns = append(warns, fmt.Sprintf("input %q: domaine %q non exporté (hors decisionTable DMN)", in.Name, in.Domain))
+			warns = append(warns, fmt.Sprintf("input %q: domain %q not exported (outside the DMN decisionTable)", in.Name, in.Domain))
 		}
 	}
 	for _, bkm := range m.BKMs {
-		warns = append(warns, fmt.Sprintf("BKM %q non exporté (inliné à la compilation, pas de mapping DMN)", bkm.Name))
+		warns = append(warns, fmt.Sprintf("BKM %q not exported (inlined at compile time, no DMN mapping)", bkm.Name))
 	}
 	for _, d := range m.Decisions {
 		writeDecisionXML(&b, m, d, &warns)
@@ -47,11 +47,11 @@ func writeDecisionXML(b *strings.Builder, m *model.Model, d model.Decision, warn
 
 	hp, agg := mapHitPolicyOut(d.HitPolicy)
 	if hp == "PRIORITY" && len(d.Priority) > 0 {
-		*warns = append(*warns, fmt.Sprintf("décision %q: la ligne `priority:` n'est pas exprimable en DMN standard — perdue à l'export", d.Name))
+		*warns = append(*warns, fmt.Sprintf("decision %q: the `priority:` line is not expressible in standard DMN — lost on export", d.Name))
 	}
 	for _, r := range d.Rules {
 		if r.IsDefault {
-			*warns = append(*warns, fmt.Sprintf("décision %q: ligne `default` émise comme règle « tout any » (DMN n'a pas de mot-clé default) — sémantique approximée", d.Name))
+			*warns = append(*warns, fmt.Sprintf("decision %q: `default` line emitted as an \"all any\" rule (DMN has no default keyword) — semantics approximated", d.Name))
 			break
 		}
 	}
@@ -77,7 +77,7 @@ func writeDecisionXML(b *strings.Builder, m *model.Model, d model.Decision, warn
 	for _, r := range d.Rules {
 		b.WriteString("      <rule>\n")
 		for j := 0; j < len(d.Needs); j++ {
-			cell := "" // `default` ou colonne absente -> entrée vide DMN (= any)
+			cell := "" // `default` or absent column -> empty DMN entry (= any)
 			if !r.IsDefault && j < len(r.Conds) && !r.Conds[j].Dash {
 				cell = r.Conds[j].Src
 			}
@@ -94,7 +94,7 @@ func writeDecisionXML(b *strings.Builder, m *model.Model, d model.Decision, warn
 
 type outCol struct{ name, typ string }
 
-// outputCols déduit les colonnes de sortie : scalaire -> 1 (nom = décision) ; context -> champs.
+// outputCols infers the output columns: scalar -> 1 (name = decision); context -> fields.
 func outputCols(m *model.Model, d model.Decision) []outCol {
 	switch model.Type(d.TypeName) {
 	case model.TypeNumber, model.TypeString, model.TypeBool:
@@ -110,7 +110,7 @@ func outputCols(m *model.Model, d model.Decision) []outCol {
 	return []outCol{{name: d.Name, typ: "string"}}
 }
 
-// inputType : type DMN d'une colonne `needs` (type de l'input référencé, sinon décision, sinon number).
+// inputType: DMN type of a `needs` column (type of the referenced input, else decision, else number).
 func inputType(m *model.Model, name string) string {
 	for _, in := range m.Inputs {
 		if in.Name == name {
@@ -155,12 +155,12 @@ func mapHitPolicyOut(hp string) (policy, agg string) {
 	}
 }
 
-// xmlEsc échappe le texte pour un contenu XML (les cellules peuvent contenir <, >, &, ").
+// xmlEsc escapes text for XML content (cells may contain <, >, &, ").
 func xmlEsc(s string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;")
 	return r.Replace(s)
 }
 
-// xmlAttr rend une valeur d'attribut XML échappée et entre guillemets (et NON via %q, qui applique
-// l'échappement Go, pas XML).
+// xmlAttr renders an escaped, quoted XML attribute value (and NOT via %q, which applies
+// Go escaping, not XML).
 func xmlAttr(s string) string { return `"` + xmlEsc(s) + `"` }

@@ -8,43 +8,43 @@ import (
 	"github.com/maxgfr/feelc/internal/ir"
 )
 
-// DecisionTrace : justification d'une décision (règle gagnante + cellules justifiantes + sortie).
-// JSON-able. La sémantique de matching reste centralisée dans ir.MatchCell / la VM : Trace REJOUE
-// l'évaluation, il ne la duplique pas (pas de divergence possible avec engine.Eval).
+// DecisionTrace: justification of a decision (winning rule + justifying cells + output).
+// JSON-able. The matching semantics stay centralized in ir.MatchCell / the VM: Trace REPLAYS
+// the evaluation, it does not duplicate it (no possible divergence with engine.Eval).
 type DecisionTrace struct {
 	Decision     string      `json:"decision"`
 	Kind         string      `json:"kind"` // "table" | "literal-expr"
 	HitPolicy    string      `json:"hitPolicy,omitempty"`
 	Matched      bool        `json:"matched"`
-	Fallback     bool        `json:"fallback,omitempty"`     // sortie via `default` (ou null)
-	RuleIndex    int         `json:"ruleIndex,omitempty"`    // 1-based, règle gagnante (single-hit)
-	RuleLine     int         `json:"ruleLine,omitempty"`     // ligne source de la règle gagnante
-	Cells        []CellTrace `json:"cells,omitempty"`        // cellules justifiantes (test vrai, non `-`)
-	Contributors []RuleRef   `json:"contributors,omitempty"` // COLLECT / RULE ORDER : règles contributrices
+	Fallback     bool        `json:"fallback,omitempty"`     // output via `default` (or null)
+	RuleIndex    int         `json:"ruleIndex,omitempty"`    // 1-based, winning rule (single-hit)
+	RuleLine     int         `json:"ruleLine,omitempty"`     // source line of the winning rule
+	Cells        []CellTrace `json:"cells,omitempty"`        // justifying cells (test true, not `-`)
+	Contributors []RuleRef   `json:"contributors,omitempty"` // COLLECT / RULE ORDER: contributing rules
 	Output       any         `json:"output"`
-	ExprSrc      string      `json:"exprSrc,omitempty"`      // literal-expr : source de l'expression
-	NotGeometric bool        `json:"notGeometric,omitempty"` // justification évaluée (Op=Prog / expression), non géométrique
+	ExprSrc      string      `json:"exprSrc,omitempty"`      // literal-expr: source of the expression
+	NotGeometric bool        `json:"notGeometric,omitempty"` // evaluated justification (Op=Prog / expression), not geometric
 }
 
-// CellTrace : une cellule qui justifie le match de la règle gagnante.
+// CellTrace: a cell that justifies the match of the winning rule.
 type CellTrace struct {
 	Input string `json:"input"`
 	Src   string `json:"src"`
 	Line  int    `json:"line,omitempty"`
-	Value string `json:"value"` // valeur de la colonne au moment de l'évaluation
+	Value string `json:"value"` // column value at evaluation time
 }
 
-// RuleRef : référence à une règle (COLLECT / RULE ORDER).
+// RuleRef: reference to a rule (COLLECT / RULE ORDER).
 type RuleRef struct {
 	Index int `json:"index"`
 	Line  int `json:"line,omitempty"`
 }
 
-// Trace évalue une décision en CAPTURANT sa justification.
+// Trace evaluates a decision while CAPTURING its justification.
 func Trace(cm *ir.CompiledModel, decisionName string, inputs map[string]ir.Value) (*DecisionTrace, error) {
 	dec, ok := cm.Decision(decisionName)
 	if !ok {
-		return nil, fmt.Errorf("décision inconnue: %q", decisionName)
+		return nil, fmt.Errorf("unknown decision: %q", decisionName)
 	}
 	e := &evaluator{cm: cm, inputs: inputs, memo: map[string]ir.Value{}, state: map[string]int{}}
 	tr := &DecisionTrace{Decision: decisionName}
@@ -57,7 +57,7 @@ func Trace(cm *ir.CompiledModel, decisionName string, inputs map[string]ir.Value
 		tr.Kind = "literal-expr"
 		tr.Matched = true
 		tr.ExprSrc = dec.ExprSrc
-		tr.NotGeometric = true // une expression n'est pas une justification géométrique (honnêteté)
+		tr.NotGeometric = true // an expression is not a geometric justification (honesty)
 		tr.Output = out.ToAny()
 		return tr, nil
 	case ir.KindTable:
@@ -66,7 +66,7 @@ func Trace(cm *ir.CompiledModel, decisionName string, inputs map[string]ir.Value
 		}
 		return tr, nil
 	default:
-		return nil, fmt.Errorf("décision %q: type non traçable", decisionName)
+		return nil, fmt.Errorf("decision %q: untraceable type", decisionName)
 	}
 }
 
@@ -83,9 +83,9 @@ func (e *evaluator) traceTable(t *ir.DecisionTable, tr *DecisionTrace) error {
 		cols[i] = v
 	}
 
-	// FIRST : court-circuite à la 1re règle qui matche, EXACTEMENT comme evalTable. Ne PAS évaluer
-	// les règles suivantes : une cellule Op=Prog ultérieure qui erre (ex: division par zéro) ferait
-	// échouer Trace là où Eval réussit → divergence. (Revue adverse, Tranche 4.)
+	// FIRST: short-circuits at the 1st matching rule, EXACTLY like evalTable. Do NOT evaluate
+	// the following rules: a later Op=Prog cell that errors (e.g. division by zero) would make
+	// Trace fail where Eval succeeds → divergence. (Adversarial review, Slice 4.)
 	if t.HitPolicy == ir.HitFirst {
 		for ri := range t.Rules {
 			ok, err := e.matches(t.Rules[ri], cols)
@@ -111,7 +111,7 @@ func (e *evaluator) traceTable(t *ir.DecisionTable, tr *DecisionTrace) error {
 		}
 	}
 
-	// COLLECT / RULE ORDER : la justification est l'ensemble des règles contributrices.
+	// COLLECT / RULE ORDER: the justification is the set of contributing rules.
 	if t.HitPolicy == ir.HitCollect || t.HitPolicy == ir.HitRuleOrder {
 		rules := make([]ir.Rule, len(matched))
 		for i, ri := range matched {
@@ -127,13 +127,13 @@ func (e *evaluator) traceTable(t *ir.DecisionTable, tr *DecisionTrace) error {
 		return nil
 	}
 
-	// UNIQUE / ANY / PRIORITY : ces politiques évaluent TOUTES les règles (comme evalTable), donc
-	// pas de divergence possible. On détermine la VRAIE règle retenue.
+	// UNIQUE / ANY / PRIORITY: these policies evaluate ALL rules (like evalTable), so
+	// no divergence is possible. We determine the REAL rule selected.
 	winner := -1
 	switch t.HitPolicy {
 	case ir.HitUnique:
 		if len(matched) > 1 {
-			return fmt.Errorf("hit policy UNIQUE: %d règles matchent (au plus 1 attendue)", len(matched))
+			return fmt.Errorf("hit policy UNIQUE: %d rules match (at most 1 expected)", len(matched))
 		}
 		if len(matched) == 1 {
 			winner = matched[0]
@@ -142,7 +142,7 @@ func (e *evaluator) traceTable(t *ir.DecisionTable, tr *DecisionTrace) error {
 		if len(matched) > 0 {
 			for _, ri := range matched[1:] {
 				if !outputsEqual(t.Rules[ri].Outputs, t.Rules[matched[0]].Outputs) {
-					return fmt.Errorf("hit policy ANY: règles en conflit (sorties divergentes)")
+					return fmt.Errorf("hit policy ANY: conflicting rules (divergent outputs)")
 				}
 			}
 			winner = matched[0]
@@ -158,7 +158,7 @@ func (e *evaluator) traceTable(t *ir.DecisionTable, tr *DecisionTrace) error {
 			}
 		}
 	default:
-		return fmt.Errorf("hit policy non traçable")
+		return fmt.Errorf("untraceable hit policy")
 	}
 
 	if winner < 0 {
@@ -168,7 +168,7 @@ func (e *evaluator) traceTable(t *ir.DecisionTable, tr *DecisionTrace) error {
 	return nil
 }
 
-// fillWinner renseigne la règle gagnante + ses cellules justifiantes (test vrai, non `-`).
+// fillWinner fills in the winning rule + its justifying cells (test true, not `-`).
 func (e *evaluator) fillWinner(t *ir.DecisionTable, winner int, cols []ir.Value, tr *DecisionTrace) {
 	tr.Matched = true
 	tr.RuleIndex = winner + 1
@@ -176,11 +176,11 @@ func (e *evaluator) fillWinner(t *ir.DecisionTable, winner int, cols []ir.Value,
 	tr.Output = buildOutput(t.Outputs, t.Rules[winner].Outputs).ToAny()
 	for i, ct := range t.Rules[winner].Conds {
 		if ct.Op == ir.OpAny {
-			continue // `-` : ne justifie rien
+			continue // `-`: justifies nothing
 		}
 		tr.Cells = append(tr.Cells, CellTrace{Input: t.Inputs[i], Src: ct.Src, Line: ct.Line, Value: traceValue(cols[i])})
 		if ct.Op == ir.OpProg {
-			tr.NotGeometric = true // cellule expression : justification évaluée, non géométrique
+			tr.NotGeometric = true // expression cell: evaluated justification, not geometric
 		}
 	}
 }

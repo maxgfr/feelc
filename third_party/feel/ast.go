@@ -60,8 +60,8 @@ func (dotop DotOp) Repr() string {
 
 // function call
 
-// FunCallArg : un argument d'invocation. EXPORTÉ (fork feelc) pour que les consommateurs
-// puissent lire le nom (keyword arg) et le nœud de l'argument — l'amont les gardait privés.
+// FunCallArg: an invocation argument. EXPORTED (feelc fork) so consumers can read the name
+// (keyword arg) and the argument node — upstream kept them private.
 type FunCallArg struct {
 	Name string
 	Arg  Node

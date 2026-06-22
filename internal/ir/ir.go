@@ -1,45 +1,47 @@
-// Package ir définit la représentation intermédiaire de feelc : un modèle compilé,
-// immuable après compilation, que la VM exécute et que la vérification analyse.
+// Package ir defines the intermediate representation of feelc: a compiled model,
+// immutable after compilation, which the VM executes and the verification analyzes.
 //
-// Conception cible (cf. plan) : 3 couches superposées —
-//   (1) graphe de décisions topo-triées ;
-//   (2) tables déclaratives normalisées en CellTest (forme géométrique = analysable) ;
-//   (3) bytecode FEEL plat par cellule/expression (Tranche 2+).
-// La Tranche 1 ne matérialise que (1) + (2) avec des sorties littérales.
+// Target design (cf. plan): 3 stacked layers —
+//
+//	(1) topologically-sorted decision graph;
+//	(2) declarative tables normalized into CellTest (geometric form = analyzable);
+//	(3) flat FEEL bytecode per cell/expression (Slice 2+).
+//
+// Slice 1 only materializes (1) + (2) with literal outputs.
 package ir
 
-// Op : opérateur normalisé d'une cellule de table (unary test).
+// Op: normalized operator of a table cell (unary test).
 type Op uint8
 
 const (
-	OpAny     Op = iota // "-" : toujours vrai (don't care)
-	OpEq                // littéral nu : égalité
+	OpAny     Op = iota // "-": always true (don't care)
+	OpEq                // bare literal: equality
 	OpNe                // "!= x"
 	OpLt                // "< x"
 	OpLe                // "<= x"
 	OpGt                // "> x"
 	OpGe                // ">= x"
-	OpInRange           // "[a..b)" etc. (Tranche 2)
-	OpInSet             // "a","b"   (Tranche 3)
-	OpProg              // expression libre -> bytecode (Tranche 2)
+	OpInRange           // "[a..b)" etc. (Slice 2)
+	OpInSet             // "a","b"   (Slice 3)
+	OpProg              // free expression -> bytecode (Slice 2)
 )
 
-// CellTest : forme normalisée d'une cellule d'entrée. C'est exactement la géométrie
-// (comparaison/intervalle/ensemble) que le vérificateur sait décomposer.
+// CellTest: normalized form of an input cell. This is exactly the geometry
+// (comparison/range/set) that the verifier knows how to decompose.
 type CellTest struct {
 	Op     Op
-	A      Value        // comparand (Eq/Ne/Lt..) ou borne basse (InRange)
-	B      Value        // borne haute (InRange)
-	AOpen  bool         // borne basse exclue ?
-	BOpen  bool         // borne haute exclue ?
-	Negate bool         // `not(<test>)` : inverse le résultat géométrique (reste analysable)
-	Sub    []CellTest   // OpInSet : OU de sous-tests (sémantique virgule des unary tests DMN)
-	Prog   *ExprProgram // OpProg : cellule = expression libre (référence une autre colonne, arithmétique)
-	Src    string       // texte source de la cellule (trace de justification, `explain`)
-	Line   int          // ligne source 1-based (0 si inconnue, ex: chargé depuis un .ir.bin)
+	A      Value        // comparand (Eq/Ne/Lt..) or low bound (InRange)
+	B      Value        // high bound (InRange)
+	AOpen  bool         // low bound excluded?
+	BOpen  bool         // high bound excluded?
+	Negate bool         // `not(<test>)`: inverts the geometric result (stays analyzable)
+	Sub    []CellTest   // OpInSet: OR of sub-tests (comma semantics of DMN unary tests)
+	Prog   *ExprProgram // OpProg: cell = free expression (references another column, arithmetic)
+	Src    string       // cell source text (justification trace, `explain`)
+	Line   int          // 1-based source line (0 if unknown, e.g. loaded from a .ir.bin)
 }
 
-// HitPolicy : politique de résolution d'une table de décision (sémantique DMN).
+// HitPolicy: resolution policy of a decision table (DMN semantics).
 type HitPolicy uint8
 
 const (
@@ -51,94 +53,94 @@ const (
 	HitRuleOrder
 )
 
-// Rule : une ligne de table. Conds aligné sur les colonnes d'entrée, Outputs sur les sorties.
+// Rule: a table row. Conds aligned on the input columns, Outputs on the outputs.
 type Rule struct {
 	Conds     []CellTest
-	Outputs   []Value  // littéraux en Tranche 1 (expressions en Tranche 2)
-	Line      int      // ligne source 1-based de la règle (trace de justification)
-	OutputSrc []string // texte source des sorties (aligné sur Outputs)
+	Outputs   []Value  // literals in Slice 1 (expressions in Slice 2)
+	Line      int      // 1-based source line of the rule (justification trace)
+	OutputSrc []string // source text of the outputs (aligned on Outputs)
 }
 
-// Aggregation : fonction d'agrégation d'une hit policy COLLECT.
+// Aggregation: aggregation function of a COLLECT hit policy.
 type Aggregation uint8
 
 const (
-	AggNone  Aggregation = iota // COLLECT brut -> liste des sorties
+	AggNone  Aggregation = iota // raw COLLECT -> list of outputs
 	AggSum                      // C+
 	AggMin                      // C<
 	AggMax                      // C>
 	AggCount                    // C#
 )
 
-// DecisionTable : la logique d'une décision sous forme de table.
+// DecisionTable: the logic of a decision in table form.
 type DecisionTable struct {
-	Inputs    []string // noms des variables d'entrée, dans l'ordre des colonnes
-	Outputs   []string // noms des sorties (1 = sortie scalaire ; >1 = context)
+	Inputs    []string // names of the input variables, in column order
+	Outputs   []string // names of the outputs (1 = scalar output; >1 = context)
 	Rules     []Rule
 	HitPolicy HitPolicy
-	Agg       Aggregation // si HitCollect
-	Priority  []Value     // si HitPriority : valeurs de sortie, ordre décroissant de priorité
-	Default   []Value     // sortie de la ligne `default` (nil si absente)
+	Agg       Aggregation // if HitCollect
+	Priority  []Value     // if HitPriority: output values, descending priority order
+	Default   []Value     // output of the `default` row (nil if absent)
 }
 
-// DecisionKind distingue table et expression littérale.
+// DecisionKind distinguishes table and literal expression.
 type DecisionKind uint8
 
 const (
-	KindTable DecisionKind = iota
-	KindLiteralExpr // Tranche 2
+	KindTable       DecisionKind = iota
+	KindLiteralExpr              // Slice 2
 )
 
-// Decision : un nœud du graphe de décisions (DRG).
+// Decision: a node of the decision graph (DRG).
 type Decision struct {
 	Name    string
 	Kind    DecisionKind
-	Table   *DecisionTable // si KindTable
-	Expr    *ExprProgram   // si KindLiteralExpr
-	ExprSrc string         // si KindLiteralExpr : texte source de l'expression (justification)
-	Deps    []string       // dépendances (information requirements)
-	Line    int            // ligne source 1-based de la décision
+	Table   *DecisionTable // if KindTable
+	Expr    *ExprProgram   // if KindLiteralExpr
+	ExprSrc string         // if KindLiteralExpr: source text of the expression (justification)
+	Deps    []string       // dependencies (information requirements)
+	Line    int            // 1-based source line of the decision
 }
 
-// Type : type statique d'une variable.
+// Type: static type of a variable.
 type Type uint8
 
 const (
 	TypeNumber Type = iota
 	TypeString
 	TypeBool
-	TypeContext // Tranche 2
+	TypeContext // Slice 2
 )
 
-// DomainKind : nature du domaine d'une entrée (pour la vérification de complétude).
+// DomainKind: nature of an input's domain (for completeness verification).
 type DomainKind uint8
 
 const (
-	DomNone    DomainKind = iota // pas de domaine déclaré
-	DomNumeric                   // intervalle [Lo, Hi] (bornes éventuellement infinies)
-	DomEnum                      // ensemble fini de valeurs
+	DomNone    DomainKind = iota // no declared domain
+	DomNumeric                   // range [Lo, Hi] (bounds possibly infinite)
+	DomEnum                      // finite set of values
 )
 
-// Domain : contrainte de domaine d'une entrée (issue de `input x : T in [..]` / `>= 0` / `in {..}`).
+// Domain: domain constraint of an input (from `input x : T in [..]` / `>= 0` / `in {..}`).
 type Domain struct {
-	Kind                   DomainKind
-	Lo, Hi                 Value // bornes numériques (si DomNumeric)
-	LoInf, HiInf           bool  // borne infinie ?
-	LoOpen, HiOpen         bool  // borne exclue ?
-	Enum                   []Value
+	Kind           DomainKind
+	Lo, Hi         Value // numeric bounds (if DomNumeric)
+	LoInf, HiInf   bool  // infinite bound?
+	LoOpen, HiOpen bool  // excluded bound?
+	Enum           []Value
 }
 
-// CompiledModel : le modèle prêt à exécuter (sortie du compilateur).
+// CompiledModel: the model ready to execute (compiler output).
 type CompiledModel struct {
 	Name      string
 	Inputs    map[string]Type
-	Domains   map[string]Domain // domaine déclaré par entrée (vide = DomNone)
+	Domains   map[string]Domain // domain declared per input (empty = DomNone)
 	Decisions []Decision
 
 	byName map[string]int
 }
 
-// Decision retrouve une décision par nom (index paresseux).
+// Decision finds a decision by name (lazy index).
 func (cm *CompiledModel) Decision(name string) (*Decision, bool) {
 	if cm.byName == nil {
 		cm.byName = make(map[string]int, len(cm.Decisions))

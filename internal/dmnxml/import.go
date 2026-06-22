@@ -1,7 +1,7 @@
-// Package dmnxml importe un modèle DMN XML (Camunda/Drools) vers le DSL .rules de feelc.
-// Import ONE-WAY (interop d'entrée) : on tolère et on SIGNALE les constructs hors sous-ensemble
-// plutôt que d'échouer durement. La syntaxe des cellules DMN (unary tests FEEL) est conservée
-// telle quelle (feelc partage la même sémantique).
+// Package dmnxml imports a DMN XML model (Camunda/Drools) into feelc's .rules DSL.
+// ONE-WAY import (input interop): out-of-subset constructs are tolerated and REPORTED
+// rather than causing a hard failure. The syntax of DMN cells (FEEL unary tests) is kept
+// as-is (feelc shares the same semantics).
 package dmnxml
 
 import (
@@ -66,12 +66,12 @@ type literalExpr struct {
 
 var identRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-// Import convertit un DMN XML en source .rules. Renvoie aussi des avertissements (constructs
-// hors sous-ensemble, simplifications).
+// Import converts a DMN XML into .rules source. It also returns warnings (out-of-subset
+// constructs, simplifications).
 func Import(data []byte) (string, []string, error) {
 	var def definitions
 	if err := xml.Unmarshal(data, &def); err != nil {
-		return "", nil, fmt.Errorf("XML DMN invalide: %w", err)
+		return "", nil, fmt.Errorf("invalid DMN XML: %w", err)
 	}
 	var warns []string
 	var b strings.Builder
@@ -93,7 +93,7 @@ func Import(data []byte) (string, []string, error) {
 		case d.Table != nil:
 			writeTable(&b, d, &warns)
 		default:
-			warns = append(warns, fmt.Sprintf("décision %q: ni table ni expression littérale — ignorée", d.Name))
+			warns = append(warns, fmt.Sprintf("decision %q: neither table nor literal expression — ignored", d.Name))
 		}
 	}
 	return b.String(), warns, nil
@@ -106,7 +106,7 @@ func writeTable(b *strings.Builder, d decision, warns *[]string) {
 		expr := strings.TrimSpace(in.Expression.Text)
 		needs[i] = expr
 		if !identRe.MatchString(expr) {
-			*warns = append(*warns, fmt.Sprintf("décision %q: inputExpression %q n'est pas un simple identifiant — `needs` invalide, à corriger", d.Name, expr))
+			*warns = append(*warns, fmt.Sprintf("decision %q: inputExpression %q is not a simple identifier — invalid `needs`, to be fixed", d.Name, expr))
 		}
 	}
 
@@ -114,7 +114,7 @@ func writeTable(b *strings.Builder, d decision, warns *[]string) {
 	if len(t.Outputs) == 1 {
 		outType = mapType(t.Outputs[0].TypeRef, warns)
 	} else if len(t.Outputs) > 1 {
-		// Sortie multi-colonnes -> type context dédié.
+		// Multi-column output -> dedicated context type.
 		tn := d.Name + "Result"
 		fmt.Fprintf(b, "type %s = context { ", tn)
 		for i, o := range t.Outputs {
@@ -136,7 +136,7 @@ func writeTable(b *strings.Builder, d decision, warns *[]string) {
 		for i, e := range r.InputEntries {
 			e = strings.TrimSpace(e)
 			if e == "" {
-				e = "-" // entrée vide DMN = any
+				e = "-" // empty DMN entry = any
 			}
 			conds[i] = e
 		}
@@ -171,7 +171,7 @@ func mapType(t string, warns *[]string) string {
 	case "boolean", "bool":
 		return "boolean"
 	default:
-		*warns = append(*warns, fmt.Sprintf("typeRef DMN inconnu %q -> traité comme string", t))
+		*warns = append(*warns, fmt.Sprintf("unknown DMN typeRef %q -> treated as string", t))
 		return "string"
 	}
 }
@@ -179,7 +179,7 @@ func mapType(t string, warns *[]string) string {
 func mapHitPolicy(hp, agg, dec string, warns *[]string) string {
 	switch strings.ToUpper(strings.TrimSpace(hp)) {
 	case "", "UNIQUE":
-		return "unique" // défaut DMN
+		return "unique" // DMN default
 	case "ANY":
 		return "any"
 	case "FIRST":
@@ -187,7 +187,7 @@ func mapHitPolicy(hp, agg, dec string, warns *[]string) string {
 	case "RULE ORDER":
 		return "rule order"
 	case "PRIORITY":
-		*warns = append(*warns, fmt.Sprintf("décision %q: PRIORITY importé en FIRST — ajoutez une ligne `priority:` si besoin", dec))
+		*warns = append(*warns, fmt.Sprintf("decision %q: PRIORITY imported as FIRST — add a `priority:` line if needed", dec))
 		return "first"
 	case "COLLECT":
 		switch strings.ToUpper(strings.TrimSpace(agg)) {
@@ -202,11 +202,11 @@ func mapHitPolicy(hp, agg, dec string, warns *[]string) string {
 		case "COUNT":
 			return "collect count"
 		default:
-			*warns = append(*warns, fmt.Sprintf("décision %q: agrégation COLLECT %q inconnue -> collect", dec, agg))
+			*warns = append(*warns, fmt.Sprintf("decision %q: unknown COLLECT aggregation %q -> collect", dec, agg))
 			return "collect"
 		}
 	default:
-		*warns = append(*warns, fmt.Sprintf("décision %q: hit policy DMN %q non supportée -> unique", dec, hp))
+		*warns = append(*warns, fmt.Sprintf("decision %q: unsupported hit policy DMN %q -> unique", dec, hp))
 		return "unique"
 	}
 }

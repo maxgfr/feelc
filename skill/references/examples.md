@@ -12,10 +12,10 @@ decision dti : number = monthly_debt / (annual_income / 12)
 decision eligibility : Eligibility {
   needs: credit_score, dti, age
   hit: first
-     < 580      | -       | -     => false | "score insuffisant"
-     [580..680) | <= 0.43 | >= 18 => true  | "approuvé sous conditions"
-     >= 680     | <= 0.43 | >= 18 => true  | "approuvé"
-     default    |         |       => false | "non couvert"
+     < 580      | -       | -     => false | "insufficient score"
+     [580..680) | <= 0.43 | >= 18 => true  | "approved with conditions"
+     >= 680     | <= 0.43 | >= 18 => true  | "approved"
+     default    |         |       => false | "not covered"
 }
 ```
 

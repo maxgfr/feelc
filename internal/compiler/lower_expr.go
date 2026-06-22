@@ -9,17 +9,17 @@ import (
 	"github.com/maxgfr/feelc/internal/model"
 )
 
-// lowerExpr compile un nœud FEEL en ExprProgram (bytecode plat).
-// Sous-ensemble v2 : littéraux, variables (dont `?`), arithmétique +-*/, comparaisons, and/or,
-// et l'INVOCATION de BKM `name(a, b)` (inlinée par substitution AST des paramètres — zéro
-// nouvel opcode, la VM ne sait pas qu'un BKM a existé). Les autres constructs (if/then/else,
-// for/some/every, **) échouent franchement.
-// Garde-fous d'inlining (bornent la RAM de compilation face à une source pathologique :
-// récursion mutuelle, ou expansion exponentielle de BKM imbriqués acycliques). Symétrique au
-// gridBudget de la vérification — jamais conformer en silence : on échoue franchement.
+// lowerExpr compiles a FEEL node into an ExprProgram (flat bytecode).
+// v2 subset: literals, variables (including `?`), arithmetic +-*/, comparisons, and/or,
+// and BKM INVOCATION `name(a, b)` (inlined by AST substitution of parameters — zero
+// new opcode, the VM does not know a BKM ever existed). Other constructs (if/then/else,
+// for/some/every, **) fail outright.
+// Inlining guards (bound compilation RAM against a pathological source: mutual
+// recursion, or exponential expansion of acyclic nested BKMs). Symmetric to the
+// gridBudget of verification — never conform silently: we fail outright.
 const (
-	maxInlineDepth = 256     // profondeur max de la chaîne d'inlining
-	maxInstrBudget = 200_000 // nb max d'instructions bytecode émises pour une expression
+	maxInlineDepth = 256     // max depth of the inlining chain
+	maxInstrBudget = 200_000 // max number of bytecode instructions emitted for an expression
 )
 
 func lowerExpr(node feel.Node, bkms map[string]model.BKM) (*ir.ExprProgram, error) {
@@ -34,17 +34,17 @@ func lowerExpr(node feel.Node, bkms map[string]model.BKM) (*ir.ExprProgram, erro
 type lowerer struct {
 	prog        *ir.ExprProgram
 	varIdx      map[string]int
-	bkms        map[string]model.BKM // BKM connus (invocations inlinables)
-	recursive   map[string]bool      // BKM sur un cycle (auto/mutuel) — invocation interdite
-	inlineDepth int                  // profondeur d'inlining courante (garde-fou anti-explosion)
+	bkms        map[string]model.BKM // known BKMs (inlinable invocations)
+	recursive   map[string]bool      // BKMs on a cycle (self/mutual) — invocation forbidden
+	inlineDepth int                  // current inlining depth (anti-explosion guard)
 }
 
-// recursiveBKMs calcule statiquement l'ensemble des BKM qui s'invoquent eux-mêmes,
-// directement ou via un cycle (mutuel) — détecté par fermeture transitive du graphe d'appels.
-// Distinguer ce cycle STATIQUE de l'imbrication `f(f(x))` (légitime, acyclique) est crucial :
-// une garde par pile d'inlining confondrait les deux (un appel en position d'argument n'est PAS
-// un cycle). Les BKM récursifs sont rejetés à l'invocation ; le graphe résiduel est acyclique
-// donc l'inlining termine.
+// recursiveBKMs statically computes the set of BKMs that invoke themselves,
+// directly or via a cycle (mutual) — detected by transitive closure of the call graph.
+// Distinguishing this STATIC cycle from `f(f(x))` nesting (legitimate, acyclic) is crucial:
+// an inlining-stack guard would conflate the two (a call in argument position is NOT
+// a cycle). Recursive BKMs are rejected at invocation; the residual graph is acyclic
+// so inlining terminates.
 func recursiveBKMs(bkms map[string]model.BKM) map[string]bool {
 	calls := make(map[string]map[string]bool, len(bkms))
 	for name, b := range bkms {
@@ -54,7 +54,7 @@ func recursiveBKMs(bkms map[string]model.BKM) map[string]bool {
 	}
 	rec := map[string]bool{}
 	for name := range bkms {
-		// name est récursif s'il s'atteint lui-même en ≥1 arête.
+		// name is recursive if it reaches itself in ≥1 edge.
 		seen := map[string]bool{}
 		var reaches func(cur string) bool
 		reaches = func(cur string) bool {
@@ -78,7 +78,7 @@ func recursiveBKMs(bkms map[string]model.BKM) map[string]bool {
 	return rec
 }
 
-// collectBKMCalls collecte les noms de BKM invoqués dans une expression (sous-ensemble lowerable).
+// collectBKMCalls collects the names of BKMs invoked in an expression (lowerable subset).
 func collectBKMCalls(node feel.Node, bkms map[string]model.BKM, out map[string]bool) {
 	switch n := node.(type) {
 	case *feel.FunCall:
@@ -123,7 +123,7 @@ func (l *lowerer) push(op ir.Opcode, arg uint32) {
 func (l *lowerer) emit(node feel.Node) error {
 	if len(l.prog.Code) > maxInstrBudget {
 		return diag.Newf(diag.CodeUnsupported, 0,
-			"expression trop volumineuse à compiler (> %d instructions) — inlining BKM excessif", maxInstrBudget)
+			"expression too large to compile (> %d instructions) — excessive BKM inlining", maxInstrBudget)
 	}
 	switch n := node.(type) {
 	case *feel.NumberNode:
@@ -159,13 +159,13 @@ func (l *lowerer) emit(node feel.Node) error {
 	case *feel.FunCall:
 		return l.emitCall(n)
 	default:
-		return diag.Newf(diag.CodeUnsupported, 0, "expression non supportée en v2: %T", node)
+		return diag.Newf(diag.CodeUnsupported, 0, "expression not supported in v2: %T", node)
 	}
 	return nil
 }
 
-// monoArgBuiltins : built-ins purs mono-arg supportés en expression. floor/ceiling/round mappent
-// sur le contexte décimal figé (déterminisme) ; `not` est la négation booléenne.
+// monoArgBuiltins: pure mono-arg built-ins supported in expressions. floor/ceiling/round map
+// onto the frozen decimal context (determinism); `not` is boolean negation.
 var monoArgBuiltins = map[string]ir.Opcode{
 	"floor":   ir.OpFloor,
 	"ceiling": ir.OpCeil,
@@ -173,18 +173,18 @@ var monoArgBuiltins = map[string]ir.Opcode{
 	"not":     ir.OpNot,
 }
 
-// emitIf compile `if c then a else b` par backpatch (OpJmpFalse vers else, OpJmp vers fin).
+// emitIf compiles `if c then a else b` via backpatch (OpJmpFalse to else, OpJmp to end).
 func (l *lowerer) emitIf(n *feel.IfExpr) error {
 	if err := l.emit(n.Cond); err != nil {
 		return err
 	}
 	jmpFalse := len(l.prog.Code)
-	l.push(ir.OpJmpFalse, 0) // -> else (backpatché)
+	l.push(ir.OpJmpFalse, 0) // -> else (backpatched)
 	if err := l.emit(n.ThenBranch); err != nil {
 		return err
 	}
 	jmpEnd := len(l.prog.Code)
-	l.push(ir.OpJmp, 0) // -> fin (backpatché)
+	l.push(ir.OpJmp, 0) // -> end (backpatched)
 	elseStart := len(l.prog.Code)
 	if err := l.emit(n.ElseBranch); err != nil {
 		return err
@@ -195,17 +195,17 @@ func (l *lowerer) emitIf(n *feel.IfExpr) error {
 	return nil
 }
 
-// emitCall route une invocation : built-in mono-arg, sinon inlining BKM.
+// emitCall routes an invocation: mono-arg built-in, otherwise BKM inlining.
 func (l *lowerer) emitCall(fc *feel.FunCall) error {
 	ref, ok := fc.FunRef.(*feel.Var)
 	if !ok {
-		return diag.Newf(diag.CodeUnsupported, 0, "invocation: seul `nom(...)` est supporté, obtenu %s", fc.FunRef.Repr())
+		return diag.Newf(diag.CodeUnsupported, 0, "invocation: only `name(...)` is supported, got %s", fc.FunRef.Repr())
 	}
 	if op, isBuiltin := monoArgBuiltins[ref.Name]; isBuiltin {
-		// Multi-arg (ex: round(x, n), substring(s, i, n)) : échec franc, cf ADR 0004.
+		// Multi-arg (e.g. round(x, n), substring(s, i, n)): fail outright, cf ADR 0004.
 		if len(fc.Args) != 1 || fc.Args[0].Name != "" {
 			return diag.Newf(diag.CodeUnsupported, 0,
-				"built-in %q attend exactement 1 argument positionnel (multi-arguments non supportés, cf ADR 0004)", ref.Name)
+				"built-in %q expects exactly 1 positional argument (multi-arguments not supported, cf ADR 0004)", ref.Name)
 		}
 		if err := l.emit(fc.Args[0].Arg); err != nil {
 			return err
@@ -216,48 +216,48 @@ func (l *lowerer) emitCall(fc *feel.FunCall) error {
 	return l.emitBKMCall(fc)
 }
 
-// emitBKMCall inline une invocation de BKM `name(a1, ..., an)` : substitution AST des
-// paramètres par les nœuds d'arguments, puis lowering normal du corps substitué.
+// emitBKMCall inlines a BKM invocation `name(a1, ..., an)`: AST substitution of
+// parameters by the argument nodes, then normal lowering of the substituted body.
 func (l *lowerer) emitBKMCall(fc *feel.FunCall) error {
 	ref, ok := fc.FunRef.(*feel.Var)
 	if !ok {
-		return diag.Newf(diag.CodeUnsupported, 0, "invocation: seul `nom(...)` est supporté, obtenu %s", fc.FunRef.Repr())
+		return diag.Newf(diag.CodeUnsupported, 0, "invocation: only `name(...)` is supported, got %s", fc.FunRef.Repr())
 	}
 	name := ref.Name
 	bkm, ok := l.bkms[name]
 	if !ok {
-		return diag.Newf(diag.CodeUnsupported, 0, "invocation %q: BKM inconnu", name).
-			WithSuggestion("déclarez `bkm " + name + "(...)` ou vérifiez le nom")
+		return diag.Newf(diag.CodeUnsupported, 0, "invocation %q: unknown BKM", name).
+			WithSuggestion("declare `bkm " + name + "(...)` or check the name")
 	}
-	// Récursion (auto ou mutuelle) détectée STATIQUEMENT : refus franc. L'imbrication acyclique
-	// `f(f(x))` n'est PAS récursive et reste autorisée.
+	// Recursion (self or mutual) detected STATICALLY: outright refusal. Acyclic nesting
+	// `f(f(x))` is NOT recursive and remains allowed.
 	if l.recursive[name] {
 		return diag.Newf(diag.CodeUnsupported, 0,
-			"récursion BKM interdite: %q s'invoque lui-même (directement ou en cycle)", name)
+			"BKM recursion forbidden: %q invokes itself (directly or in a cycle)", name)
 	}
 	if len(fc.Args) != len(bkm.Params) {
-		return diag.Newf(diag.CodeArity, 0, "invocation %q: %d argument(s) pour %d paramètre(s)",
+		return diag.Newf(diag.CodeArity, 0, "invocation %q: %d argument(s) for %d parameter(s)",
 			name, len(fc.Args), len(bkm.Params))
 	}
-	// Périmètre v1 : positionnel uniquement (pas de kwargs `f(x: 1)`).
+	// v1 scope: positional only (no kwargs `f(x: 1)`).
 	subst := make(map[string]feel.Node, len(bkm.Params))
 	for i, arg := range fc.Args {
 		if arg.Name != "" {
 			return diag.Newf(diag.CodeUnsupported, 0,
-				"invocation %q: arguments nommés non supportés (BKM positionnel uniquement)", name)
+				"invocation %q: named arguments not supported (positional BKM only)", name)
 		}
 		subst[bkm.Params[i].Name] = arg.Arg
 	}
-	// `?` (valeur de colonne) n'a pas de sens dans un corps de BKM : refus franc.
+	// `?` (column value) makes no sense in a BKM body: outright refusal.
 	if hasColumnRef(bkm.Body.Node) {
-		return diag.Newf(diag.CodeUnsupported, 0, "BKM %q: `?` (valeur de colonne) interdit dans un corps de BKM", name)
+		return diag.Newf(diag.CodeUnsupported, 0, "BKM %q: `?` (column value) forbidden in a BKM body", name)
 	}
-	// Garde-fou de profondeur (borne la RAM même pour une imbrication acyclique pathologique).
+	// Depth guard (bounds RAM even for a pathological acyclic nesting).
 	l.inlineDepth++
 	if l.inlineDepth > maxInlineDepth {
 		l.inlineDepth--
 		return diag.Newf(diag.CodeUnsupported, 0,
-			"profondeur d'inlining BKM excessive (> %d) sur %q — imbrication trop profonde", maxInlineDepth, name)
+			"excessive BKM inlining depth (> %d) on %q — nesting too deep", maxInlineDepth, name)
 	}
 	body := substitute(bkm.Body.Node, subst)
 	err := l.emit(body)
@@ -265,9 +265,9 @@ func (l *lowerer) emitBKMCall(fc *feel.FunCall) error {
 	return err
 }
 
-// substitute clone un nœud FEEL en remplaçant chaque *feel.Var{Name ∈ subst} par le nœud
-// d'argument correspondant. Couvre le sous-ensemble lowerable ; les autres types sont rendus
-// tels quels (le lowering les rejettera franchement si non supportés).
+// substitute clones a FEEL node, replacing each *feel.Var{Name ∈ subst} by the
+// corresponding argument node. Covers the lowerable subset; other types are returned
+// as-is (lowering will reject them outright if unsupported).
 func substitute(node feel.Node, subst map[string]feel.Node) feel.Node {
 	switch n := node.(type) {
 	case *feel.Var:
@@ -290,12 +290,12 @@ func substitute(node feel.Node, subst map[string]feel.Node) feel.Node {
 		}
 		return &feel.FunCall{FunRef: n.FunRef, Args: args}
 	default:
-		return node // littéraux et types non supportés : inchangés
+		return node // literals and unsupported types: unchanged
 	}
 }
 
-// hasColumnRef indique si l'expression référence `?` (valeur de colonne) dans le sous-ensemble
-// lowerable. Sert à interdire `?` dans un corps de BKM (les args, eux, peuvent contenir `?`).
+// hasColumnRef reports whether the expression references `?` (column value) in the lowerable
+// subset. Used to forbid `?` in a BKM body (arguments themselves may contain `?`).
 func hasColumnRef(node feel.Node) bool {
 	switch n := node.(type) {
 	case *feel.Var:
@@ -316,7 +316,7 @@ func hasColumnRef(node feel.Node) bool {
 	}
 }
 
-// progUsesInput indique si un programme référence `?` (OpLoadInput) — interdit hors cellule.
+// progUsesInput reports whether a program references `?` (OpLoadInput) — forbidden outside a cell.
 func progUsesInput(p *ir.ExprProgram) bool {
 	for _, in := range p.Code {
 		if in.Op == ir.OpLoadInput {
@@ -353,14 +353,14 @@ func binopcode(op string) (ir.Opcode, error) {
 	case "or":
 		return ir.OpOr, nil
 	default:
-		return 0, diag.Newf(diag.CodeUnsupported, 0, "opérateur non supporté en v2: %q", op)
+		return 0, diag.Newf(diag.CodeUnsupported, 0, "operator not supported in v2: %q", op)
 	}
 }
 
-// maxStack calcule une borne SUPÉRIEURE de la profondeur de pile. Avec les sauts (if/then/else),
-// la passe linéaire surestime (compte les deux branches) — c'est sûr : la pile VM est un slice
-// qui croît par append, MaxStack n'est qu'un indice de capacité. Les opcodes unaires (not/floor/
-// ceiling/round) sont neutres ; OpJmpFalse dépile la condition.
+// maxStack computes an UPPER bound of the stack depth. With jumps (if/then/else),
+// the linear pass overestimates (counts both branches) — this is safe: the VM stack is a slice
+// that grows by append, MaxStack is only a capacity hint. Unary opcodes (not/floor/
+// ceiling/round) are neutral; OpJmpFalse pops the condition.
 func maxStack(code []ir.Instr) int {
 	depth, max := 0, 0
 	for _, in := range code {
@@ -370,7 +370,7 @@ func maxStack(code []ir.Instr) int {
 		case ir.OpAdd, ir.OpSub, ir.OpMul, ir.OpDivOp,
 			ir.OpEqOp, ir.OpNeOp, ir.OpLtOp, ir.OpLeOp, ir.OpGtOp, ir.OpGeOp,
 			ir.OpAnd, ir.OpOr, ir.OpJmpFalse:
-			depth-- // pop 2 push 1 (binops/logiques) ; OpJmpFalse dépile la condition
+			depth-- // pop 2 push 1 (binops/logical); OpJmpFalse pops the condition
 		}
 		if depth > max {
 			max = depth

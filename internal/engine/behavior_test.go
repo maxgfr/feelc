@@ -7,7 +7,7 @@ import (
 	"github.com/maxgfr/feelc/internal/engine"
 )
 
-// Table à plusieurs colonnes d'entrée : toutes les conditions d'une ligne doivent matcher (AND).
+// Table with multiple input columns: all conditions in a row must match (AND).
 func TestMultiColumnFirstHit(t *testing.T) {
 	src := `
 model "loan" {}
@@ -19,8 +19,8 @@ decision verdict : string {
   needs: score, age
   hit: first
   #  score  | age   => result
-     < 580   | -      => "score insuffisant"
-     -       | < 18   => "mineur"
+     < 580   | -      => "insufficient score"
+     -       | < 18   => "minor"
      >= 580  | >= 18  => "ok"
 }
 `
@@ -28,9 +28,9 @@ decision verdict : string {
 		score, age int
 		want       string
 	}{
-		{500, 40, "score insuffisant"}, // 1re ligne
-		{700, 16, "mineur"},            // 2e ligne (score ok mais mineur)
-		{700, 40, "ok"},                // 3e ligne
+		{500, 40, "insufficient score"}, // 1st row
+		{700, 16, "minor"},              // 2nd row (score ok but minor)
+		{700, 40, "ok"},                 // 3rd row
 	}
 	for _, c := range cases {
 		got, err := engine.Run(src, "verdict", map[string]any{"score": c.score, "age": c.age})
@@ -38,12 +38,12 @@ decision verdict : string {
 			t.Fatalf("(%d,%d): %v", c.score, c.age, err)
 		}
 		if got != c.want {
-			t.Errorf("verdict(score=%d,age=%d) = %v, attendu %q", c.score, c.age, got, c.want)
+			t.Errorf("verdict(score=%d,age=%d) = %v, expected %q", c.score, c.age, got, c.want)
 		}
 	}
 }
 
-// Égalité implicite sur un littéral string (cellule = valeur).
+// Implicit equality on a string literal (cell = value).
 func TestStringEquality(t *testing.T) {
 	src := `
 model "tier" {}
@@ -66,22 +66,22 @@ decision discount : string {
 			t.Fatalf("plan=%s: %v", c.plan, err)
 		}
 		if got != c.want {
-			t.Errorf("discount(plan=%q) = %v, attendu %q", c.plan, got, c.want)
+			t.Errorf("discount(plan=%q) = %v, expected %q", c.plan, got, c.want)
 		}
 	}
 }
 
-// Discipline de périmètre : un construct hors sous-ensemble v1 doit ÉCHOUER FRANCHEMENT
-// (refuser plutôt qu'accepter-puis-mal-interpréter), de même que les erreurs de modèle.
+// Scope discipline: a construct outside the v1 subset must FAIL CLEARLY
+// (refuse rather than accept-then-misinterpret), as must model errors.
 func TestScopeAndErrorDiscipline(t *testing.T) {
 	cases := []struct {
 		name    string
 		src     string
 		dec     string
-		wantErr string // sous-chaîne attendue
+		wantErr string // expected substring
 	}{
 		{
-			name: "needs vers entrée non déclarée",
+			name: "needs to undeclared input",
 			src: `model "m" {}
 input a : number
 decision d : string {
@@ -90,10 +90,10 @@ decision d : string {
   - => "x"
 }`,
 			dec:     "d",
-			wantErr: "non déclaré",
+			wantErr: "not declared",
 		},
 		{
-			name: "hit policy non supportée (output order différée)",
+			name: "unsupported hit policy (output order deferred)",
 			src: `model "m" {}
 input a : number
 decision d : string {
@@ -102,10 +102,10 @@ decision d : string {
   - => "x"
 }`,
 			dec:     "d",
-			wantErr: "hit policy non supportée",
+			wantErr: "unsupported hit policy",
 		},
 		{
-			name: "décision inconnue à l'évaluation",
+			name: "unknown decision at evaluation",
 			src: `model "m" {}
 input a : number
 decision d : string {
@@ -114,10 +114,10 @@ decision d : string {
   - => "x"
 }`,
 			dec:     "absente",
-			wantErr: "décision inconnue",
+			wantErr: "unknown decision",
 		},
 		{
-			name: "contenu après { sur la ligne d'en-tête",
+			name: "content after { on the header line",
 			src: `model "m" {}
 input a : number
 decision d : string { needs: a
@@ -125,17 +125,17 @@ decision d : string { needs: a
   - => "x"
 }`,
 			dec:     "d",
-			wantErr: "en fin de ligne",
+			wantErr: "at end of line",
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := engine.Run(c.src, c.dec, map[string]any{"a": 1})
 			if err == nil {
-				t.Fatalf("erreur attendue contenant %q, obtenu nil", c.wantErr)
+				t.Fatalf("expected error containing %q, got nil", c.wantErr)
 			}
 			if !strings.Contains(err.Error(), c.wantErr) {
-				t.Errorf("erreur = %q, attendu contenir %q", err.Error(), c.wantErr)
+				t.Errorf("error = %q, expected to contain %q", err.Error(), c.wantErr)
 			}
 		})
 	}

@@ -1,11 +1,11 @@
-// Package model est la représentation conceptuelle d'un modèle de règles, telle que
-// produite par le parseur DSL et consommée par le compilateur. Elle conserve l'AST FEEL
-// des cellules et leurs positions source (pont NL<->règle + explication).
+// Package model is the conceptual representation of a rule model, as
+// produced by the DSL parser and consumed by the compiler. It retains the FEEL AST
+// of cells and their source positions (NL<->rule bridge + explanation).
 package model
 
 import feel "github.com/pbinitiative/feel"
 
-// Type : type scalaire déclaré d'une variable (forme source).
+// Type: declared scalar type of a variable (source form).
 type Type string
 
 const (
@@ -14,69 +14,69 @@ const (
 	TypeBool   Type = "boolean"
 )
 
-// Input : une donnée d'entrée déclarée (Input Data DMN).
+// Input: a declared input data (DMN Input Data).
 type Input struct {
 	Name   string
 	Type   Type
-	Domain string // contrainte de domaine brute (ex: "in [300..850]", ">= 0") ; exploitée par la vérif (T4)
+	Domain string // raw domain constraint (e.g. "in [300..850]", ">= 0"); used by the check (T4)
 	Line   int
 }
 
-// Field : un champ d'un type context (sortie multi-colonnes).
+// Field: a field of a context type (multi-column output).
 type Field struct {
 	Name string
 	Type Type
 }
 
-// TypeDecl : déclaration `type Name = context { f1: t1, f2: t2 }`.
+// TypeDecl: declaration `type Name = context { f1: t1, f2: t2 }`.
 type TypeDecl struct {
 	Name   string
 	Fields []Field
 	Line   int
 }
 
-// Cell : une cellule de table (condition d'entrée ou sortie), avec sa trace source.
+// Cell: a table cell (input condition or output), with its source trace.
 type Cell struct {
-	Src  string    // texte source brut (pour l'explication)
-	Dash bool      // "-" : any/don't-care (jamais passé au parseur FEEL)
-	Node feel.Node // AST FEEL (nil si Dash)
+	Src  string    // raw source text (for the explanation)
+	Dash bool      // "-": any/don't-care (never passed to the FEEL parser)
+	Node feel.Node // FEEL AST (nil if Dash)
 	Line int
 	Col  int
 }
 
-// Rule : une ligne de table (conditions => sorties), ou la ligne `default`.
+// Rule: a table row (conditions => outputs), or the `default` row.
 type Rule struct {
 	Conds     []Cell
 	Outputs   []Cell
-	IsDefault bool // ligne `default` : s'applique quand aucune règle ne matche
+	IsDefault bool // `default` row: applies when no rule matches
 	Line      int
 }
 
-// Decision : une décision du DRG. Soit une table (Rules), soit une expression (Expr).
+// Decision: a DRG decision. Either a table (Rules), or an expression (Expr).
 type Decision struct {
 	Name      string
-	TypeName  string // "number"/"string"/"boolean" ou un nom de type context déclaré
+	TypeName  string // "number"/"string"/"boolean" or a declared context type name
 	Needs     []string
 	HitPolicy string
-	Priority  []Cell // valeurs de sortie ordonnées (PRIORITY), de la plus prioritaire à la moins
+	Priority  []Cell // ordered output values (PRIORITY), from highest priority to lowest
 	Rules     []Rule
-	Expr      *Cell // si != nil : décision literal-expression (TypeName scalaire), pas de table
+	Expr      *Cell // if != nil: literal-expression decision (scalar TypeName), no table
 	Line      int
 }
 
-// BKM : Business Knowledge Model — une expression nommée paramétrée, réutilisable, inlinée
-// à la compilation par substitution AST des paramètres (zéro frame d'appel au runtime).
-// Forme source : `bkm name(p1:t1, p2:t2):ret = expr`. Référençable par invocation `name(a, b)`
-// dans n'importe quelle expression (décision literal-expr ou cellule Op=Prog).
+// BKM: Business Knowledge Model — a named parameterized, reusable expression, inlined
+// at compile time by AST substitution of the parameters (zero call frame at runtime).
+// Source form: `bkm name(p1:t1, p2:t2):ret = expr`. Referenceable by invocation `name(a, b)`
+// in any expression (literal-expr decision or Op=Prog cell).
 type BKM struct {
 	Name   string
-	Params []Field // paramètres positionnels (nom + type)
-	Ret    Type    // type de retour déclaré
-	Body   *Cell   // corps (Src + AST FEEL)
+	Params []Field // positional parameters (name + type)
+	Ret    Type    // declared return type
+	Body   *Cell   // body (Src + FEEL AST)
 	Line   int
 }
 
-// Model : un modèle complet.
+// Model: a complete model.
 type Model struct {
 	Name      string
 	Inputs    []Input
@@ -85,7 +85,7 @@ type Model struct {
 	Decisions []Decision
 }
 
-// BKM retrouve un BKM par nom.
+// BKM looks up a BKM by name.
 func (m *Model) BKM(name string) (BKM, bool) {
 	for _, b := range m.BKMs {
 		if b.Name == name {
@@ -95,7 +95,7 @@ func (m *Model) BKM(name string) (BKM, bool) {
 	return BKM{}, false
 }
 
-// Type retrouve une déclaration de type context par nom.
+// Type looks up a context type declaration by name.
 func (m *Model) Type(name string) (TypeDecl, bool) {
 	for _, t := range m.Types {
 		if t.Name == name {

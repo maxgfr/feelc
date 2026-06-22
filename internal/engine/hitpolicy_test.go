@@ -24,10 +24,10 @@ decision grade : string {
      [10..20) => "B"
 }`
 	if got, _ := runStr(t, src, "grade", map[string]any{"n": 5}); got != "A" {
-		t.Errorf("grade(5) = %v, attendu A", got)
+		t.Errorf("grade(5) = %v, expected A", got)
 	}
 	if got, _ := runStr(t, src, "grade", map[string]any{"n": 15}); got != "B" {
-		t.Errorf("grade(15) = %v, attendu B", got)
+		t.Errorf("grade(15) = %v, expected B", got)
 	}
 
 	conflict := `model "m" {}
@@ -39,7 +39,7 @@ decision bad : string {
      >= 5 => "y"
 }`
 	if _, err := runStr(t, conflict, "bad", map[string]any{"n": 10}); err == nil || !strings.Contains(err.Error(), "UNIQUE") {
-		t.Errorf("attendu erreur UNIQUE pour 2 matchs, obtenu %v", err)
+		t.Errorf("expected UNIQUE error for 2 matches, got %v", err)
 	}
 }
 
@@ -64,7 +64,7 @@ decision a : string {
      >= 10 => "y"
 }`
 	if _, err := runStr(t, conflict, "a", map[string]any{"n": 15}); err == nil || !strings.Contains(err.Error(), "ANY") {
-		t.Errorf("attendu erreur ANY (conflit), obtenu %v", err)
+		t.Errorf("expected ANY error (conflict), got %v", err)
 	}
 }
 
@@ -88,24 +88,24 @@ decision r : number {
 		}
 		d, ok := out.(*apd.Decimal)
 		if !ok {
-			t.Fatalf("%s: attendu décimal, obtenu %T", hit, out)
+			t.Fatalf("%s: expected decimal, got %T", hit, out)
 		}
 		return d.Text('f')
 	}
 	if got := num(t, "collect sum", 1200); got != "60" { // 10+20+30
-		t.Errorf("collect sum(1200) = %s, attendu 60", got)
+		t.Errorf("collect sum(1200) = %s, expected 60", got)
 	}
-	if got := num(t, "collect sum", 50); got != "0" { // aucun match
-		t.Errorf("collect sum(50) = %s, attendu 0", got)
+	if got := num(t, "collect sum", 50); got != "0" { // no match
+		t.Errorf("collect sum(50) = %s, expected 0", got)
 	}
 	if got := num(t, "collect count", 1200); got != "3" {
-		t.Errorf("collect count(1200) = %s, attendu 3", got)
+		t.Errorf("collect count(1200) = %s, expected 3", got)
 	}
 	if got := num(t, "collect max", 1200); got != "30" {
-		t.Errorf("collect max(1200) = %s, attendu 30", got)
+		t.Errorf("collect max(1200) = %s, expected 30", got)
 	}
 	if got := num(t, "collect min", 1200); got != "10" {
-		t.Errorf("collect min(1200) = %s, attendu 10", got)
+		t.Errorf("collect min(1200) = %s, expected 10", got)
 	}
 }
 
@@ -125,10 +125,10 @@ decision r : number {
 	}
 	xs, ok := out.([]any)
 	if !ok {
-		t.Fatalf("attendu liste, obtenu %T", out)
+		t.Fatalf("expected list, got %T", out)
 	}
 	if len(xs) != 3 {
-		t.Errorf("liste de %d éléments, attendu 3", len(xs))
+		t.Errorf("list of %d elements, expected 3", len(xs))
 	}
 }
 
@@ -147,16 +147,16 @@ decision verdict : string {
 		score int
 		want  string
 	}{
-		{500, "reject"},  // matche approve(>=0) ET reject(<600) -> reject (plus prioritaire)
-		{800, "review"},  // matche approve(>=0) ET review(>=700) -> review
-		{650, "approve"}, // matche approve seulement
+		{500, "reject"},  // matches approve(>=0) AND reject(<600) -> reject (higher priority)
+		{800, "review"},  // matches approve(>=0) AND review(>=700) -> review
+		{650, "approve"}, // matches approve only
 	} {
 		got, err := runStr(t, src, "verdict", map[string]any{"score": c.score})
 		if err != nil {
 			t.Fatalf("score=%d: %v", c.score, err)
 		}
 		if got != c.want {
-			t.Errorf("verdict(%d) = %v, attendu %q", c.score, got, c.want)
+			t.Errorf("verdict(%d) = %v, expected %q", c.score, got, c.want)
 		}
 	}
 }

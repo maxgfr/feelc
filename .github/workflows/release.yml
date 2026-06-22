@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write # créer tags + release
+  contents: write # create tags + release
 
 jobs:
   release:
@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # semantic-release a besoin de tout l'historique
+          fetch-depth: 0 # semantic-release needs the full history
       - uses: actions/setup-go@v5
         with:
           go-version: "1.23"
@@ -24,8 +24,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # semantic-release calcule la version, crée le tag, puis (via exec) goreleaser publie
-      # les binaires multi-OS/arch sur la release GitHub.
+      # semantic-release computes the version, creates the tag, then (via exec) goreleaser
+      # publishes the multi-OS/arch binaries to the GitHub release.
       - run: npx --yes -p semantic-release -p @semantic-release/exec semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -7,8 +7,8 @@ import (
 	"github.com/maxgfr/feelc/internal/engine"
 )
 
-// BKM scalaire invoqué dans une décision literal-expression. L'invocation est inlinée à la
-// compilation (substitution AST des paramètres), zéro frame d'appel au runtime.
+// Scalar BKM invoked in a literal-expression decision. The invocation is inlined at
+// compile time (AST substitution of parameters), zero call frames at runtime.
 func TestBKMScalarInLiteralExpr(t *testing.T) {
 	src := `model "m" {}
 input monthly_debt : number
@@ -21,18 +21,18 @@ decision verdict : boolean = dti(monthly_debt, annual_income) <= 0.36`
 		t.Fatalf("compile/run: %v", err)
 	}
 	if got != true {
-		t.Errorf("verdict(dti=0.3) = %v, attendu true", got)
+		t.Errorf("verdict(dti=0.3) = %v, expected true", got)
 	}
 	got, err = engine.Run(src, "verdict", map[string]any{"monthly_debt": 2000, "annual_income": 60000})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != false {
-		t.Errorf("verdict(dti=0.4) = %v, attendu false", got)
+		t.Errorf("verdict(dti=0.4) = %v, expected false", got)
 	}
 }
 
-// BKM invoqué dans une cellule de table (Op=Prog).
+// BKM invoked in a table cell (Op=Prog).
 func TestBKMInTableCell(t *testing.T) {
 	src := `model "m" {}
 input monthly_debt : number
@@ -49,15 +49,15 @@ bkm dti(debt:number, income:number):number = debt / (income / 12)`
 		t.Fatalf("compile/run: %v", err)
 	}
 	if got != true {
-		t.Errorf("flag(1500) = %v, attendu true", got)
+		t.Errorf("flag(1500) = %v, expected true", got)
 	}
 	got, _ = engine.Run(src, "flag", map[string]any{"monthly_debt": 2000})
 	if got != false {
-		t.Errorf("flag(2000) = %v, attendu false", got)
+		t.Errorf("flag(2000) = %v, expected false", got)
 	}
 }
 
-// Invocations imbriquées f(g(x)) : inlining récursif borné, non cyclique.
+// Nested invocations f(g(x)): bounded, non-cyclic recursive inlining.
 func TestBKMNested(t *testing.T) {
 	src := `model "m" {}
 input n : number
@@ -70,18 +70,18 @@ decision q : number = quarter(n)`
 		t.Fatalf("compile/run: %v", err)
 	}
 	if got == nil {
-		t.Fatal("résultat nil")
+		t.Fatal("nil result")
 	}
 	if s, ok := got.(interface{ Text(byte) string }); ok {
 		if v := s.Text('f'); v != "25" {
-			t.Errorf("quarter(100) = %s, attendu 25", v)
+			t.Errorf("quarter(100) = %s, expected 25", v)
 		}
 	} else {
-		t.Fatalf("type de sortie inattendu: %T", got)
+		t.Fatalf("unexpected output type: %T", got)
 	}
 }
 
-// Échecs FRANCS (jamais conformer en silence) : arité, BKM inconnu, récursion, kwargs, `?`.
+// HARD failures (never conform in silence): arity, unknown BKM, recursion, kwargs, `?`.
 func TestBKMHardFailures(t *testing.T) {
 	base := `model "m" {}
 input n : number
@@ -91,25 +91,25 @@ input n : number
 		extra   string
 		wantSub string
 	}{
-		{"arité incorrecte",
+		{"incorrect arity",
 			"bkm f(a:number, b:number):number = a + b\ndecision d : number = f(n)", "argument"},
-		{"BKM inconnu",
-			"decision d : number = nope(n)", "inconnu"},
-		{"récursion BKM",
-			"bkm loop(x:number):number = loop(x)\ndecision d : number = loop(n)", "récursion"},
-		{"arguments nommés (kwargs)",
-			"bkm f(a:number, b:number):number = a + b\ndecision d : number = f(a: n, b: 1)", "nommé"},
-		{"? dans un corps de BKM",
-			"bkm bad(x:number):number = ? + x\ndecision d : number = bad(n)", "interdit"},
+		{"unknown BKM",
+			"decision d : number = nope(n)", "unknown"},
+		{"BKM recursion",
+			"bkm loop(x:number):number = loop(x)\ndecision d : number = loop(n)", "recursion"},
+		{"named arguments (kwargs)",
+			"bkm f(a:number, b:number):number = a + b\ndecision d : number = f(a: n, b: 1)", "named"},
+		{"? in a BKM body",
+			"bkm bad(x:number):number = ? + x\ndecision d : number = bad(n)", "forbidden"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := engine.Run(base+c.extra, "d", map[string]any{"n": 1})
 			if err == nil {
-				t.Fatalf("erreur attendue contenant %q, obtenu nil", c.wantSub)
+				t.Fatalf("expected error containing %q, got nil", c.wantSub)
 			}
 			if !strings.Contains(err.Error(), c.wantSub) {
-				t.Errorf("erreur = %q, attendu contenir %q", err.Error(), c.wantSub)
+				t.Errorf("error = %q, expected to contain %q", err.Error(), c.wantSub)
 			}
 		})
 	}

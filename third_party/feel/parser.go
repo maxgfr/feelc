@@ -430,11 +430,10 @@ func (p *Parser) singleElement() (Node, error) {
 	case "{":
 		return p.parseMapNode()
 	case "?":
-		// Fork feelc — correctif DoS amont : l'amont retournait Var{"?"} SANS consumer le token,
-		// si bien qu'un `?` explicite dans une expression (ex: corps de BKM `? + x`) faisait
-		// boucler `Parse` à l'infini (croissance non bornée → OOM). On consomme le token comme
-		// tous les autres cas feuilles. Le `?` implicite des cellules (`< 580`) passe par
-		// parseUnaryTestElement et n'est pas affecté.
+		// feelc fork — upstream DoS fix: upstream returned Var{"?"} WITHOUT consuming the token,
+		// so an explicit `?` in an expression (e.g. a BKM body `? + x`) made `Parse` loop
+		// forever (unbounded growth → OOM). We consume the token like all other leaf cases.
+		// The implicit `?` of cells (`< 580`) goes through parseUnaryTestElement and is unaffected.
 		textRange := p.startTextRange()
 		if err := p.scanner.Next(); err != nil {
 			return nil, err

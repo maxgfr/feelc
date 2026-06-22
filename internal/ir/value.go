@@ -10,7 +10,7 @@ import (
 	"github.com/maxgfr/feelc/internal/decimal"
 )
 
-// Tag identifie le type dynamique d'une Value (FEEL est trivalent : null fait partie du jeu).
+// Tag identifies the dynamic type of a Value (FEEL is three-valued: null is part of the set).
 type Tag uint8
 
 const (
@@ -18,30 +18,30 @@ const (
 	TagNumber
 	TagString
 	TagBool
-	TagContext // sortie multi-colonnes d'une décision (DMN context)
-	TagList    // liste (COLLECT brut / RULE ORDER)
+	TagContext // multi-column output of a decision (DMN context)
+	TagList    // list (raw COLLECT / RULE ORDER)
 )
 
-// Value : valeur unboxée de taille fixe manipulée par la VM.
-// Pas d'interface{} dans le hot path (cf. plan). Les nombres sont décimaux exacts.
+// Value: fixed-size unboxed value manipulated by the VM.
+// No interface{} in the hot path (cf. plan). Numbers are exact decimals.
 type Value struct {
 	Tag  Tag
 	Num  *apd.Decimal
 	Str  string
 	Bool bool
-	Ctx  map[string]Value // si TagContext
-	List []Value          // si TagList
+	Ctx  map[string]Value // if TagContext
+	List []Value          // if TagList
 }
 
-func Null() Value             { return Value{Tag: TagNull} }
-func Num(d *apd.Decimal) Value { return Value{Tag: TagNumber, Num: d} }
-func Str(s string) Value      { return Value{Tag: TagString, Str: s} }
-func Bool(b bool) Value       { return Value{Tag: TagBool, Bool: b} }
+func Null() Value                  { return Value{Tag: TagNull} }
+func Num(d *apd.Decimal) Value     { return Value{Tag: TagNumber, Num: d} }
+func Str(s string) Value           { return Value{Tag: TagString, Str: s} }
+func Bool(b bool) Value            { return Value{Tag: TagBool, Bool: b} }
 func Ctx(m map[string]Value) Value { return Value{Tag: TagContext, Ctx: m} }
-func List(xs []Value) Value         { return Value{Tag: TagList, List: xs} }
+func List(xs []Value) Value        { return Value{Tag: TagList, List: xs} }
 
-// FromAny convertit une entrée externe (map JSON-ish) en Value déterministe.
-// Les nombres repassent par leur représentation décimale pour rester exacts.
+// FromAny converts an external input (JSON-ish map) into a deterministic Value.
+// Numbers go back through their decimal representation to stay exact.
 func FromAny(v any) (Value, error) {
 	switch x := v.(type) {
 	case nil:
@@ -61,7 +61,7 @@ func FromAny(v any) (Value, error) {
 		}
 		return Num(d), nil
 	case json.Number:
-		// Entrée JSON décodée avec UseNumber : on garde la repr exacte (pas de passage par float64).
+		// JSON input decoded with UseNumber: we keep the exact repr (no detour through float64).
 		d, err := decimal.Parse(x.String())
 		if err != nil {
 			return Value{}, err
@@ -70,16 +70,16 @@ func FromAny(v any) (Value, error) {
 	case *apd.Decimal:
 		return Num(x), nil
 	default:
-		return Value{}, fmt.Errorf("type d'entrée non supporté: %T", v)
+		return Value{}, fmt.Errorf("unsupported input type: %T", v)
 	}
 }
 
-// ToAny rend la Value sous une forme exploitable hors du moteur.
+// ToAny renders the Value in a form usable outside the engine.
 func (v Value) ToAny() any {
 	switch v.Tag {
 	case TagNumber:
-		// Représentation externe canonique : on retire les zéros de traîne issus des
-		// divisions (0.3000... -> 0.3) sans muter la valeur interne. La valeur est inchangée.
+		// Canonical external representation: we strip the trailing zeros produced by
+		// divisions (0.3000... -> 0.3) without mutating the internal value. The value is unchanged.
 		out := new(apd.Decimal)
 		out.Reduce(v.Num)
 		return out

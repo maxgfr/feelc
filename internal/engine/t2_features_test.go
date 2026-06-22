@@ -29,7 +29,7 @@ decision band : string {
 			t.Fatalf("n=%d: %v", c.n, err)
 		}
 		if got != c.want {
-			t.Errorf("band(%d) = %v, attendu %q", c.n, got, c.want)
+			t.Errorf("band(%d) = %v, want %q", c.n, got, c.want)
 		}
 	}
 }
@@ -56,12 +56,12 @@ decision tag : string {
 			t.Fatalf("(%s,%d): %v", c.plan, c.lvl, err)
 		}
 		if got != c.want {
-			t.Errorf("tag(%q,%d) = %v, attendu %q", c.plan, c.lvl, got, c.want)
+			t.Errorf("tag(%q,%d) = %v, want %q", c.plan, c.lvl, got, c.want)
 		}
 	}
 }
 
-// Cellule Op=Prog : la condition compare la colonne `?` à une AUTRE colonne (bytecode).
+// Cell Op=Prog: the condition compares the `?` column to ANOTHER column (bytecode).
 func TestProgCellReferencingAnotherColumn(t *testing.T) {
 	src := `model "m" {}
 input amount : number
@@ -83,12 +83,12 @@ decision verdict : string {
 			t.Fatalf("(%d,%d): %v", c.amount, c.limit, err)
 		}
 		if got != c.want {
-			t.Errorf("verdict(%d,%d) = %v, attendu %q", c.amount, c.limit, got, c.want)
+			t.Errorf("verdict(%d,%d) = %v, want %q", c.amount, c.limit, got, c.want)
 		}
 	}
 }
 
-// Décision literal-expression : arithmétique exacte via bytecode.
+// Literal-expression decision: exact arithmetic via bytecode.
 func TestArithmeticExpr(t *testing.T) {
 	src := `model "m" {}
 input a : number
@@ -100,9 +100,9 @@ decision total : number = a * 2 + b`
 	}
 	d, ok := out.(*apd.Decimal)
 	if !ok {
-		t.Fatalf("total attendu décimal, obtenu %T", out)
+		t.Fatalf("total want decimal, got %T", out)
 	}
 	if d.Text('f') != "25" {
-		t.Errorf("total = %s, attendu 25", d.Text('f'))
+		t.Errorf("total = %s, want 25", d.Text('f'))
 	}
 }

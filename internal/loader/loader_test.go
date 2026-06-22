@@ -11,9 +11,9 @@ import (
 	"github.com/maxgfr/feelc/internal/registry"
 )
 
-// CompileFile propage le nom de fichier sur les erreurs structurées (parse ET compile).
+// CompileFile propagates the filename onto structured errors (parse AND compile).
 func TestCompileFileStampsFilename(t *testing.T) {
-	// Erreur de compilation (hit policy invalide) -> doit porter le fichier.
+	// Compilation error (invalid hit policy) -> must carry the file.
 	brokenCompile := `model "m" {}
 input n : number
 decision d : string {
@@ -24,19 +24,19 @@ decision d : string {
 	_, _, _, err := loader.CompileFile("foo.rules", []byte(brokenCompile))
 	var de *diag.Error
 	if !errors.As(err, &de) {
-		t.Fatalf("erreur non structurée: %T %v", err, err)
+		t.Fatalf("unstructured error: %T %v", err, err)
 	}
 	if de.File != "foo.rules" {
-		t.Errorf("File = %q, attendu foo.rules", de.File)
+		t.Errorf("File = %q, expected foo.rules", de.File)
 	}
 
-	// Erreur de parse -> doit aussi porter le fichier.
+	// Parse error -> must also carry the file.
 	_, _, _, err = loader.CompileFile("bar.rules", []byte("not a model\n"))
 	if !errors.As(err, &de) {
-		t.Fatalf("erreur de parse non structurée: %T %v", err, err)
+		t.Fatalf("unstructured parse error: %T %v", err, err)
 	}
 	if de.File != "bar.rules" {
-		t.Errorf("File (parse) = %q, attendu bar.rules", de.File)
+		t.Errorf("File (parse) = %q, expected bar.rules", de.File)
 	}
 }
 
@@ -56,7 +56,7 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
-// Règle d'or : une source cassée NE swappe PAS — le modèle courant sain est conservé.
+// Golden rule: a broken source does NOT swap — the current healthy model is kept.
 func TestReloadRejectsBrokenKeepsCurrent(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "m.rules")
 	reg := registry.New()
@@ -67,10 +67,10 @@ func TestReloadRejectsBrokenKeepsCurrent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if e1.Version != 1 {
-		t.Fatalf("version initiale = %d, attendu 1", e1.Version)
+		t.Fatalf("initial version = %d, expected 1", e1.Version)
 	}
 
-	// Source qui échoue à la compilation (hit policy invalide).
+	// Source that fails to compile (invalid hit policy).
 	writeFile(t, p, `model "m" {}
 input n : number
 decision d : string {
@@ -79,10 +79,10 @@ decision d : string {
   - => "x"
 }`)
 	if _, _, err := loader.Reload(p, reg, false); err == nil {
-		t.Fatal("erreur attendue pour source qui ne compile pas")
+		t.Fatal("expected error for source that does not compile")
 	}
 	if cur := reg.Current(); cur == nil || cur.Version != 1 {
-		t.Fatalf("le modèle courant aurait dû rester v1, obtenu %+v", cur)
+		t.Fatalf("the current model should have stayed v1, got %+v", cur)
 	}
 
 	writeFile(t, p, validRules)
@@ -91,11 +91,11 @@ decision d : string {
 		t.Fatal(err)
 	}
 	if e2.Version != 2 {
-		t.Fatalf("après source valide, version = %d, attendu 2", e2.Version)
+		t.Fatalf("after valid source, version = %d, expected 2", e2.Version)
 	}
 }
 
-// Mode strict : des bloqueurs de vérification empêchent la publication.
+// Strict mode: verification blockers prevent publication.
 func TestStrictRejectsVerifyBlockers(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "g.rules")
 	gap := `model "g" {}
@@ -110,19 +110,19 @@ decision d : string {
 
 	_, rep, err := loader.Reload(p, reg, true) // strict
 	if err == nil {
-		t.Fatal("mode strict : erreur attendue (bloqueurs de complétude)")
+		t.Fatal("strict mode: expected error (completeness blockers)")
 	}
 	if rep == nil || rep.Blockers() == 0 {
-		t.Fatal("rapport avec bloqueurs attendu")
+		t.Fatal("expected report with blockers")
 	}
 	if reg.Current() != nil {
-		t.Fatal("rien ne doit être publié en mode strict avec bloqueurs")
+		t.Fatal("nothing must be published in strict mode with blockers")
 	}
 
-	if _, _, err := loader.Reload(p, reg, false); err != nil { // non-strict publie quand même
+	if _, _, err := loader.Reload(p, reg, false); err != nil { // non-strict publishes anyway
 		t.Fatal(err)
 	}
 	if reg.Current() == nil {
-		t.Fatal("non-strict : le modèle doit être publié malgré les remarques")
+		t.Fatal("non-strict: the model must be published despite the remarks")
 	}
 }

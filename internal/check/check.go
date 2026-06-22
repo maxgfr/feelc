@@ -1,8 +1,8 @@
-// Package check implémente le gate sémantique NL<->règle, côté OUTILLAGE (le cœur reste pur).
+// Package check implements the NL<->rule semantic gate, on the TOOLING side (the core stays pure).
 //
-// Principe (cf. plan) : « le LLM propose, la VM dispose ». L'IA (skill) décompose le texte métier
-// en CLAIMS atomiques structurés {décision, entrée-témoin, sortie attendue} ; feelc check exécute
-// la VM DÉTERMINISTE sur chaque témoin et compare. Aucun LLM dans le verdict final.
+// Principle (cf. plan): "the LLM proposes, the VM disposes". The AI (skill) decomposes the business text
+// into atomic structured CLAIMS {decision, witness-input, expected-output}; feelc check runs
+// the DETERMINISTIC VM on each witness and compares. No LLM in the final verdict.
 package check
 
 import (
@@ -16,24 +16,24 @@ import (
 	"github.com/maxgfr/feelc/internal/ir"
 )
 
-// Claim : une affirmation métier ancrée sur un point-témoin.
+// Claim: a business assertion anchored on a witness point.
 type Claim struct {
-	Desc     string         `json:"desc,omitempty"` // phrase NL d'origine (traçabilité)
+	Desc     string         `json:"desc,omitempty"` // original NL phrase (traceability)
 	Decision string         `json:"decision"`
 	Input    map[string]any `json:"input"`
 	Expect   any            `json:"expect"`
 }
 
-// Status : verdict conservateur.
+// Status: conservative verdict.
 type Status string
 
 const (
-	Supported   Status = "supported"
-	Contradicted Status = "contradicted" // bloquant
-	Errored     Status = "error"          // l'évaluation a échoué (bloquant)
+	Supported    Status = "supported"
+	Contradicted Status = "contradicted" // blocking
+	Errored      Status = "error"        // evaluation failed (blocking)
 )
 
-// Verdict : le résultat d'un claim.
+// Verdict: the result of a claim.
 type Verdict struct {
 	Claim  Claim  `json:"claim"`
 	Status Status `json:"status"`
@@ -41,12 +41,12 @@ type Verdict struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-// Report : l'ensemble des verdicts.
+// Report: the set of verdicts.
 type Report struct {
 	Verdicts []Verdict `json:"verdicts"`
 }
 
-// Blockers compte les verdicts bloquants (contradicted / error).
+// Blockers counts the blocking verdicts (contradicted / error).
 func (r *Report) Blockers() int {
 	n := 0
 	for _, v := range r.Verdicts {
@@ -57,7 +57,7 @@ func (r *Report) Blockers() int {
 	return n
 }
 
-// Check ancre chaque claim sur la VM déterministe et rend un verdict.
+// Check anchors each claim on the deterministic VM and produces a verdict.
 func Check(cm *ir.CompiledModel, claims []Claim) *Report {
 	rep := &Report{}
 	for _, c := range claims {
@@ -69,18 +69,18 @@ func Check(cm *ir.CompiledModel, claims []Claim) *Report {
 			rep.Verdicts = append(rep.Verdicts, Verdict{Claim: c, Status: Supported, Got: jsonify(got)})
 		default:
 			rep.Verdicts = append(rep.Verdicts, Verdict{Claim: c, Status: Contradicted, Got: jsonify(got),
-				Detail: fmt.Sprintf("attendu %v, obtenu %v", c.Expect, jsonify(got))})
+				Detail: fmt.Sprintf("expected %v, got %v", c.Expect, jsonify(got))})
 		}
 	}
 	return rep
 }
 
-// Equal expose la comparaison attendu-vs-obtenu (égalité décimale exacte, listes, contexts) —
-// réutilisée TELLE QUELLE par le harnais TCK (internal/tck), zéro duplication de sémantique.
+// Equal exposes the expected-vs-got comparison (exact decimal equality, lists, contexts) —
+// reused AS-IS by the TCK harness (internal/tck), zero duplication of semantics.
 func Equal(expect, got any) bool { return equalValue(expect, got) }
 
-// equalValue compare une valeur attendue (issue de JSON, nombres en json.Number) à la sortie
-// de la VM (décimaux exacts, listes, contexts).
+// equalValue compares an expected value (from JSON, numbers as json.Number) to the VM
+// output (exact decimals, lists, contexts).
 func equalValue(expect, got any) bool {
 	switch e := expect.(type) {
 	case nil:
@@ -135,7 +135,7 @@ func numEq(expect string, got any) bool {
 	return decimal.Cmp(e, g) == 0
 }
 
-// jsonify rend la sortie VM sérialisable (décimaux -> nombres).
+// jsonify makes the VM output serializable (decimals -> numbers).
 func jsonify(v any) any {
 	switch x := v.(type) {
 	case *apd.Decimal:

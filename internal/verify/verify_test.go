@@ -32,7 +32,7 @@ func has(rep *verify.Report, kind verify.Kind) *verify.Finding {
 	return nil
 }
 
-// L'exemple crédit est PROUVÉ complet et sans conflit (FIRST) ; sa ligne `default` est inutile.
+// The credit example is PROVEN complete and conflict-free (FIRST); its `default` line is useless.
 func TestVerifyCreditIsComplete(t *testing.T) {
 	b, err := os.ReadFile("../../examples/credit/credit.rules")
 	if err != nil {
@@ -40,17 +40,17 @@ func TestVerifyCreditIsComplete(t *testing.T) {
 	}
 	rep := verify.Verify(compile(t, string(b)))
 	if n := rep.Blockers(); n != 0 {
-		t.Errorf("crédit : %d bloqueurs, attendu 0 (table prouvée complète). Findings: %+v", n, rep.Findings)
+		t.Errorf("credit: %d blockers, expected 0 (table proven complete). Findings: %+v", n, rep.Findings)
 	}
 	if has(rep, verify.KindGap) != nil {
-		t.Errorf("crédit : trou de complétude inattendu. Findings: %+v", rep.Findings)
+		t.Errorf("credit: unexpected completeness gap. Findings: %+v", rep.Findings)
 	}
 	if has(rep, verify.KindUnreachableDefault) == nil {
-		t.Errorf("crédit : la ligne `default` devrait être détectée comme inutile (table complète)")
+		t.Errorf("credit: the `default` line should be detected as useless (complete table)")
 	}
 }
 
-// Trou de complétude : [30..60) non couvert, pas de default -> erreur + contre-exemple.
+// Completeness gap: [30..60) not covered, no default -> error + counterexample.
 func TestVerifyDetectsGap(t *testing.T) {
 	rep := verify.Verify(compile(t, `model "g" {}
 input n : number in [0..100]
@@ -62,17 +62,17 @@ decision d : string {
 }`))
 	g := has(rep, verify.KindGap)
 	if g == nil {
-		t.Fatalf("trou attendu, findings: %+v", rep.Findings)
+		t.Fatalf("gap expected, findings: %+v", rep.Findings)
 	}
 	if g.Severity != verify.SevError {
-		t.Errorf("trou sans default -> sévérité error, obtenu %s", g.Severity)
+		t.Errorf("gap without default -> error severity, got %s", g.Severity)
 	}
 	if g.Witness["n"] == "" {
-		t.Errorf("contre-exemple attendu pour n, obtenu %+v", g.Witness)
+		t.Errorf("counterexample expected for n, got %+v", g.Witness)
 	}
 }
 
-// UNIQUE avec chevauchement -> conflit bloquant.
+// UNIQUE with overlap -> blocking conflict.
 func TestVerifyDetectsUniqueConflict(t *testing.T) {
 	rep := verify.Verify(compile(t, `model "u" {}
 input n : number in [0..100]
@@ -84,11 +84,11 @@ decision d : string {
 }`))
 	c := has(rep, verify.KindConflict)
 	if c == nil || c.Severity != verify.SevError {
-		t.Fatalf("conflit UNIQUE bloquant attendu, findings: %+v", rep.Findings)
+		t.Fatalf("blocking UNIQUE conflict expected, findings: %+v", rep.Findings)
 	}
 }
 
-// FIRST : une règle dont tous les cas sont déjà couverts par une règle antérieure est masquée.
+// FIRST: a rule whose every case is already covered by an earlier rule is masked.
 func TestVerifyDetectsMaskedRule(t *testing.T) {
 	rep := verify.Verify(compile(t, `model "m" {}
 input n : number in [0..100]
@@ -99,11 +99,11 @@ decision d : string {
      >= 50 => "fifty"
 }`))
 	if has(rep, verify.KindDeadRule) == nil {
-		t.Errorf("règle masquée attendue, findings: %+v", rep.Findings)
+		t.Errorf("masked rule expected, findings: %+v", rep.Findings)
 	}
 }
 
-// Dégradation honnête : une cellule Op=Prog rend la table non prouvable géométriquement.
+// Honest degradation: an Op=Prog cell makes the table not geometrically provable.
 func TestVerifyDegradesOnProgCell(t *testing.T) {
 	rep := verify.Verify(compile(t, `model "p" {}
 input a : number
@@ -115,6 +115,6 @@ decision d : string {
      -   | - => "ok"
 }`))
 	if has(rep, verify.KindNotVerifiable) == nil {
-		t.Errorf("dégradation 'non vérifiable' attendue (cellule Op=Prog), findings: %+v", rep.Findings)
+		t.Errorf("'not verifiable' degradation expected (Op=Prog cell), findings: %+v", rep.Findings)
 	}
 }

@@ -13,16 +13,16 @@ import (
 	"github.com/maxgfr/feelc/internal/verify"
 )
 
-// buildSubsumeModel construit DIRECTEMENT un IR (sans DSL) : nRules règles `>= k` sur nCols
-// colonnes, bornes tirées d'un petit pool (4 valeurs) -> grille bornée < gridBudget, et
-// nombreux chevauchements/redondances (sortie identique) pour exercer la matrice de subsumption.
+// buildSubsumeModel builds an IR DIRECTLY (without DSL): nRules rules `>= k` over nCols
+// columns, bounds drawn from a small pool (4 values) -> bounded grid < gridBudget, and
+// many overlaps/redundancies (identical output) to exercise the subsumption matrix.
 func buildSubsumeModel(nRules, nCols int) *ir.CompiledModel {
 	tbl := &ir.DecisionTable{HitPolicy: ir.HitAny, Outputs: []string{"out"}}
 	for j := 0; j < nCols; j++ {
 		tbl.Inputs = append(tbl.Inputs, fmt.Sprintf("c%d", j))
 	}
 	for i := 0; i < nRules; i++ {
-		r := ir.Rule{Outputs: []ir.Value{ir.Str("x")}} // sortie identique partout -> redondances, pas de conflit
+		r := ir.Rule{Outputs: []ir.Value{ir.Str("x")}} // identical output everywhere -> redundancies, no conflict
 		for j := 0; j < nCols; j++ {
 			lo := int64((i + j) % 4)
 			r.Conds = append(r.Conds, ir.CellTest{Op: ir.OpGe, A: ir.Num(decimal.FromInt(lo))})
@@ -48,23 +48,23 @@ func BenchmarkVerifySubsumption(b *testing.B) {
 	}
 }
 
-// Garde-fou perf : verify d'une table 50×5 doit rester rapide. La matrice de subsumption est
-// O(points × règles_couvrantes) (bitset) ; une régression algorithmique (ex: O(points × règles²)
-// dans la boucle chaude) la ferait exploser. Médiane de 3 (anti-bruit), budget généreux,
-// ignorable en -short, surchargé par FEELC_VERIFY_PERF_BUDGET_MS — échoue franchement, jamais flaky.
+// Perf guard: verify of a 50×5 table must stay fast. The subsumption matrix is
+// O(points × covering_rules) (bitset); an algorithmic regression (e.g. O(points × rules²)
+// in the hot loop) would make it explode. Median of 3 (anti-noise), generous budget,
+// skippable in -short, overridden by FEELC_VERIFY_PERF_BUDGET_MS — fails cleanly, never flaky.
 func TestVerifySubsumptionPerfGuard(t *testing.T) {
 	if testing.Short() {
-		t.Skip("garde-fou perf ignoré en -short")
+		t.Skip("perf guard skipped in -short")
 	}
 	cm := buildSubsumeModel(50, 5)
 
-	// La table doit être réellement vérifiée (grille sous budget), sinon le garde-fou est vide.
+	// The table must actually be verified (grid under budget), otherwise the guard is empty.
 	rep := verify.Verify(cm)
 	if has(rep, verify.KindNotVerifiable) != nil {
-		t.Fatalf("la table de bench ne doit pas dégrader en non-vérifiable (grille trop grande ?)")
+		t.Fatalf("the bench table must not degrade to non-verifiable (grid too large?)")
 	}
 	if has(rep, verify.KindSubsumed) == nil {
-		t.Fatalf("la table de bench doit produire des findings de subsumption")
+		t.Fatalf("the bench table must produce subsumption findings")
 	}
 
 	var durs []time.Duration
@@ -83,7 +83,7 @@ func TestVerifySubsumptionPerfGuard(t *testing.T) {
 		}
 	}
 	if median > budget {
-		t.Fatalf("verify 50×5 médiane %v > budget %v — régression algorithmique de subsumption ?", median, budget)
+		t.Fatalf("verify 50×5 median %v > budget %v — subsumption algorithmic regression?", median, budget)
 	}
-	t.Logf("verify 50×5 médiane %v (budget %v)", median, budget)
+	t.Logf("verify 50×5 median %v (budget %v)", median, budget)
 }

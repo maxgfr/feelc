@@ -1,6 +1,6 @@
-// Package decimal centralise l'arithmétique décimale EXACTE de feelc (cf. ADR 0002).
-// Le contexte est FIGÉ (précision 34 = Decimal128, arrondi HALF_EVEN) : c'est une
-// condition du déterminisme bit-à-bit inter-plateforme, thèse centrale du produit.
+// Package decimal centralizes feelc's EXACT decimal arithmetic (see ADR 0002).
+// The context is FROZEN (precision 34 = Decimal128, HALF_EVEN rounding): this is a
+// condition of cross-platform bit-for-bit determinism, the product's central thesis.
 package decimal
 
 import (
@@ -9,24 +9,24 @@ import (
 	apd "github.com/cockroachdb/apd/v3"
 )
 
-// Ctx est le contexte décimal figé. Ne pas muter à l'exécution.
+// Ctx is the frozen decimal context. Do not mutate at runtime.
 var Ctx = func() *apd.Context {
 	c := apd.BaseContext.WithPrecision(34)
 	c.Rounding = apd.RoundHalfEven
 	return c
 }()
 
-// Parse lit un décimal exact depuis sa représentation source (le littéral du .rules).
+// Parse reads an exact decimal from its source representation (the .rules literal).
 func Parse(s string) (*apd.Decimal, error) {
 	d, _, err := apd.NewFromString(s)
 	if err != nil {
-		return nil, fmt.Errorf("décimal invalide %q: %w", s, err)
+		return nil, fmt.Errorf("invalid decimal %q: %w", s, err)
 	}
 	return d, nil
 }
 
-// FromInt construit un décimal à partir d'un entier.
+// FromInt builds a decimal from an integer.
 func FromInt(i int64) *apd.Decimal { return apd.New(i, 0) }
 
-// Cmp compare deux décimaux : -1 si a<b, 0 si égaux, 1 si a>b.
+// Cmp compares two decimals: -1 if a<b, 0 if equal, 1 if a>b.
 func Cmp(a, b *apd.Decimal) int { return a.Cmp(b) }

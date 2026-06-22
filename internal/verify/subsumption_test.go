@@ -6,9 +6,9 @@ import (
 	"github.com/maxgfr/feelc/internal/verify"
 )
 
-// Subsumption : règle #2 (>= 50) incluse dans #1 (>= 0) avec la MÊME sortie -> redondante.
-// Sous ANY, ce chevauchement à sorties identiques n'est PAS un conflit ; il était donc
-// silencieux avant. Subsumption le signale (supprimable).
+// Subsumption: rule #2 (>= 50) included in #1 (>= 0) with the SAME output -> redundant.
+// Under ANY, this overlap with identical outputs is NOT a conflict; it was therefore
+// silent before. Subsumption flags it (removable).
 func TestVerifyDetectsRedundantSubsumedRule(t *testing.T) {
 	rep := verify.Verify(compile(t, `model "m" {}
 input x : number in [0..100]
@@ -20,14 +20,14 @@ decision d : string {
 }`))
 	f := has(rep, verify.KindSubsumed)
 	if f == nil {
-		t.Fatalf("subsumption attendue (règle #2 incluse dans #1, même sortie). Findings: %+v", rep.Findings)
+		t.Fatalf("subsumption expected (rule #2 included in #1, same output). Findings: %+v", rep.Findings)
 	}
 	if len(f.Rules) == 0 || f.Rules[0] != 2 {
-		t.Errorf("règle redondante attendue = #2, obtenu %+v", f.Rules)
+		t.Errorf("redundant rule expected = #2, got %+v", f.Rules)
 	}
 }
 
-// Règles disjointes : aucune subsomption.
+// Disjoint rules: no subsumption.
 func TestVerifyNoSubsumptionWhenDisjoint(t *testing.T) {
 	rep := verify.Verify(compile(t, `model "m" {}
 input x : number in [0..100]
@@ -38,12 +38,12 @@ decision d : string {
   [50..100] => "b"
 }`))
 	if f := has(rep, verify.KindSubsumed); f != nil {
-		t.Errorf("aucune subsomption attendue (règles disjointes), obtenu %+v", f)
+		t.Errorf("no subsumption expected (disjoint rules), got %+v", f)
 	}
 }
 
-// Subsumption ne double PAS un conflit déjà signalé : sous UNIQUE, le chevauchement est déjà
-// un conflit, on ne ré-émet pas de KindSubsumed.
+// Subsumption does NOT duplicate an already reported conflict: under UNIQUE, the overlap is already
+// a conflict, so we do not re-emit KindSubsumed.
 func TestVerifyNoSubsumptionUnderUnique(t *testing.T) {
 	rep := verify.Verify(compile(t, `model "m" {}
 input x : number in [0..100]
@@ -54,9 +54,9 @@ decision d : string {
   >= 50 => "a"
 }`))
 	if f := has(rep, verify.KindSubsumed); f != nil {
-		t.Errorf("UNIQUE : pas de subsomption (déjà un conflit), obtenu %+v", f)
+		t.Errorf("UNIQUE: no subsumption (already a conflict), got %+v", f)
 	}
 	if has(rep, verify.KindConflict) == nil {
-		t.Errorf("UNIQUE : un conflit de chevauchement était attendu")
+		t.Errorf("UNIQUE: an overlap conflict was expected")
 	}
 }

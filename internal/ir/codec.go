@@ -1,16 +1,16 @@
 package ir
 
-// Sérialisation CANONIQUE et DÉTERMINISTE d'un *CompiledModel (ADR 0006).
+// CANONICAL and DETERMINISTIC serialization of a *CompiledModel (ADR 0006).
 //
-// Pourquoi pas gob : gob n'est pas canonique (ordre des champs/maps non garanti, drift
-// de version), or feelc vend du déterminisme bit-à-bit inter-plateforme. On encode donc
-// à la main, en length-prefixed big-endian, avec :
-//   - les maps (Inputs, Domains, context) émises en ordre de clé TRIÉ ;
-//   - les décimaux via MarshalText (texte EXACT, sans Reduce → aucune perte) ;
-//   - un en-tête magic+version explicite.
+// Why not gob: gob is not canonical (field/map order not guaranteed, version drift),
+// whereas feelc sells bit-for-bit cross-platform determinism. So we encode by hand,
+// length-prefixed big-endian, with:
+//   - maps (Inputs, Domains, context) emitted in SORTED key order;
+//   - decimals via MarshalText (EXACT text, no Reduce -> no loss);
+//   - an explicit magic+version header.
 //
-// Hash(cm) = sha256(Encode(cm)) : identité canonique du modèle compilé (≠ hash du source).
-// Deux sources distinctes qui compilent vers le même IR ont le même hash (c'est voulu).
+// Hash(cm) = sha256(Encode(cm)): canonical identity of the compiled model (!= source hash).
+// Two distinct sources that compile to the same IR have the same hash (this is intended).
 
 import (
 	"crypto/sha256"
@@ -25,7 +25,7 @@ var magic = [4]byte{'F', 'L', 'I', 'R'}
 
 const codecVersion uint16 = 1
 
-// Encode sérialise un modèle compilé en bytes canoniques.
+// Encode serializes a compiled model into canonical bytes.
 func Encode(cm *CompiledModel) ([]byte, error) {
 	e := &encoder{}
 	e.buf = append(e.buf, magic[:]...)
@@ -37,15 +37,15 @@ func Encode(cm *CompiledModel) ([]byte, error) {
 	return e.buf, nil
 }
 
-// Decode reconstruit un modèle compilé depuis des bytes produits par Encode.
+// Decode reconstructs a compiled model from bytes produced by Encode.
 func Decode(b []byte) (*CompiledModel, error) {
 	d := &decoder{b: b}
 	got, ok := d.need(4)
 	if !ok || got[0] != magic[0] || got[1] != magic[1] || got[2] != magic[2] || got[3] != magic[3] {
-		return nil, fmt.Errorf("ir: magic invalide (blob non-feelc)")
+		return nil, fmt.Errorf("ir: invalid magic (non-feelc blob)")
 	}
 	if v := d.getU16(); v != codecVersion {
-		return nil, fmt.Errorf("ir: version de codec %d non supportée (attendu %d)", v, codecVersion)
+		return nil, fmt.Errorf("ir: unsupported codec version %d (expected %d)", v, codecVersion)
 	}
 	cm := d.getModel()
 	if d.err != nil {
@@ -54,13 +54,13 @@ func Decode(b []byte) (*CompiledModel, error) {
 	return cm, nil
 }
 
-// IsEncoded indique si b commence par le magic feelc-IR (donc produit par Encode).
-// Permet au CLI de distinguer une source .rules d'un .ir.bin sans se fier à l'extension.
+// IsEncoded reports whether b starts with the feelc-IR magic (so produced by Encode).
+// Lets the CLI distinguish a .rules source from an .ir.bin without relying on the extension.
 func IsEncoded(b []byte) bool {
 	return len(b) >= 4 && b[0] == magic[0] && b[1] == magic[1] && b[2] == magic[2] && b[3] == magic[3]
 }
 
-// Hash renvoie le sha256 de l'encodage canonique (identité du modèle compilé).
+// Hash returns the sha256 of the canonical encoding (identity of the compiled model).
 func Hash(cm *CompiledModel) ([32]byte, error) {
 	b, err := Encode(cm)
 	if err != nil {
@@ -69,7 +69,7 @@ func Hash(cm *CompiledModel) ([32]byte, error) {
 	return sha256.Sum256(b), nil
 }
 
-// --- encodeur ---
+// --- encoder ---
 
 type encoder struct {
 	buf []byte
@@ -82,7 +82,7 @@ func (e *encoder) fail(err error) {
 	}
 }
 
-func (e *encoder) putU8(v uint8)  { e.buf = append(e.buf, v) }
+func (e *encoder) putU8(v uint8) { e.buf = append(e.buf, v) }
 func (e *encoder) putBool(b bool) {
 	if b {
 		e.putU8(1)
@@ -100,21 +100,21 @@ func (e *encoder) putStr(s string) { e.putBytes([]byte(s)) }
 
 func (e *encoder) putModel(cm *CompiledModel) {
 	e.putStr(cm.Name)
-	// Inputs (map -> clés triées)
+	// Inputs (map -> sorted keys)
 	inNames := sortedMapKeys(cm.Inputs)
 	e.putU32(uint32(len(inNames)))
 	for _, n := range inNames {
 		e.putStr(n)
 		e.putU8(uint8(cm.Inputs[n]))
 	}
-	// Domains (map -> clés triées)
+	// Domains (map -> sorted keys)
 	domNames := sortedMapKeys(cm.Domains)
 	e.putU32(uint32(len(domNames)))
 	for _, n := range domNames {
 		e.putStr(n)
 		e.putDomain(cm.Domains[n])
 	}
-	// Decisions (ordre topo conservé)
+	// Decisions (topo order preserved)
 	e.putU32(uint32(len(cm.Decisions)))
 	for i := range cm.Decisions {
 		e.putDecision(cm.Decisions[i])
@@ -144,14 +144,14 @@ func (e *encoder) putDecision(d Decision) {
 	for _, dep := range d.Deps {
 		e.putStr(dep)
 	}
-	// Table (présence)
+	// Table (presence)
 	if d.Table != nil {
 		e.putBool(true)
 		e.putTable(d.Table)
 	} else {
 		e.putBool(false)
 	}
-	// Expr (présence)
+	// Expr (presence)
 	e.putProg(d.Expr)
 }
 
@@ -171,7 +171,7 @@ func (e *encoder) putTable(t *DecisionTable) {
 		e.putStrSlice(r.OutputSrc)
 	}
 	e.putValueSlice(t.Priority)
-	// Default : nil distinct de [] (présence)
+	// Default: nil distinct from [] (presence)
 	if t.Default != nil {
 		e.putBool(true)
 		e.putValueSlice(t.Default)
@@ -256,11 +256,11 @@ func (e *encoder) putValueSlice(xs []Value) {
 	}
 }
 
-// --- décodeur ---
+// --- decoder ---
 
-// maxDecodeDepth borne la profondeur de récursion du décodeur (blob non fiable) : sinon un
-// blob minuscule à imbrication TagList/TagContext/Sub profonde provoque un stack overflow
-// FATAL non rattrapable par recover() (revue adverse). Jamais conformer en silence : on échoue.
+// maxDecodeDepth bounds the decoder's recursion depth (untrusted blob): otherwise a
+// tiny blob with deep TagList/TagContext/Sub nesting causes a FATAL stack overflow
+// not recoverable by recover() (adversarial review). Never conform silently: we fail.
 const maxDecodeDepth = 1000
 
 type decoder struct {
@@ -275,7 +275,7 @@ func (d *decoder) need(n int) ([]byte, bool) {
 		return nil, false
 	}
 	if n < 0 || d.pos+n > len(d.b) {
-		d.err = fmt.Errorf("ir: décodage tronqué (besoin %d à l'offset %d, taille %d)", n, d.pos, len(d.b))
+		d.err = fmt.Errorf("ir: truncated decoding (need %d at offset %d, size %d)", n, d.pos, len(d.b))
 		return nil, false
 	}
 	s := d.b[d.pos : d.pos+n]
@@ -283,16 +283,16 @@ func (d *decoder) need(n int) ([]byte, bool) {
 	return s, true
 }
 
-// count lit une longueur (u32) et la BORNE par les octets restants : chaque élément consomme
-// au moins 1 octet, donc une longueur supérieure est forcément corrompue/malveillante. Évite
-// toute préallocation géante (`make(..., n)`) depuis une longueur non fiable (revue adverse).
+// count reads a length (u32) and BOUNDS it by the remaining bytes: each element consumes
+// at least 1 byte, so a larger length is necessarily corrupt/malicious. Avoids any giant
+// preallocation (`make(..., n)`) from an untrusted length (adversarial review).
 func (d *decoder) count() int {
 	n := d.getU32()
 	if d.err != nil {
 		return 0
 	}
 	if int64(n) > int64(len(d.b)-d.pos) {
-		d.err = fmt.Errorf("ir: longueur %d invalide (dépasse %d octets restants)", n, len(d.b)-d.pos)
+		d.err = fmt.Errorf("ir: invalid length %d (exceeds %d remaining bytes)", n, len(d.b)-d.pos)
 		return 0
 	}
 	return int(n)
@@ -406,7 +406,7 @@ func (d *decoder) getTable() *DecisionTable {
 	if d.getBool() {
 		t.Default = d.getValueSlice()
 		if t.Default == nil {
-			t.Default = []Value{} // distinguer "présent vide" de "absent"
+			t.Default = []Value{} // distinguish "present empty" from "absent"
 		}
 	}
 	return t
@@ -416,7 +416,7 @@ func (d *decoder) getCellTest() CellTest {
 	d.depth++
 	defer func() { d.depth-- }()
 	if d.depth > maxDecodeDepth {
-		d.err = fmt.Errorf("ir: imbrication de cellules trop profonde (> %d)", maxDecodeDepth)
+		d.err = fmt.Errorf("ir: cell nesting too deep (> %d)", maxDecodeDepth)
 		return CellTest{}
 	}
 	c := CellTest{Op: Op(d.getU8())}
@@ -456,7 +456,7 @@ func (d *decoder) getValue() Value {
 	d.depth++
 	defer func() { d.depth-- }()
 	if d.depth > maxDecodeDepth {
-		d.err = fmt.Errorf("ir: imbrication de valeurs trop profonde (> %d)", maxDecodeDepth)
+		d.err = fmt.Errorf("ir: value nesting too deep (> %d)", maxDecodeDepth)
 		return Value{}
 	}
 	v := Value{Tag: Tag(d.getU8())}
@@ -466,7 +466,7 @@ func (d *decoder) getValue() Value {
 		if len(txt) > 0 {
 			num, err := decimal.Parse(string(txt))
 			if err != nil && d.err == nil {
-				d.err = fmt.Errorf("ir: décimal invalide au décodage: %w", err)
+				d.err = fmt.Errorf("ir: invalid decimal at decoding: %w", err)
 			}
 			v.Num = num
 		}
@@ -511,7 +511,7 @@ func (d *decoder) getValueSlice() []Value {
 	return out
 }
 
-// sortedMapKeys renvoie les clés d'une map à clés string, triées (déterminisme).
+// sortedMapKeys returns the keys of a string-keyed map, sorted (determinism).
 func sortedMapKeys[V any](m map[string]V) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

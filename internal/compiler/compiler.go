@@ -1,10 +1,10 @@
-// Package compiler transforme un *model.Model (sortie du DSL) en *ir.CompiledModel
-// exécutable : typecheck (gardien du périmètre) + lowering (normalisation des cellules
-// en CellTest, compilation des expressions en bytecode).
+// Package compiler transforms a *model.Model (DSL output) into an executable
+// *ir.CompiledModel: typecheck (scope gatekeeper) + lowering (normalizing cells
+// into CellTest, compiling expressions into bytecode).
 //
-// Discipline anti-scope-creep : tout construct hors sous-ensemble v2 échoue franchement.
-// Les erreurs sont des *diag.Error positionnés (ligne, et colonne quand issue d'une cellule),
-// avec un code stable CMPxxx et une suggestion quand c'est utile.
+// Anti-scope-creep discipline: any construct outside the v2 subset fails outright.
+// Errors are positioned *diag.Error values (line, and column when they come from a cell),
+// with a stable CMPxxx code and a suggestion when useful.
 package compiler
 
 import (
@@ -20,7 +20,7 @@ import (
 	"github.com/maxgfr/feelc/internal/model"
 )
 
-// Compile typecheck puis abaisse le modèle conceptuel en IR.
+// Compile typechecks then lowers the conceptual model into IR.
 func Compile(m *model.Model) (*ir.CompiledModel, error) {
 	cm := &ir.CompiledModel{Name: m.Name, Inputs: map[string]ir.Type{}, Domains: map[string]ir.Domain{}}
 	for _, in := range m.Inputs {
@@ -31,9 +31,9 @@ func Compile(m *model.Model) (*ir.CompiledModel, error) {
 		}
 		cm.Domains[in.Name] = dom
 	}
-	// Noms résolvables : entrées externes + décisions (une cellule/expr peut référencer une décision amont).
-	// Les BKM ne sont PAS des noms résolvables (pas dans `valid`) : ce sont des fonctions pures,
-	// référençables uniquement par invocation `name(...)`, inlinées par le lowerer.
+	// Resolvable names: external inputs + decisions (a cell/expr may reference an upstream decision).
+	// BKMs are NOT resolvable names (not in `valid`): they are pure functions,
+	// referenceable only via invocation `name(...)`, inlined by the lowerer.
 	valid := map[string]bool{}
 	for n := range cm.Inputs {
 		valid[n] = true
@@ -59,14 +59,14 @@ func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]mode
 	if d.Expr != nil {
 		prog, err := lowerExpr(d.Expr.Node, bkms)
 		if err != nil {
-			return ir.Decision{}, diag.Wrap(diag.CodeUnsupported, d.Line, fmt.Sprintf("décision %q", d.Name), err).
+			return ir.Decision{}, diag.Wrap(diag.CodeUnsupported, d.Line, fmt.Sprintf("decision %q", d.Name), err).
 				WithCol(d.Expr.Col)
 		}
-		// `?` (valeur de colonne) n'a de sens que dans une cellule de table : refus FRANC à la
-		// compilation (sinon échec seulement à l'exécution — y compris via un argument de BKM).
+		// `?` (column value) only makes sense inside a table cell: outright refusal at
+		// compile time (otherwise it would fail only at runtime — including via a BKM argument).
 		if progUsesInput(prog) {
 			return ir.Decision{}, diag.Newf(diag.CodeUnsupported, d.Line,
-				"décision %q: `?` (valeur de colonne) interdit dans une expression literal — réservé aux cellules de table", d.Name).
+				"decision %q: `?` (column value) forbidden in a literal expression — reserved for table cells", d.Name).
 				WithCol(d.Expr.Col)
 		}
 		if err := checkVars(prog.Vars, valid, d.Name, d.Line); err != nil {
@@ -85,30 +85,30 @@ func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]mode
 	}
 	if agg != ir.AggNone && agg != ir.AggCount && len(outNames) != 1 {
 		return ir.Decision{}, diag.Newf(diag.CodeCollect, d.Line,
-			"décision %q: l'agrégation COLLECT exige une sortie scalaire unique", d.Name)
+			"decision %q: COLLECT aggregation requires a single scalar output", d.Name)
 	}
 	for _, n := range d.Needs {
 		if !valid[n] {
 			return ir.Decision{}, diag.Newf(diag.CodeUndeclared, d.Line,
-				"décision %q: `needs` référence %q, non déclaré", d.Name, n).
-				WithSuggestion("noms déclarés : " + strings.Join(sortedKeys(valid), ", "))
+				"decision %q: `needs` references %q, not declared", d.Name, n).
+				WithSuggestion("declared names: " + strings.Join(sortedKeys(valid), ", "))
 		}
 	}
 	table := &ir.DecisionTable{Inputs: d.Needs, Outputs: outNames, HitPolicy: hp, Agg: agg}
 	if hp == ir.HitPriority {
 		if len(outNames) != 1 {
 			return ir.Decision{}, diag.Newf(diag.CodePriority, d.Line,
-				"décision %q: PRIORITY exige une sortie scalaire unique", d.Name)
+				"decision %q: PRIORITY requires a single scalar output", d.Name)
 		}
 		if len(d.Priority) == 0 {
 			return ir.Decision{}, diag.Newf(diag.CodePriority, d.Line,
-				"décision %q: PRIORITY exige une ligne `priority:` listant les sorties par ordre de priorité décroissant", d.Name)
+				"decision %q: PRIORITY requires a `priority:` line listing the outputs in decreasing priority order", d.Name)
 		}
 		for _, c := range d.Priority {
 			v, err := literalValue(c.Node)
 			if err != nil {
 				return ir.Decision{}, diag.Wrap(diag.CodeLiteral, c.Line,
-					fmt.Sprintf("décision %q: valeur de priorité %q", d.Name, c.Src), err).WithCol(c.Col)
+					fmt.Sprintf("decision %q: priority value %q", d.Name, c.Src), err).WithCol(c.Col)
 			}
 			table.Priority = append(table.Priority, v)
 		}
@@ -124,7 +124,7 @@ func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]mode
 		}
 		if len(r.Conds) != len(d.Needs) {
 			return ir.Decision{}, diag.Newf(diag.CodeArity, r.Line,
-				"décision %q: %d conditions pour %d colonnes `needs`", d.Name, len(r.Conds), len(d.Needs))
+				"decision %q: %d conditions for %d `needs` columns", d.Name, len(r.Conds), len(d.Needs))
 		}
 		rule := ir.Rule{Outputs: outs, Line: r.Line, OutputSrc: outputSrcs(r.Outputs)}
 		for _, c := range r.Conds {
@@ -139,7 +139,7 @@ func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]mode
 	return ir.Decision{Name: d.Name, Kind: ir.KindTable, Table: table, Deps: d.Needs, Line: d.Line}, nil
 }
 
-// outputSrcs extrait le texte source des cellules de sortie (trace de justification).
+// outputSrcs extracts the source text of the output cells (justification trace).
 func outputSrcs(cells []model.Cell) []string {
 	srcs := make([]string, len(cells))
 	for i, c := range cells {
@@ -148,8 +148,8 @@ func outputSrcs(cells []model.Cell) []string {
 	return srcs
 }
 
-// outputNames déduit les colonnes de sortie du type de la décision :
-// builtin scalaire -> 1 sortie (nom = décision) ; type context -> les champs, dans l'ordre.
+// outputNames derives the output columns from the decision's type:
+// scalar builtin -> 1 output (name = decision); context type -> the fields, in order.
 func outputNames(m *model.Model, d model.Decision) ([]string, error) {
 	switch model.Type(d.TypeName) {
 	case model.TypeNumber, model.TypeString, model.TypeBool:
@@ -157,8 +157,8 @@ func outputNames(m *model.Model, d model.Decision) ([]string, error) {
 	}
 	td, ok := m.Type(d.TypeName)
 	if !ok {
-		return nil, diag.Newf(diag.CodeUnknownType2, d.Line, "décision %q: type inconnu %q", d.Name, d.TypeName).
-			WithSuggestion("types : number, string, boolean, ou un `type ... = context { ... }` déclaré")
+		return nil, diag.Newf(diag.CodeUnknownType2, d.Line, "decision %q: unknown type %q", d.Name, d.TypeName).
+			WithSuggestion("types: number, string, boolean, or a declared `type ... = context { ... }`")
 	}
 	names := make([]string, len(td.Fields))
 	for i, f := range td.Fields {
@@ -169,20 +169,20 @@ func outputNames(m *model.Model, d model.Decision) ([]string, error) {
 
 func literalOutputs(cells []model.Cell, want int, dec string, line int) ([]ir.Value, error) {
 	if len(cells) != want {
-		return nil, diag.Newf(diag.CodeArity, line, "décision %q: %d sorties, %d attendue(s)", dec, len(cells), want)
+		return nil, diag.Newf(diag.CodeArity, line, "decision %q: %d outputs, %d expected", dec, len(cells), want)
 	}
 	out := make([]ir.Value, len(cells))
 	for i, c := range cells {
 		v, err := literalValue(c.Node)
 		if err != nil {
-			return nil, diag.Wrap(diag.CodeLiteral, line, fmt.Sprintf("décision %q: sortie %q", dec, c.Src), err).WithCol(c.Col)
+			return nil, diag.Wrap(diag.CodeLiteral, line, fmt.Sprintf("decision %q: output %q", dec, c.Src), err).WithCol(c.Col)
 		}
 		out[i] = v
 	}
 	return out, nil
 }
 
-// normalizeCell transforme une cellule de condition en CellTest géométrique (ou Op=Prog).
+// normalizeCell transforms a condition cell into a geometric CellTest (or Op=Prog).
 func normalizeCell(c model.Cell, valid map[string]bool, bkms map[string]model.BKM, dec string) (ir.CellTest, error) {
 	if c.Dash {
 		return ir.CellTest{Op: ir.OpAny, Src: c.Src, Line: c.Line}, nil
@@ -191,7 +191,7 @@ func normalizeCell(c model.Cell, valid map[string]bool, bkms map[string]model.BK
 	if err != nil {
 		return ir.CellTest{}, err
 	}
-	// Trace de justification : Src/Line de la cellule de plus haut niveau (pas les sous-tests).
+	// Justification trace: Src/Line of the top-level cell (not the sub-tests).
 	ct.Src = c.Src
 	ct.Line = c.Line
 	return ct, nil
@@ -202,11 +202,11 @@ func normalizeNode(node feel.Node, src string, valid map[string]bool, bkms map[s
 	case *feel.RangeNode:
 		lo, err := literalValue(n.Start)
 		if err != nil {
-			return ir.CellTest{}, diag.Wrap(diag.CodeLiteral, line, fmt.Sprintf("borne basse de %q", src), err).WithCol(col)
+			return ir.CellTest{}, diag.Wrap(diag.CodeLiteral, line, fmt.Sprintf("lower bound of %q", src), err).WithCol(col)
 		}
 		hi, err := literalValue(n.End)
 		if err != nil {
-			return ir.CellTest{}, diag.Wrap(diag.CodeLiteral, line, fmt.Sprintf("borne haute de %q", src), err).WithCol(col)
+			return ir.CellTest{}, diag.Wrap(diag.CodeLiteral, line, fmt.Sprintf("upper bound of %q", src), err).WithCol(col)
 		}
 		return ir.CellTest{Op: ir.OpInRange, A: lo, B: hi, AOpen: n.StartOpen, BOpen: n.EndOpen}, nil
 	case *feel.MultiTests:
@@ -228,38 +228,38 @@ func normalizeNode(node feel.Node, src string, valid map[string]bool, bkms map[s
 				}
 				return ir.CellTest{Op: op, A: lit}, nil
 			}
-			// "? op <expr non littérale>" (ex: "< monthly_debt") -> cellule Op=Prog
+			// "? op <non-literal expr>" (e.g. "< monthly_debt") -> Op=Prog cell
 			return progCell(node, valid, bkms, dec, line, col)
 		}
 		return progCell(node, valid, bkms, dec, line, col)
 	case *feel.NumberNode, *feel.StringNode, *feel.BoolNode:
 		lit, err := literalValue(node)
 		if err != nil {
-			return ir.CellTest{}, diag.Wrap(diag.CodeLiteral, line, fmt.Sprintf("cellule %q", src), err).WithCol(col)
+			return ir.CellTest{}, diag.Wrap(diag.CodeLiteral, line, fmt.Sprintf("cell %q", src), err).WithCol(col)
 		}
 		return ir.CellTest{Op: ir.OpEq, A: lit}, nil
 	case *feel.FunCall:
-		// `not(<test>)` en cellule : négation GÉOMÉTRIQUE (reste analysable par le vérificateur).
-		// not(x) -> test(x) nié ; not(a, b, ...) -> hors de l'ensemble {a, b, ...}.
+		// `not(<test>)` in a cell: GEOMETRIC negation (stays analyzable by the checker).
+		// not(x) -> negated test(x); not(a, b, ...) -> outside the set {a, b, ...}.
 		if v, ok := n.FunRef.(*feel.Var); ok && v.Name == "not" {
 			return negateCell(n, src, valid, bkms, dec, line, col)
 		}
-		// Autre invocation (BKM, floor/round) utilisée comme test booléen -> cellule Op=Prog.
+		// Other invocation (BKM, floor/round) used as a boolean test -> Op=Prog cell.
 		return progCell(node, valid, bkms, dec, line, col)
 	default:
-		return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cellule %q: construct non supporté en v2", src).WithCol(col)
+		return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cell %q: construct not supported in v2", src).WithCol(col)
 	}
 }
 
-// negateCell normalise `not(...)` en cellule : un test géométrique inversé (Negate), ou un
-// OpNot appliqué au programme pour un test non géométrique (Op=Prog). Échec franc sur kwargs / 0 arg.
+// negateCell normalizes `not(...)` into a cell: an inverted geometric test (Negate), or an
+// OpNot applied to the program for a non-geometric test (Op=Prog). Outright failure on kwargs / 0 args.
 func negateCell(n *feel.FunCall, src string, valid map[string]bool, bkms map[string]model.BKM, dec string, line, col int) (ir.CellTest, error) {
 	if len(n.Args) == 0 {
-		return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cellule %q: `not()` attend au moins un test", src).WithCol(col)
+		return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cell %q: `not()` expects at least one test", src).WithCol(col)
 	}
 	for _, a := range n.Args {
 		if a.Name != "" {
-			return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cellule %q: `not(...)` n'accepte pas d'arguments nommés", src).WithCol(col)
+			return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cell %q: `not(...)` does not accept named arguments", src).WithCol(col)
 		}
 	}
 	if len(n.Args) == 1 {
@@ -268,14 +268,14 @@ func negateCell(n *feel.FunCall, src string, valid map[string]bool, bkms map[str
 			return ir.CellTest{}, err
 		}
 		if inner.Op == ir.OpProg {
-			// non géométrique : négation à l'exécution (OpNot sur le résultat booléen).
+			// non-geometric: negation at runtime (OpNot on the boolean result).
 			inner.Prog.Code = append(inner.Prog.Code, ir.Instr{Op: ir.OpNot})
 			return inner, nil
 		}
-		inner.Negate = !inner.Negate // toggle (gère not(not(...)))
+		inner.Negate = !inner.Negate // toggle (handles not(not(...)))
 		return inner, nil
 	}
-	// not(a, b, ...) : hors de l'ensemble — OU des sous-tests, le tout nié.
+	// not(a, b, ...): outside the set — OR of the sub-tests, the whole thing negated.
 	ct := ir.CellTest{Op: ir.OpInSet, Negate: true}
 	for _, a := range n.Args {
 		sub, err := normalizeNode(a.Arg, src, valid, bkms, dec, line, col)
@@ -283,18 +283,18 @@ func negateCell(n *feel.FunCall, src string, valid map[string]bool, bkms map[str
 			return ir.CellTest{}, err
 		}
 		if sub.Op == ir.OpProg {
-			return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cellule %q: `not(...)` multi-tests exige des tests géométriques", src).WithCol(col)
+			return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cell %q: multi-test `not(...)` requires geometric tests", src).WithCol(col)
 		}
 		ct.Sub = append(ct.Sub, sub)
 	}
 	return ct, nil
 }
 
-// progCell compile une cellule en expression booléenne (couche bytecode), `?` = valeur de colonne.
+// progCell compiles a cell into a boolean expression (bytecode layer), `?` = column value.
 func progCell(node feel.Node, valid map[string]bool, bkms map[string]model.BKM, dec string, line, col int) (ir.CellTest, error) {
 	prog, err := lowerExpr(node, bkms)
 	if err != nil {
-		return ir.CellTest{}, diag.Wrap(diag.CodeUnsupported, line, "cellule", err).WithCol(col)
+		return ir.CellTest{}, diag.Wrap(diag.CodeUnsupported, line, "cell", err).WithCol(col)
 	}
 	if err := checkVars(prog.Vars, valid, dec, line); err != nil {
 		return ir.CellTest{}, err
@@ -306,14 +306,14 @@ func checkVars(vars []string, valid map[string]bool, dec string, line int) error
 	for _, v := range vars {
 		if !valid[v] {
 			return diag.Newf(diag.CodeUndeclared, line,
-				"décision %q: référence %q, non déclarée (input ou décision)", dec, v).
-				WithSuggestion("noms déclarés : " + strings.Join(sortedKeys(valid), ", "))
+				"decision %q: references %q, not declared (input or decision)", dec, v).
+				WithSuggestion("declared names: " + strings.Join(sortedKeys(valid), ", "))
 		}
 	}
 	return nil
 }
 
-// literalValue convertit un nœud FEEL littéral en Value (re-parse exact des nombres via apd).
+// literalValue converts a literal FEEL node into a Value (exact re-parse of numbers via apd).
 func literalValue(node feel.Node) (ir.Value, error) {
 	switch n := node.(type) {
 	case *feel.NumberNode:
@@ -323,11 +323,11 @@ func literalValue(node feel.Node) (ir.Value, error) {
 		}
 		return ir.Num(d), nil
 	case *feel.StringNode:
-		return ir.Str(n.Content()), nil // Content() retire les guillemets + déséchappe (Value les garde)
+		return ir.Str(n.Content()), nil // Content() strips the quotes + unescapes (Value keeps them)
 	case *feel.BoolNode:
 		return ir.Bool(n.Value), nil
 	default:
-		return ir.Value{}, diag.Newf(diag.CodeLiteral, 0, "littéral attendu, obtenu %T", node)
+		return ir.Value{}, diag.Newf(diag.CodeLiteral, 0, "literal expected, got %T", node)
 	}
 }
 
@@ -346,15 +346,15 @@ func mapOp(op string, line, col int) (ir.Op, error) {
 	case "!=":
 		return ir.OpNe, nil
 	default:
-		return 0, diag.Newf(diag.CodeUnsupported, line, "opérateur de cellule non supporté en v2: %q", op).WithCol(col)
+		return 0, diag.Newf(diag.CodeUnsupported, line, "cell operator not supported in v2: %q", op).WithCol(col)
 	}
 }
 
 func parseHitPolicy(s string, no int) (ir.HitPolicy, ir.Aggregation, error) {
 	switch s {
 	case "":
-		return 0, 0, diag.New(diag.CodeHitPolicy, no, "`hit:` manquant").
-			WithSuggestion("ex : hit: first")
+		return 0, 0, diag.New(diag.CodeHitPolicy, no, "`hit:` missing").
+			WithSuggestion("e.g.: hit: first")
 	case "first":
 		return ir.HitFirst, ir.AggNone, nil
 	case "unique":
@@ -376,13 +376,13 @@ func parseHitPolicy(s string, no int) (ir.HitPolicy, ir.Aggregation, error) {
 	case "collect count":
 		return ir.HitCollect, ir.AggCount, nil
 	default:
-		return 0, 0, diag.Newf(diag.CodeHitPolicy, no, "hit policy non supportée: %q", s).
-			WithSuggestion("politiques : first, unique, any, priority, rule order, collect[ sum|min|max|count]")
+		return 0, 0, diag.Newf(diag.CodeHitPolicy, no, "unsupported hit policy: %q", s).
+			WithSuggestion("policies: first, unique, any, priority, rule order, collect[ sum|min|max|count]")
 	}
 }
 
-// parseDomain interprète une contrainte de domaine d'entrée (`in [a..b]`, `>= 0`, `in {..}`)
-// en ir.Domain pour la vérification de complétude. Une forme non reconnue -> DomNone (pas d'erreur).
+// parseDomain interprets an input domain constraint (`in [a..b]`, `>= 0`, `in {..}`)
+// into an ir.Domain for completeness checking. An unrecognized form -> DomNone (no error).
 func parseDomain(s string) (ir.Domain, error) {
 	rest := strings.TrimSpace(s)
 	if rest == "" {
@@ -402,11 +402,11 @@ func parseDomain(s string) (ir.Domain, error) {
 			}
 			node, err := feel.ParseString(part)
 			if err != nil {
-				return ir.Domain{}, diag.Wrap(diag.CodeFeelSyntax, 0, fmt.Sprintf("domaine enum %q", part), err)
+				return ir.Domain{}, diag.Wrap(diag.CodeFeelSyntax, 0, fmt.Sprintf("enum domain %q", part), err)
 			}
 			v, err := literalValue(node)
 			if err != nil {
-				return ir.Domain{}, diag.Wrap(diag.CodeLiteral, 0, fmt.Sprintf("domaine enum %q", part), err)
+				return ir.Domain{}, diag.Wrap(diag.CodeLiteral, 0, fmt.Sprintf("enum domain %q", part), err)
 			}
 			dom.Enum = append(dom.Enum, v)
 		}
@@ -414,7 +414,7 @@ func parseDomain(s string) (ir.Domain, error) {
 	}
 	node, err := feel.ParseString(rest)
 	if err != nil {
-		return ir.Domain{Kind: ir.DomNone}, nil // non interprétable -> pas de domaine (dégradation)
+		return ir.Domain{Kind: ir.DomNone}, nil // not interpretable -> no domain (degradation)
 	}
 	switch n := node.(type) {
 	case *feel.RangeNode:
@@ -459,7 +459,7 @@ func irType(t model.Type) ir.Type {
 	}
 }
 
-// sortedKeys renvoie les clés vraies d'un set, triées (pour des suggestions déterministes).
+// sortedKeys returns the true keys of a set, sorted (for deterministic suggestions).
 func sortedKeys(set map[string]bool) []string {
 	out := make([]string, 0, len(set))
 	for k, ok := range set {

@@ -5,8 +5,8 @@ description: >-
   to a deterministic Go engine). Use when the user wants to WRITE or REVIEW business rules /
   decision logic and have them be deterministic, auditable and formally checkable — e.g.
   "encode these eligibility rules", "write a decision table", "rule engine", "DMN", "FEEL",
-  "barème / éligibilité / scoring / tarification / promotions en règles", "génère les règles
-  métier", "vérifie ma table de décision", "feelc". The AI writes the .rules source; the feelc
+  "scoring / eligibility / pricing / promotions as rules", "generate business rules",
+  "check my decision table", "feelc". The AI writes the .rules source; the feelc
   binary (compile / verify / run) is the deterministic oracle — never decide rule outcomes "in
   your head", always run feelc.
 license: Apache-2.0

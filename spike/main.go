@@ -1,10 +1,10 @@
-// Spike jetable (Tranche 0) : évaluer empiriquement si github.com/pbinitiative/feel
-// peut parser le sous-ensemble FEEL dont feelc a besoin pour les CELLULES de table
-// (unary tests) et les EXPRESSIONS littérales. Verdict data-driven pour l'ADR feel-frontend.
+// Throwaway spike (Slice 0): empirically evaluate whether github.com/pbinitiative/feel
+// can parse the FEEL subset feelc needs for table CELLS (unary tests) and literal
+// EXPRESSIONS. Data-driven verdict for the feel-frontend ADR.
 //
-// On NE teste PAS l'évaluation (leur Number = big.Float binaire, non-décimal) : feelc
-// exécutera via apd dans sa propre VM. Ici on teste seulement : « le parseur accepte-t-il
-// notre syntaxe, et l'AST exporté est-il exploitable (positions, littéral source) ? »
+// We do NOT test evaluation (their Number = binary big.Float, non-decimal): feelc
+// executes via apd in its own VM. Here we only test: "does the parser accept our
+// syntax, and is the exported AST usable (positions, source literal)?"
 package main
 
 import (
@@ -14,37 +14,37 @@ import (
 )
 
 type probe struct {
-	kind string // "unary" (cellule de table) ou "expr" (décision literal expression)
+	kind string // "unary" (table cell) or "expr" (literal-expression decision)
 	src  string
 }
 
 func main() {
 	probes := []probe{
-		// --- Unary tests (cellules de table) : le cœur du moteur DMN ---
+		// --- Unary tests (table cells): the heart of the DMN engine ---
 		{"unary", `< 580`},
 		{"unary", `<= 0.43`},
 		{"unary", `> 0.43`},
 		{"unary", `>= 680`},
 		{"unary", `>= 18`},
 		{"unary", `!= 0`},
-		{"unary", `[580..680)`},   // range borne droite exclue
-		{"unary", `[300..850]`},   // range fermé
-		{"unary", `(0..1)`},       // range ouvert
-		{"unary", `]0..100]`},     // notation crochet inversé (borne gauche exclue)
-		{"unary", `"good"`},       // littéral string = égalité implicite
-		{"unary", `"good","excellent"`}, // liste = OU implicite (MultiTests)
-		{"unary", `1, 2, 3`},      // liste de nombres
-		{"unary", `not(< 18)`},    // négation
-		{"unary", `not("none")`},  // négation de littéral
-		{"unary", `-`},            // any / don't-care (DMN) : à surveiller (peut = moins unaire)
-		{"unary", `580`},          // nombre nu = égalité
-		{"unary", `true`},         // booléen
-		{"unary", `< monthly_debt`}, // comparaison à une autre variable (cellule Op=Prog)
-		{"unary", `[date("2026-01-01")..date("2026-12-31")]`}, // range de dates
-		// --- Expressions (décisions literal expression) ---
+		{"unary", `[580..680)`},         // range with right bound excluded
+		{"unary", `[300..850]`},         // closed range
+		{"unary", `(0..1)`},             // open range
+		{"unary", `]0..100]`},           // inverted-bracket notation (left bound excluded)
+		{"unary", `"good"`},             // string literal = implicit equality
+		{"unary", `"good","excellent"`}, // list = implicit OR (MultiTests)
+		{"unary", `1, 2, 3`},            // list of numbers
+		{"unary", `not(< 18)`},          // negation
+		{"unary", `not("none")`},        // literal negation
+		{"unary", `-`},                  // any / don't-care (DMN): to watch (may = unary minus)
+		{"unary", `580`},                // bare number = equality
+		{"unary", `true`},               // boolean
+		{"unary", `< monthly_debt`},     // comparison to another variable (Op=Prog cell)
+		{"unary", `[date("2026-01-01")..date("2026-12-31")]`}, // range of dates
+		// --- Expressions (literal-expression decisions) ---
 		{"expr", `monthly_debt / (annual_income / 12)`},
 		{"expr", `credit_score * 2 + 10`},
-		{"expr", `if age < 18 then "mineur" else "majeur"`},
+		{"expr", `if age < 18 then "minor" else "adult"`},
 		{"expr", `annual_income >= 30000 and credit_score >= 700`},
 		{"expr", `sum([1, 2, 3])`},
 		{"expr", `floor(3.7)`},
@@ -81,5 +81,5 @@ func main() {
 		fmt.Printf("[%s] %-4s %-45s %s\n", status, p.kind, p.src, detail)
 	}
 
-	fmt.Printf("\n=== BILAN ===\nunary-tests : %d/%d\nexpressions : %d/%d\n", okU, totU, okE, totE)
+	fmt.Printf("\n=== SUMMARY ===\nunary-tests : %d/%d\nexpressions : %d/%d\n", okU, totU, okE, totE)
 }

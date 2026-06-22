@@ -40,7 +40,7 @@ func TestServiceDecision(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != 200 {
-		t.Fatalf("code = %d, attendu 200 ; corps: %s", rec.Code, rec.Body.String())
+		t.Fatalf("code = %d, expected 200 ; body: %s", rec.Code, rec.Body.String())
 	}
 	var resp struct {
 		Output       map[string]any `json:"output"`
@@ -51,10 +51,10 @@ func TestServiceDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 	if resp.Output["eligible"] != true {
-		t.Errorf("eligible = %v, attendu true ; sortie: %+v", resp.Output["eligible"], resp.Output)
+		t.Errorf("eligible = %v, expected true ; output: %+v", resp.Output["eligible"], resp.Output)
 	}
 	if resp.ModelVersion != 1 || resp.Hash != "h1" {
-		t.Errorf("version/hash = %d/%s, attendu 1/h1", resp.ModelVersion, resp.Hash)
+		t.Errorf("version/hash = %d/%s, expected 1/h1", resp.ModelVersion, resp.Hash)
 	}
 }
 
@@ -65,7 +65,7 @@ func TestServiceExplain(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != 200 {
-		t.Fatalf("code = %d, attendu 200 ; corps: %s", rec.Code, rec.Body.String())
+		t.Fatalf("code = %d, expected 200 ; body: %s", rec.Code, rec.Body.String())
 	}
 	var tr struct {
 		Matched   bool   `json:"matched"`
@@ -81,10 +81,10 @@ func TestServiceExplain(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !tr.Matched || tr.RuleIndex != 1 {
-		t.Errorf("attendu match règle #1, obtenu matched=%v ruleIndex=%d", tr.Matched, tr.RuleIndex)
+		t.Errorf("expected match for rule #1, got matched=%v ruleIndex=%d", tr.Matched, tr.RuleIndex)
 	}
-	if tr.Output["reason"] != "score insuffisant" {
-		t.Errorf("reason = %v, attendu \"score insuffisant\"", tr.Output["reason"])
+	if tr.Output["reason"] != "insufficient score" {
+		t.Errorf("reason = %v, expected \"insufficient score\"", tr.Output["reason"])
 	}
 	found := false
 	for _, c := range tr.Cells {
@@ -93,11 +93,11 @@ func TestServiceExplain(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("cellule justifiante credit_score=500 absente: %+v", tr.Cells)
+		t.Errorf("justifying cell credit_score=500 missing: %+v", tr.Cells)
 	}
 }
 
-// GET /v1/model enrichi : chaque décision porte kind / hitPolicy / deps.
+// GET /v1/model enriched: each decision carries kind / hitPolicy / deps.
 func TestServiceModelEnriched(t *testing.T) {
 	h := creditHandler(t)
 	req := httptest.NewRequest("GET", "/v1/model", nil)
@@ -125,16 +125,16 @@ func TestServiceModelEnriched(t *testing.T) {
 		if d.Name == "dti" {
 			dti = true
 			if d.Kind != "literal-expr" {
-				t.Errorf("dti: kind = %s, attendu literal-expr", d.Kind)
+				t.Errorf("dti: kind = %s, expected literal-expr", d.Kind)
 			}
 		}
 	}
 	if !elig || !dti {
-		t.Errorf("décisions eligibility/dti absentes: %+v", resp.Decisions)
+		t.Errorf("decisions eligibility/dti missing: %+v", resp.Decisions)
 	}
 }
 
-// POST /v1/verify : vérifie une source CANDIDATE (sans swap). Valide -> 200 + report ; invalide -> 422.
+// POST /v1/verify: verifies a CANDIDATE source (without swap). Valid -> 200 + report ; invalid -> 422.
 func TestServiceVerifyCandidate(t *testing.T) {
 	h := creditHandler(t)
 	good := `model "m" {}
@@ -148,34 +148,34 @@ decision d : string {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/verify", strings.NewReader(good)))
 	if rec.Code != 200 {
-		t.Fatalf("verify candidate valide: code %d, corps %s", rec.Code, rec.Body.String())
+		t.Fatalf("verify valid candidate: code %d, body %s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), `"report"`) {
-		t.Errorf("report absent: %s", rec.Body.String())
+		t.Errorf("report missing: %s", rec.Body.String())
 	}
-	// Source invalide -> 422 structuré.
+	// Invalid source -> structured 422.
 	rec2 := httptest.NewRecorder()
 	h.ServeHTTP(rec2, httptest.NewRequest("POST", "/v1/verify", strings.NewReader("bogus")))
 	if rec2.Code != 422 {
-		t.Errorf("verify candidate invalide: code %d, attendu 422", rec2.Code)
+		t.Errorf("verify invalid candidate: code %d, expected 422", rec2.Code)
 	}
 }
 
-// POST /v1/check : claims sur une source candidate.
+// POST /v1/check: claims against a candidate source.
 func TestServiceCheckCandidate(t *testing.T) {
 	h := creditHandler(t)
 	body := `{"rules":"model \"m\" {}\ninput n : number\ndecision d : string {\n  needs: n\n  hit: first\n  < 0 => \"neg\"\n  -   => \"pos\"\n}","claims":[{"decision":"d","input":{"n":-1},"expect":"neg"}]}`
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/check", strings.NewReader(body)))
 	if rec.Code != 200 {
-		t.Fatalf("check candidate: code %d, corps %s", rec.Code, rec.Body.String())
+		t.Fatalf("check candidate: code %d, body %s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), "supported") {
-		t.Errorf("claim attendu supported: %s", rec.Body.String())
+		t.Errorf("claim expected supported: %s", rec.Body.String())
 	}
 }
 
-// GET /v1/source renvoie la source du modèle courant (si stockée).
+// GET /v1/source returns the source of the current model (if stored).
 func TestServiceSource(t *testing.T) {
 	src := "model \"m\" {}\ninput n : number\ndecision d : number = n\n"
 	m, err := dsl.Parse(src)
@@ -192,38 +192,38 @@ func TestServiceSource(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/v1/source", nil))
 	if rec.Code != 200 || rec.Body.String() != src {
-		t.Errorf("source: code %d, corps %q", rec.Code, rec.Body.String())
+		t.Errorf("source: code %d, body %q", rec.Code, rec.Body.String())
 	}
 }
 
-// CORS : preflight OPTIONS -> 204 + en-tête Access-Control-Allow-Origin.
+// CORS: preflight OPTIONS -> 204 + Access-Control-Allow-Origin header.
 func TestServiceCORS(t *testing.T) {
 	h := creditHandler(t)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("OPTIONS", "/v1/verify", nil))
 	if rec.Code != 204 {
-		t.Errorf("preflight: code %d, attendu 204", rec.Code)
+		t.Errorf("preflight: code %d, expected 204", rec.Code)
 	}
 	if rec.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Errorf("en-tête CORS absent")
+		t.Errorf("CORS header missing")
 	}
 }
 
 func TestServiceBadInput(t *testing.T) {
 	h := creditHandler(t)
-	req := httptest.NewRequest("POST", "/v1/decisions/eligibility", strings.NewReader("pas du json"))
+	req := httptest.NewRequest("POST", "/v1/decisions/eligibility", strings.NewReader("not json"))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
-		t.Errorf("code = %d, attendu 400", rec.Code)
+		t.Errorf("code = %d, expected 400", rec.Code)
 	}
 }
 
 func TestServiceReadyWhenEmpty(t *testing.T) {
-	srv := service.New(registry.New(), nil, nil) // aucun modèle
+	srv := service.New(registry.New(), nil, nil) // no model
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/readyz", nil))
 	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("readyz sans modèle = %d, attendu 503", rec.Code)
+		t.Errorf("readyz without model = %d, expected 503", rec.Code)
 	}
 }
