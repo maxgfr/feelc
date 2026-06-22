@@ -100,13 +100,23 @@ type dim struct {
 	witnesses []ir.Value
 }
 
+// smtProve est le POINT D'EXTENSION pour un backend SMT (Z3), activé par le build tag `smt`
+// (cf. verify_smt.go, ADR 0007). Par défaut nil : les tables à cellules Op=Prog (non géométriques)
+// restent en dégradation honnête `not-verifiable`. Un backend doit renvoyer true s'il a TRAITÉ la
+// décision (ajouté ses findings), false pour laisser le not-verifiable par défaut.
+var smtProve func(cm *ir.CompiledModel, d *ir.Decision, rep *Report) bool
+
 func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 	t := d.Table
 
-	// Dégradation honnête : pas de cellule Op=Prog (non géométrique).
+	// Cellule Op=Prog (non géométrique) : router vers le backend SMT s'il est branché, sinon
+	// dégradation honnête `not-verifiable`.
 	for _, r := range t.Rules {
 		for _, c := range r.Conds {
 			if c.Op == ir.OpProg {
+				if smtProve != nil && smtProve(cm, d, rep) {
+					return
+				}
 				rep.add(Finding{Decision: d.Name, Kind: KindNotVerifiable, Severity: SevWarning,
 					Message: "table non prouvable géométriquement (cellule expression Op=Prog) — résidu non vérifié"})
 				return
