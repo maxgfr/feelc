@@ -22,6 +22,7 @@ import (
 	"github.com/maxgfr/feelc/internal/check"
 	"github.com/maxgfr/feelc/internal/diag"
 	"github.com/maxgfr/feelc/internal/dmnxml"
+	"github.com/maxgfr/feelc/internal/dsl"
 	"github.com/maxgfr/feelc/internal/engine"
 	"github.com/maxgfr/feelc/internal/explain"
 	"github.com/maxgfr/feelc/internal/fmtrules"
@@ -136,6 +137,8 @@ func main() {
 		err = cmdFmt(args)
 	case "import":
 		err = cmdImport(args)
+	case "export":
+		err = cmdExport(args)
 	case "serve":
 		err = cmdServe(args)
 	case "version", "--version", "-v":
@@ -183,6 +186,7 @@ Usage:
   feelc check  --rules <fichier.rules> --claims <claims.json> [--json]
   feelc fmt    --rules <fichier.rules> [-w] [--check]
   feelc import --in <modele.dmn> [-o <sortie.rules>]
+  feelc export --rules <fichier.rules> [-o <sortie.dmn>]
   feelc serve  --rules <fichier.rules> [--addr :8080] [--watch] [--strict]
   feelc version
 
@@ -255,6 +259,38 @@ func cmdImport(args []string) error {
 		return nil
 	}
 	return os.WriteFile(*out, []byte(rules), 0o644)
+}
+
+func cmdExport(args []string) error {
+	fs := flag.NewFlagSet("export", flag.ContinueOnError)
+	rulesPath := fs.String("rules", "", "chemin du fichier .rules à exporter en DMN")
+	out := fs.String("o", "", "fichier .dmn de sortie (stdout si absent)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *rulesPath == "" {
+		return fmt.Errorf("--rules est requis")
+	}
+	src, err := os.ReadFile(*rulesPath)
+	if err != nil {
+		return err
+	}
+	m, err := dsl.ParseFile(*rulesPath, string(src))
+	if err != nil {
+		return err
+	}
+	xmlOut, warns, err := dmnxml.Export(m)
+	if err != nil {
+		return err
+	}
+	for _, w := range warns {
+		fmt.Fprintln(os.Stderr, "avertissement:", w)
+	}
+	if *out == "" {
+		_, err = os.Stdout.Write(xmlOut)
+		return err
+	}
+	return os.WriteFile(*out, xmlOut, 0o644)
 }
 
 func cmdCheck(args []string) error {
