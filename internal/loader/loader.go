@@ -62,7 +62,7 @@ func Reload(path string, reg *registry.Registry, strict bool) (*registry.Entry, 
 	if strict && rep.Blockers() > 0 {
 		return nil, rep, fmt.Errorf("%d bloqueur(s) de vérification (mode strict) — modèle non publié", rep.Blockers())
 	}
-	return reg.Store(cm, hash), rep, nil
+	return reg.StoreWithSource(cm, hash, src), rep, nil
 }
 
 // Watch surveille le fichier (via son répertoire, pour survivre aux write-rename des éditeurs)

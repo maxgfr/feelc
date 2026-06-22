@@ -17,6 +17,7 @@ type Entry struct {
 	Model   *ir.CompiledModel
 	Version int64
 	Hash    string
+	Source  []byte // source .rules à l'origine du modèle (pour GET /v1/source ; nil si inconnue)
 }
 
 // Registry : porteur thread-safe du modèle courant.
@@ -34,7 +35,12 @@ func (r *Registry) Current() *Entry { return r.cur.Load() }
 
 // Store publie un nouveau modèle (swap O(1) lock-free) et l'ajoute à l'historique.
 func (r *Registry) Store(cm *ir.CompiledModel, hash string) *Entry {
-	e := &Entry{Model: cm, Version: r.ver.Add(1), Hash: hash}
+	return r.StoreWithSource(cm, hash, nil)
+}
+
+// StoreWithSource est Store en conservant aussi la source .rules (servie par GET /v1/source).
+func (r *Registry) StoreWithSource(cm *ir.CompiledModel, hash string, src []byte) *Entry {
+	e := &Entry{Model: cm, Version: r.ver.Add(1), Hash: hash, Source: src}
 	r.cur.Store(e)
 	r.mu.Lock()
 	r.history = append(r.history, e)
@@ -53,7 +59,7 @@ func (r *Registry) Rollback() (*Entry, bool) {
 		return nil, false
 	}
 	prev := r.history[len(r.history)-2]
-	e := &Entry{Model: prev.Model, Version: r.ver.Add(1), Hash: prev.Hash}
+	e := &Entry{Model: prev.Model, Version: r.ver.Add(1), Hash: prev.Hash, Source: prev.Source}
 	r.cur.Store(e)
 	r.history = append(r.history, e)
 	return e, true

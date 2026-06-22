@@ -5,14 +5,20 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
 
 	"github.com/maxgfr/feelc/internal/audit"
+	"github.com/maxgfr/feelc/internal/check"
+	"github.com/maxgfr/feelc/internal/diag"
 	"github.com/maxgfr/feelc/internal/engine"
 	"github.com/maxgfr/feelc/internal/explain"
+	"github.com/maxgfr/feelc/internal/ir"
+	"github.com/maxgfr/feelc/internal/loader"
 	"github.com/maxgfr/feelc/internal/registry"
 )
 
@@ -34,10 +40,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/decisions/{key}/explain", s.handleExplain)
 	mux.HandleFunc("POST /v1/evaluate", s.handleEvaluate)
 	mux.HandleFunc("GET /v1/model", s.handleModel)
+	mux.HandleFunc("GET /v1/source", s.handleSource)         // source .rules courante (éditeur web)
+	mux.HandleFunc("POST /v1/verify", s.handleVerifyCandidate) // vérifie une source CANDIDATE (sans swap)
+	mux.HandleFunc("POST /v1/check", s.handleCheckCandidate)   // check claims sur une source CANDIDATE
 	mux.HandleFunc("POST /v1/admin/reload", s.handleReload)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 	mux.HandleFunc("GET /readyz", s.handleReady)
-	return recoverMW(mux)
+	return corsMW(recoverMW(mux))
 }
 
 func (s *Server) handleDecision(w http.ResponseWriter, r *http.Request) {
@@ -119,13 +128,112 @@ func (s *Server) handleModel(w http.ResponseWriter, _ *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, "aucun modèle chargé")
 		return
 	}
-	names := make([]string, len(entry.Model.Decisions))
-	for i, d := range entry.Model.Decisions {
-		names[i] = d.Name
+	type decInfo struct {
+		Name      string   `json:"name"`
+		Kind      string   `json:"kind"`
+		HitPolicy string   `json:"hitPolicy,omitempty"`
+		Deps      []string `json:"deps,omitempty"`
+	}
+	decisions := make([]decInfo, len(entry.Model.Decisions))
+	for i := range entry.Model.Decisions {
+		d := &entry.Model.Decisions[i]
+		info := decInfo{Name: d.Name, Deps: d.Deps}
+		if d.Kind == ir.KindTable && d.Table != nil {
+			info.Kind = "table"
+			info.HitPolicy = hitPolicyName(d.Table.HitPolicy)
+		} else {
+			info.Kind = "literal-expr"
+		}
+		decisions[i] = info
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"name": entry.Model.Name, "version": entry.Version, "hash": entry.Hash, "decisions": names,
+		"name": entry.Model.Name, "version": entry.Version, "hash": entry.Hash, "decisions": decisions,
 	})
+}
+
+// handleSource renvoie la source .rules courante (éditeur web : LIRE le modèle servi).
+func (s *Server) handleSource(w http.ResponseWriter, _ *http.Request) {
+	entry := s.reg.Current()
+	if entry == nil {
+		writeErr(w, http.StatusServiceUnavailable, "aucun modèle chargé")
+		return
+	}
+	if entry.Source == nil {
+		writeErr(w, http.StatusNotFound, "source indisponible (modèle chargé sans source, ex: .ir.bin)")
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(entry.Source)
+}
+
+// handleVerifyCandidate compile+vérifie une source CANDIDATE en mémoire, SANS swap (éditeur web :
+// prévisualiser la vérification avant de publier). Body = source .rules brute.
+func (s *Server) handleVerifyCandidate(w http.ResponseWriter, r *http.Request) {
+	src, err := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "lecture du corps: "+err.Error())
+		return
+	}
+	_, hash, rep, err := loader.Compile(src)
+	if err != nil {
+		writeCompileErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"hash": hash, "report": rep, "blockers": rep.Blockers()})
+}
+
+// handleCheckCandidate exécute des claims sur une source CANDIDATE en mémoire (sans swap).
+// Body JSON = { "rules": "<source>", "claims": [ ... ] }.
+func (s *Server) handleCheckCandidate(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	dec := json.NewDecoder(r.Body)
+	dec.UseNumber() // exactitude des nombres attendus dans les claims
+	var doc struct {
+		Rules  string        `json:"rules"`
+		Claims []check.Claim `json:"claims"`
+	}
+	if err := dec.Decode(&doc); err != nil {
+		writeErr(w, http.StatusBadRequest, "corps JSON invalide: "+err.Error())
+		return
+	}
+	cm, _, _, err := loader.Compile([]byte(doc.Rules))
+	if err != nil {
+		writeCompileErr(w, err)
+		return
+	}
+	rep := check.Check(cm, doc.Claims)
+	writeJSON(w, http.StatusOK, map[string]any{"report": rep, "blockers": rep.Blockers()})
+}
+
+// writeCompileErr rend une erreur de compilation : structurée (422 + {file,line,col,...}) si c'est
+// un diag.Error, sinon message brut.
+func writeCompileErr(w http.ResponseWriter, err error) {
+	var de *diag.Error
+	if errors.As(err, &de) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": de})
+		return
+	}
+	writeErr(w, http.StatusUnprocessableEntity, err.Error())
+}
+
+func hitPolicyName(h ir.HitPolicy) string {
+	switch h {
+	case ir.HitUnique:
+		return "unique"
+	case ir.HitAny:
+		return "any"
+	case ir.HitFirst:
+		return "first"
+	case ir.HitPriority:
+		return "priority"
+	case ir.HitCollect:
+		return "collect"
+	case ir.HitRuleOrder:
+		return "rule order"
+	}
+	return ""
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, _ *http.Request) {
@@ -146,6 +254,21 @@ func (s *Server) handleReload(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	s.handleModel(w, nil)
+}
+
+// corsMW autorise un front (éditeur web) à appeler l'API depuis le navigateur (BYO key côté
+// front, jamais de secret côté moteur). Origine `*` : usage dev/outillage.
+func corsMW(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // recoverMW garantit qu'un panic (ex: dans la VM) renvoie 500 sans tuer le process.
