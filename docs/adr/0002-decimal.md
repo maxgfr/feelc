@@ -1,40 +1,40 @@
-# ADR 0002 — Arithmétique décimale : cockroachdb/apd vs int128 maison
+# ADR 0002 — Decimal arithmetic: cockroachdb/apd vs in-house int128
 
-- **Statut** : accepté (Tranche 0, 2026-06-22)
-- **Décideurs** : maxgfr
+- **Status**: accepted (Tranche 0, 2026-06-22)
+- **Deciders**: maxgfr
 
-## Contexte
+## Context
 
-feelc DOIT être **déterministe bit-à-bit inter-plateforme** : c'est la thèse centrale du produit
-(décisions reproductibles, auditables, rejouables). Les domaines crédit/assurance manipulent des montants
-et des taux (`dti = monthly_debt / (annual_income / 12)`, comparé à `0.43`) où l'arithmétique binaire
-(`float64`, `big.Float`) introduit des erreurs de représentation (`0.1 + 0.2 != 0.3`) et un arrondi
-non maîtrisé. Il faut donc un **décimal exact** avec un arrondi **HALF_EVEN** (banker's rounding) figé.
+feelc MUST be **bit-for-bit deterministic across platforms**: this is the product's central thesis
+(reproducible, auditable, replayable decisions). The credit/insurance domains handle amounts
+and rates (`dti = monthly_debt / (annual_income / 12)`, compared against `0.43`) where binary arithmetic
+(`float64`, `big.Float`) introduces representation errors (`0.1 + 0.2 != 0.3`) and uncontrolled
+rounding. We therefore need an **exact decimal** with a fixed **HALF_EVEN** (banker's rounding) mode.
 
-Le plan « complet » évoquait un décimal **int128 maison** (mantisse int128 + échelle). La revue adverse
-a classé cela comme un **piège de plusieurs semaines** (Go n'a pas d'int128 natif ; add/sub/mul/div +
-arrondi + parsing/format corrects = un projet en soi, source de bugs de déterminisme subtils).
+The "complete" plan mentioned an **in-house int128 decimal** (int128 mantissa + scale). The adversarial
+review classified this as a **multi-week trap** (Go has no native int128; correct add/sub/mul/div +
+rounding + parsing/formatting = a project in itself, a source of subtle determinism bugs).
 
-## Évaluation empirique (spike `spike/decimal_test.go`)
+## Empirical evaluation (spike `spike/decimal_test.go`)
 
-`github.com/cockroachdb/apd/v3@v3.2.3` (Apache-2.0, utilisé en prod par CockroachDB) vérifié :
-- **Exactitude** : `0.1 + 0.2 == 0.3` exact ; `1500 / (60000/12) == 0.3` exact (cas dti crédit). ✅
-- **HALF_EVEN** : `2.5→2`, `3.5→4`, `2.125→2.12`, `2.135→2.14` (à 2 décimales). ✅
+`github.com/cockroachdb/apd/v3@v3.2.3` (Apache-2.0, used in production by CockroachDB) verified:
+- **Exactness**: `0.1 + 0.2 == 0.3` exact; `1500 / (60000/12) == 0.3` exact (credit dti case). ✅
+- **HALF_EVEN**: `2.5→2`, `3.5→4`, `2.125→2.12`, `2.135→2.14` (at 2 decimals). ✅
 
-## Décision
+## Decision
 
-1. **Utiliser `cockroachdb/apd/v3`** comme moteur décimal de feelc dès le v1. Contexte figé :
-   précision suffisante (≥ 34 chiffres, type Decimal128) et `Rounding = RoundHalfEven` par défaut,
-   l'arrondi du modèle (`rounding: half_even`) étant stocké dans l'IR.
-2. Le wrapper vit dans `internal/decimal` : il expose le strict nécessaire (parse depuis le littéral
-   source, +, -, *, /, comparaison, quantize/arrondi) et **fige le contexte** pour garantir le
-   déterminisme — aucune dépendance à un état global mutable.
-3. L'**int128 inline maison reste une micro-optimisation différée**, à n'envisager qu'**après** des
-   benchmarks (`testing.B -benchmem`) montrant que apd est le goulot du hot path. Pas une décision d'archi v1.
+1. **Use `cockroachdb/apd/v3`** as feelc's decimal engine from v1. Fixed context:
+   sufficient precision (≥ 34 digits, Decimal128 type) and `Rounding = RoundHalfEven` by default,
+   the model's rounding (`rounding: half_even`) being stored in the IR.
+2. The wrapper lives in `internal/decimal`: it exposes only the strict necessities (parse from the
+   source literal, +, -, *, /, comparison, quantize/rounding) and **freezes the context** to guarantee
+   determinism — no dependency on mutable global state.
+3. The **in-house inline int128 remains a deferred micro-optimization**, to be considered only **after**
+   benchmarks (`testing.B -benchmem`) show that apd is the bottleneck of the hot path. Not a v1 architecture decision.
 
-## Conséquences
+## Consequences
 
-- Déterminisme et exactitude **acquis immédiatement**, sans semaines de code numérique fragile.
-- Une dépendance Apache-2.0 de plus (compatible avec la licence Apache-2.0 de feelc).
-- `Value` de la VM portera un décimal apd (ou une vue compacte de celui-ci) ; le coût d'allocation
-  d'apd dans le hot path sera **mesuré** en Tranche 4/5 et optimisé si nécessaire (pooling, ou int128).
+- Determinism and exactness **acquired immediately**, without weeks of fragile numerical code.
+- One more Apache-2.0 dependency (compatible with feelc's Apache-2.0 license).
+- The VM's `Value` will carry an apd decimal (or a compact view of it); the allocation cost
+  of apd in the hot path will be **measured** in Tranche 4/5 and optimized if necessary (pooling, or int128).

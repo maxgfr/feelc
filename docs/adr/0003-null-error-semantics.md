@@ -1,49 +1,49 @@
-# ADR 0003 — Sémantique de null et des erreurs (trivalence)
+# ADR 0003 — Semantics of null and errors (trivalence)
 
-- **Statut** : accepté (Tranche 2, 2026-06-22)
-- **Décideurs** : maxgfr
+- **Status**: accepted (Slice 2, 2026-06-22)
+- **Deciders**: maxgfr
 
-## Contexte
+## Context
 
-FEEL est **trivalent** : `null` est une valeur de première classe et se propage sans lever
-d'exception. C'est précisément ce qui fait échouer ~30 % du DMN TCK aux implémentations naïves
-(la revue adverse l'a signalé). Il faut donc **figer une table de décision null/erreur explicite**
-et la tester, *avant* de viser le TCK. feelc distingue trois mondes : la frontière d'entrée, les
-cellules de table, et les expressions.
+FEEL is **trivalent**: `null` is a first-class value and propagates without raising
+an exception. This is precisely what makes ~30% of the DMN TCK fail on naive implementations
+(the adversarial review flagged it). We must therefore **freeze an explicit null/error decision
+table** and test it, *before* targeting the TCK. feelc distinguishes three worlds: the input
+boundary, table cells, and expressions.
 
-## Décision (politique v2)
+## Decision (policy v2)
 
-### 1. Frontière d'entrée
-- Une entrée externe **manquante** référencée par une décision → **erreur** (`variable inconnue à
-  l'exécution`). C'est une violation de contrat de l'appelant, pas un `null` FEEL. Fail-fast.
-- Une entrée explicitement `null` (JSON `null`) → valeur `null` FEEL qui suit les règles ci-dessous.
+### 1. Input boundary
+- A **missing** external input referenced by a decision → **error** (`unknown variable at
+  runtime`). This is a contract violation by the caller, not a FEEL `null`. Fail-fast.
+- An input explicitly `null` (JSON `null`) → FEEL `null` value that follows the rules below.
 
-### 2. Cellules de table (unary tests)
-- Une cellule testée contre une valeur `null` (`< 580`, `[a..b)`, `= x`, ensemble) → **ne matche pas**
-  (`false`), **sans erreur**. `null` ne satisfait aucune condition. → la ligne `default` (si présente)
-  prend le relais ; sinon la décision vaut `null`.
-- Un **type incohérent non-null** dans une cellule (ex. comparer un `string` à un seuil numérique alors
-  que le typecheck aurait dû l'interdire) → **erreur** (anomalie réelle, pas un cas métier).
+### 2. Table cells (unary tests)
+- A cell tested against a `null` value (`< 580`, `[a..b)`, `= x`, set) → **does not match**
+  (`false`), **without error**. `null` satisfies no condition. → the `default` row (if present)
+  takes over; otherwise the decision is `null`.
+- A **non-null inconsistent type** in a cell (e.g. comparing a `string` to a numeric threshold when
+  the typecheck should have forbidden it) → **error** (a real anomaly, not a business case).
 
-### 3. Décisions
-- Table sans règle gagnante **et sans `default`** → résultat **`null`** (et la **vérification de
-  complétude (Tranche 4) signalera le trou** avec un contre-exemple — on ne masque rien en silence).
-- Expression : **arithmétique avec un opérande `null`** → propage **`null`** (jamais d'exception).
-- **Division par zéro** → **erreur** (cas indéfini, distinct de la propagation de null ; choix orienté
-  auditabilité : une division par zéro est un défaut du modèle/des données, pas un résultat métier).
+### 3. Decisions
+- Table with no winning rule **and no `default`** → **`null`** result (and the **completeness
+  check (Slice 4) will flag the gap** with a counter-example — nothing is silently hidden).
+- Expression: **arithmetic with a `null` operand** → propagates **`null`** (never an exception).
+- **Division by zero** → **error** (undefined case, distinct from null propagation; choice driven by
+  auditability: a division by zero is a defect in the model/data, not a business result).
 
-## Déféré (assumé, jamais conformé en silence)
+## Deferred (assumed, never silently conformed)
 
-- **Logique booléenne trivalente complète** au niveau expression (`null and false`, `null or true`,
-  comparaison `null < x` → `null` plutôt que `false`). En v2 une comparaison sur `null` dans une
-  **expression** rend `false` (conservateur). La trivalence booléenne fine arrivera avec le harness
-  DMN TCK (cf. plan), accompagnée de tests dédiés. Aucune prétention de conformité TCK tant que ce
-  n'est pas implémenté.
+- **Full trivalent boolean logic** at the expression level (`null and false`, `null or true`,
+  comparison `null < x` → `null` rather than `false`). In v2 a comparison on `null` within an
+  **expression** yields `false` (conservative). Fine-grained boolean trivalence will arrive with the
+  DMN TCK harness (cf. plan), accompanied by dedicated tests. No claim of TCK conformance until this
+  is implemented.
 
-## Conséquences
+## Consequences
 
-- Comportement **déterministe et testé** sur les cas null courants des 4 exemples.
-- Les cellules tolèrent `null` (robustesse : une décision amont qui rend `null` n'explose pas l'aval,
-  elle tombe sur le `default`).
-- La frontière (input manquant, division par zéro) **échoue franchement** plutôt que de produire un
-  résultat trompeur — cohérent avec l'objectif d'auditabilité.
+- **Deterministic and tested** behavior on the common null cases of the 4 examples.
+- Cells tolerate `null` (robustness: an upstream decision that returns `null` does not blow up the
+  downstream, it falls onto the `default`).
+- The boundary (missing input, division by zero) **fails outright** rather than producing a
+  misleading result — consistent with the auditability objective.

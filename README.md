@@ -1,23 +1,23 @@
 # feelc
 
-> Un pseudo-langage de règles métier (DMN/FEEL) **compilé en Go**, dans l'esprit d'IBM ODM/ILOG —
-> avec un angle distinctif : **l'IA aide à rédiger et expliquer les règles, mais à l'exécution tout
-> est 100 % déterministe, reproductible et auditable** (aucun LLM dans le cœur).
+> A business-rules pseudo-language (DMN/FEEL) **compiled to Go**, in the spirit of IBM ODM/ILOG —
+> with a distinctive angle: **AI helps write and explain the rules, but at execution time everything
+> is 100% deterministic, reproducible and auditable** (no LLM in the core).
 
-## Pourquoi
+## Why
 
-Les moteurs de règles classiques opposent *lisibilité métier* et *exécution fiable*. `feelc` réconcilie
-les deux :
+Classic rule engines pit *business readability* against *reliable execution*. `feelc` reconciles
+the two:
 
-- **L'IA écrit, le moteur exécute.** On rédige les règles dans un DSL `.rules` lisible (paradigme DMN :
-  un graphe de décisions, chacune une table de décision, expressions en FEEL). Un LLM peut le générer
-  nativement. Le compilateur Go le transforme en IR typé et vérifié, exécuté par une petite VM déterministe.
-- **Vérification formelle.** `feelc verify` prouve la **complétude** (aucun cas non couvert),
-  l'**absence de conflits**, et détecte **règles mortes / redondances** — avec des contre-exemples concrets.
-- **Hot-reload.** Les règles sont des *données* : on les met à jour à chaud, sans recompiler le binaire.
-- **Auditable.** Chaque décision est rejouable (hash du modèle + trace d'explication citant la source).
+- **AI writes, the engine executes.** Rules are written in a readable `.rules` DSL (DMN paradigm:
+  a graph of decisions, each a decision table, expressions in FEEL). An LLM can generate it
+  natively. The Go compiler transforms it into typed, checked IR, executed by a small deterministic VM.
+- **Formal verification.** `feelc verify` proves **completeness** (no uncovered case),
+  the **absence of conflicts**, and detects **dead rules / redundancies** — with concrete counterexamples.
+- **Hot-reload.** Rules are *data*: you update them on the fly, without recompiling the binary.
+- **Auditable.** Each decision is replayable (model hash + explanation trace citing the source).
 
-## Commandes
+## Commands
 
 ```sh
 feelc run    --rules m.rules --decision <nom> --input '{…}' [--json]   # évaluer une décision
@@ -27,24 +27,24 @@ feelc import --in modele.dmn [-o m.rules]                              # importe
 feelc serve  --rules m.rules [--addr :8080] [--watch] [--strict]       # service HTTP + hot-reload
 ```
 
-## Statut
+## Status
 
-Cœur **opérationnel** : langage → compilateur → IR → VM déterministe (décimal exact), 7 hit policies,
-**vérification formelle** (complétude/conflits/règles mortes avec contre-exemples), **service HTTP +
-hot-reload**, **gate sémantique** (`check`), **import DMN XML**. 4 exemples de référence vérifiés.
-Reportés (ADR 0004) : BKM paramétré, extension SMT/Z3.
+Core **operational**: language → compiler → IR → deterministic VM (exact decimal), 7 hit policies,
+**formal verification** (completeness/conflicts/dead rules with counterexamples), **HTTP service +
+hot-reload**, **semantic gate** (`check`), **DMN XML import**. 4 verified reference examples.
+Deferred (ADR 0004): parameterized BKM, SMT/Z3 extension.
 
-## Skill d'autoring (l'IA écrit les règles)
+## Authoring skill (AI writes the rules)
 
-Une **skill portable** (Claude Code, Codex, Cursor…) est intégrée dans [`skill/`](skill/) : elle
-guide un agent pour rédiger/vérifier des règles via le flux *interview → DSL → `verify` → `run` →
-itère*, en utilisant `feelc` comme oracle déterministe. Voir [`skill/SKILL.md`](skill/SKILL.md).
+A **portable skill** (Claude Code, Codex, Cursor…) is bundled in [`skill/`](skill/): it
+guides an agent in writing/verifying rules through the *interview → DSL → `verify` → `run` →
+iterate* flow, using `feelc` as a deterministic oracle. See [`skill/SKILL.md`](skill/SKILL.md).
 
 ```sh
 node skill/scripts/feelc-skill.mjs verify --rules examples/credit/credit.rules --json
 ```
 
-## Exemple
+## Example
 
 ```
 model "credit" {
@@ -71,6 +71,6 @@ decision eligibility : Eligibility {
 }
 ```
 
-## Licence
+## License
 
-Apache-2.0. Voir [LICENSE](./LICENSE).
+Apache-2.0. See [LICENSE](./LICENSE).

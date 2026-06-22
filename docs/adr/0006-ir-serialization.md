@@ -1,46 +1,46 @@
-# ADR 0006 — Sérialisation canonique de l'IR + hash du modèle compilé
+# ADR 0006 — Canonical IR serialization + compiled model hash
 
-- **Statut** : accepté (2026-06-22)
-- **Décideurs** : maxgfr
+- **Status**: accepted (2026-06-22)
+- **Deciders**: maxgfr
 
-## Contexte
+## Context
 
-feelc vend du **déterminisme bit-à-bit inter-plateforme**. Il manquait (1) un format de
-distribution du modèle **déjà compilé** (`.ir.bin`) pour exécuter sans re-parser/re-compiler,
-et (2) une **identité canonique** du modèle compilé pour figer des goldens de non-régression
-(Tranche 19). Le hash du service était jusqu'ici `sha256(source)` : sensible au formatage du
-texte, pas à la sémantique.
+feelc sells **bit-for-bit cross-platform determinism**. It was missing (1) a distribution
+format for the **already-compiled** model (`.ir.bin`) to execute without re-parsing/re-compiling,
+and (2) a **canonical identity** of the compiled model to freeze non-regression goldens
+(Tranche 19). The service hash was until now `sha256(source)`: sensitive to text formatting,
+not to semantics.
 
-## Décision
+## Decision
 
-Encodage **manuel, length-prefixed big-endian** dans `internal/ir/codec.go` :
+**Manual, length-prefixed big-endian** encoding in `internal/ir/codec.go`:
 
 - `Encode(cm) ([]byte, error)` / `Decode([]byte) (*CompiledModel, error)` / `Hash(cm) ([32]byte, error)`.
-- En-tête `magic ("FLIR") + version (uint16)`. `IsEncoded(b)` teste le magic (le CLI distingue
-  ainsi `.rules` d'un `.ir.bin` sans se fier à l'extension).
-- **gob proscrit** : non canonique (ordre des champs/maps, drift de version) — incompatible avec
-  l'exigence de déterminisme.
-- Les **maps** (`Inputs`, `Domains`, `context`) sont émises en **ordre de clé trié**.
-- Les **décimaux** passent par `MarshalText` : texte **exact**, **sans `Reduce`** (aucune perte
-  de précision ni d'échelle), arch-indépendant.
+- Header `magic ("FLIR") + version (uint16)`. `IsEncoded(b)` tests the magic (the CLI thereby
+  distinguishes a `.rules` from an `.ir.bin` without relying on the extension).
+- **gob banned**: non-canonical (field/map ordering, version drift) — incompatible with the
+  determinism requirement.
+- **Maps** (`Inputs`, `Domains`, `context`) are emitted in **sorted key order**.
+- **Decimals** go through `MarshalText`: **exact** text, **without `Reduce`** (no loss of
+  precision or scale), arch-independent.
 
-`loader.Compile` migre vers `hex(ir.Hash(cm))` : l'identité reflète désormais l'**IR**, pas le
-texte. Deux sources distinctes qui compilent vers le même IR partagent le hash (**breaking voulu** :
-aucun test ne fige l'ancien hash de source).
+`loader.Compile` migrates to `hex(ir.Hash(cm))`: the identity now reflects the **IR**, not the
+text. Two distinct sources that compile to the same IR share the hash (**intended breaking change**:
+no test freezes the old source hash).
 
-CLI : `feelc compile --rules x.rules -o x.ir.bin` (affiche taille + hash) ; `run`/`verify`/`check`
-acceptent indifféremment une source ou un `.ir.bin`.
+CLI: `feelc compile --rules x.rules -o x.ir.bin` (displays size + hash); `run`/`verify`/`check`
+accept either a source or an `.ir.bin` interchangeably.
 
-## Conséquences
+## Consequences
 
-- Distribution/exécution d'un modèle compilé sans la chaîne de parsing.
-- Base des goldens déterministes (ADR/Tranche 19) : `modelHash` rejouable amd64 + arm64.
-- Round-trip prouvé stable (`Encode→Decode→Encode` identique bit-à-bit) ; magic invalide rejeté
-  (jamais conformer en silence).
-- Le `.ir.bin` ne porte **pas** les positions source (`Src`/`Line`/`Col`) : `explain` sur un binaire
-  dégrade honnêtement (positions absentes).
-- **Robustesse (blob non fiable).** `Decode` ingère des `.ir.bin` arbitraires ; le décodeur borne
-  donc (a) toute longueur length-prefixed aux octets restants (`count()`) — pas de `make(..., n)`
-  géant depuis une taille corrompue → pas d'OOM ; (b) la profondeur de récursion
-  (`maxDecodeDepth`) — pas de débordement de pile fatal sur une imbrication TagList/Sub profonde.
-  Tout dépassement échoue franchement (jamais conformer en silence). Cf. revue adverse Tranche 4.
+- Distribution/execution of a compiled model without the parsing chain.
+- Basis for the deterministic goldens (ADR/Tranche 19): `modelHash` replayable amd64 + arm64.
+- Round-trip proven stable (`Encode→Decode→Encode` bit-for-bit identical); invalid magic rejected
+  (never conform silently).
+- The `.ir.bin` does **not** carry source positions (`Src`/`Line`/`Col`): `explain` on a binary
+  degrades honestly (positions absent).
+- **Robustness (untrusted blob).** `Decode` ingests arbitrary `.ir.bin`; the decoder therefore
+  bounds (a) every length-prefixed length to the remaining bytes (`count()`) — no giant
+  `make(..., n)` from a corrupt size → no OOM; (b) recursion depth
+  (`maxDecodeDepth`) — no fatal stack overflow on a deep TagList/Sub nesting.
+  Any overrun fails outright (never conform silently). Cf. adversarial review Tranche 4.

@@ -1,27 +1,27 @@
-# Sous-ensemble DMN TCK (fixtures)
+# DMN TCK subset (fixtures)
 
-Fixtures au **format officiel du DMN TCK** (`<testCases>`, namespace
-`http://www.omg.org/spec/DMN/20160719/testcase`) : une paire `<modèle>.dmn` + un ou plusieurs
-fichiers `*-test-*.xml`. Exécutées par `feelc tck --suite testdata/dmn-tck` (et par
+Fixtures in the **official DMN TCK format** (`<testCases>`, namespace
+`http://www.omg.org/spec/DMN/20160719/testcase`): a `<model>.dmn` pair + one or more
+`*-test-*.xml` files. Run by `feelc tck --suite testdata/dmn-tck` (and by
 `internal/tck`).
 
 ## Provenance
 
-Ces fichiers sont **rédigés à la main** pour rester *self-contained* et déterministes (pas de
-téléchargement réseau). Ils miment fidèlement le schéma du
-[DMN TCK officiel](https://github.com/dmn-tck/tck) (Apache-2.0). Le harnais `feelc tck` fonctionne
-aussi tel quel sur un **checkout réel du TCK** : `feelc tck --suite <path-vers-tck/TestCases>`.
+These files are **hand-written** to stay *self-contained* and deterministic (no
+network download). They faithfully mimic the schema of the
+[official DMN TCK](https://github.com/dmn-tck/tck) (Apache-2.0). The `feelc tck` harness also works
+as-is on a **real TCK checkout**: `feelc tck --suite <path-to-tck/TestCases>`.
 
-## Cas retenus
+## Selected cases
 
-- `grade/` — table `FIRST` scalaire (score → F/B/A). `grade-test-01.xml` : 3 cas **passants**.
-  `grade-test-02-skip.xml` : 1 cas **skippé** (valeur attendue de type `date`, hors sous-ensemble).
+- `grade/` — scalar `FIRST` table (score → F/B/A). `grade-test-01.xml`: 3 **passing** cases.
+  `grade-test-02-skip.xml`: 1 **skipped** case (expected value of type `date`, outside the subset).
 
-## Familles volontairement absentes (hors sous-ensemble v2, seraient SKIPPÉES)
+## Families deliberately absent (outside the v2 subset, would be SKIPPED)
 
-- types temporels (`date`, `time`, `dateTime`, `duration`) et `function` ;
-- DRG multi-décisions dont le câblage `informationRequirement`/`requiredDecision` n'est pas importé ;
-- built-ins multi-arguments (cf. ADR 0004 §3).
+- temporal types (`date`, `time`, `dateTime`, `duration`) and `function`;
+- multi-decision DRGs whose `informationRequirement`/`requiredDecision` wiring is not imported;
+- multi-argument built-ins (cf. ADR 0004 §3).
 
-Le rapport `feelc tck` distingue toujours `passed` / `failed` / `skipped` (avec raison) : la
-conformité = `passed / (passed+failed)`, les skips n'y comptent pas (couverture honnête).
+The `feelc tck` report always distinguishes `passed` / `failed` / `skipped` (with reason):
+conformance = `passed / (passed+failed)`, skips do not count toward it (honest coverage).

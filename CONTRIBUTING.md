@@ -1,59 +1,59 @@
-# Contribuer à feelc
+# Contributing to feelc
 
-feelc est un moteur de règles métier (DMN/FEEL) compilé vers un moteur **déterministe** en Go.
-Principe directeur : **jamais conformer/prétendre en silence** — tout ce qui est hors périmètre
-échoue franchement (ou est signalé en dégradation honnête), jamais accepté-puis-mal-interprété.
+feelc is a business rules engine (DMN/FEEL) compiled to a **deterministic** engine in Go.
+Guiding principle: **never silently conform/pretend** — anything out of scope
+fails plainly (or is reported as honest degradation), never accepted-then-misinterpreted.
 
-## Prérequis & build
+## Prerequisites & build
 
-- **Go 1.23+** (cf. `go.mod` et les workflows CI/release).
-- Le parseur FEEL est un **fork vendorisé** sous `third_party/feel`, épinglé via un `replace` dans
-  `go.mod` (exporte `FunCall.Args`, corrige un DoS parseur — cf. [ADR 0004 §1](docs/adr/0004-deferrals.md)).
-  Ne pas le « dé-vendoriser ».
+- **Go 1.23+** (see `go.mod` and the CI/release workflows).
+- The FEEL parser is a **vendored fork** under `third_party/feel`, pinned via a `replace` in
+  `go.mod` (exports `FunCall.Args`, fixes a parser DoS — see [ADR 0004 §1](docs/adr/0004-deferrals.md)).
+  Do not "de-vendor" it.
 
 ```sh
 go build ./...
 go vet ./...
-go test -race ./...                 # tout doit être vert
-go test -tags smt ./internal/...    # backend SMT optionnel (cf. ADR 0007 ; requiert z3 pour une preuve)
+go test -race ./...                 # everything must be green
+go test -tags smt ./internal/...    # optional SMT backend (see ADR 0007; requires z3 for a proof)
 ```
 
-Le sous-module `spike/` (Tranche 0, jetable) a son propre `go.mod` ; il n'est pas dans `./...`.
+The `spike/` submodule (Slice 0, throwaway) has its own `go.mod`; it is not part of `./...`.
 
 ## Discipline
 
-- **TDD** : test rouge d'abord, puis le minimum pour le vert ; refactor à vert.
-- **`go test -race ./...` + `go vet` verts** avant tout commit.
-- **Déterminisme** : aucune source d'indéterminisme dans le chemin de décision. Les **goldens**
-  (`internal/engine/golden_test.go`) sont rejoués en CI sur **amd64 + arm64** (preuve bit-à-bit).
-  Régénération : `FEELC_REGEN_GOLDEN=1 go test ./internal/engine -run Golden`.
-- **Pivots** (modifs à sérialiser, jamais paralléliser) : `internal/ir/match.go` (source unique
-  VM+verify), `internal/compiler/lower_expr.go` (point d'extension du lowering), le codec
-  `internal/ir/codec.go` (toute modif de struct change `ir.Hash` → régénérer les goldens).
+- **TDD**: red test first, then the minimum to go green; refactor while green.
+- **`go test -race ./...` + `go vet` green** before any commit.
+- **Determinism**: no source of nondeterminism in the decision path. The **goldens**
+  (`internal/engine/golden_test.go`) are replayed in CI on **amd64 + arm64** (bit-for-bit proof).
+  Regeneration: `FEELC_REGEN_GOLDEN=1 go test ./internal/engine -run Golden`.
+- **Pivots** (changes to serialize, never parallelize): `internal/ir/match.go` (single source
+  VM+verify), `internal/compiler/lower_expr.go` (lowering extension point), the
+  `internal/ir/codec.go` codec (any struct change alters `ir.Hash` → regenerate the goldens).
 
 ## Commits & release
 
-- **Conventional Commits** (`feat:`, `fix:`, `ci:`, `docs:`, `test:`…) : consommés par
-  semantic-release. Un `feat:`/`fix:` poussé sur `main` déclenche une release (goreleaser publie les
-  binaires multi-OS/arch). Les commits non-release (`ci:`, `docs:`, `test:`…) ne publient pas.
-- Terminer les messages par : `Co-Authored-By: ...` si pertinent.
+- **Conventional Commits** (`feat:`, `fix:`, `ci:`, `docs:`, `test:`…): consumed by
+  semantic-release. A `feat:`/`fix:` pushed to `main` triggers a release (goreleaser publishes the
+  multi-OS/arch binaries). Non-release commits (`ci:`, `docs:`, `test:`…) do not publish.
+- End messages with: `Co-Authored-By: ...` if relevant.
 
 ## ADR
 
-Les décisions d'architecture sont dans `docs/adr/` (numérotation : 0001 frontend FEEL, 0002
-décimal, 0003 null/erreur, 0004 reports, 0005 erreurs structurées, 0006 sérialisation IR, 0007
-backend SMT). Toute décision structurante ajoute/au met à jour un ADR (l'éthique du projet
-l'exige : un report doit être documenté, pas masqué).
+Architecture decisions live in `docs/adr/` (numbering: 0001 FEEL frontend, 0002
+decimal, 0003 null/error, 0004 deferrals, 0005 structured errors, 0006 IR serialization, 0007
+SMT backend). Any structuring decision adds/updates an ADR (the project's ethics
+require it: a deferral must be documented, not hidden).
 
-## La skill d'autoring (`skill/`)
+## The authoring skill (`skill/`)
 
-La skill `feelc-rules` vit dans le **sous-dossier `skill/`** du dépôt (pas à la racine). Un
-`npx skills add maxgfr/feelc` **nu ne suffit donc PAS** : il cible la racine, qui ne contient pas de
-`SKILL.md`. Utiliser la **tree-URL** pointant le sous-dossier :
+The `feelc-rules` skill lives in the **`skill/` subdirectory** of the repo (not at the root). A
+bare `npx skills add maxgfr/feelc` is therefore **NOT enough**: it targets the root, which has no
+`SKILL.md`. Use the **tree-URL** pointing at the subdirectory:
 
 ```sh
 npx skills add https://github.com/maxgfr/feelc/tree/main/skill
 ```
 
-La skill ne décide jamais d'un résultat « de tête » : le binaire `feelc` (compile / verify / run /
-check / explain) est l'**oracle déterministe**.
+The skill never decides a result "off the top of its head": the `feelc` binary (compile / verify / run /
+check / explain) is the **deterministic oracle**.

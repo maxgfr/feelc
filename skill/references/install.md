@@ -1,27 +1,27 @@
-# Fournir le binaire `feelc`
+# Providing the `feelc` binary
 
-Le wrapper `scripts/feelc-skill.mjs` cherche `feelc` dans cet ordre :
+The wrapper `scripts/feelc-skill.mjs` looks for `feelc` in this order:
 
-1. **`$FEELC_BIN`** — chemin explicite vers un binaire feelc.
+1. **`$FEELC_BIN`** — explicit path to a feelc binary.
    ```sh
-   export FEELC_BIN=/chemin/vers/feelc
+   export FEELC_BIN=/path/to/feelc
    ```
-2. **`feelc` sur le PATH** — si tu l'as installé globalement.
-3. **Binaire à la racine du dépôt** — `../../feelc` (la skill vit dans `feelc/skill/`).
-4. **Build automatique** — si la skill tourne dans le dépôt (`../../go.mod` présent) et que `go`
-   est installé, le wrapper lance `go build -o ../../feelc ./cmd/feelc`.
+2. **`feelc` on the PATH** — if you installed it globally.
+3. **Binary at the repository root** — `../../feelc` (the skill lives in `feelc/skill/`).
+4. **Automatic build** — if the skill runs inside the repository (`../../go.mod` present) and `go`
+   is installed, the wrapper runs `go build -o ../../feelc ./cmd/feelc`.
 
-> La skill est intégrée au dépôt `feelc` (sous `skill/`). En usage DANS le dépôt, 3/4 suffisent.
-> En installation autonome (copie de la skill seule), utilise plutôt 1 (`$FEELC_BIN`) ou 2 (PATH).
+> The skill is integrated into the `feelc` repository (under `skill/`). When used INSIDE the repository, 3/4 are sufficient.
+> For a standalone installation (copy of the skill alone), prefer 1 (`$FEELC_BIN`) or 2 (PATH).
 
-## Obtenir feelc
+## Getting feelc
 
-- Cloner et builder (Go ≥ 1.22) :
+- Clone and build (Go ≥ 1.22):
   ```sh
   git clone https://github.com/maxgfr/feelc
   cd feelc && go build -o feelc ./cmd/feelc
   export FEELC_BIN="$PWD/feelc"
   ```
-- Vérifier : `node skill/scripts/feelc-skill.mjs version` → `feelc <version>`.
+- Verify: `node skill/scripts/feelc-skill.mjs version` → `feelc <version>`.
 
-Le wrapper relaie ensuite toutes les sous-commandes telles quelles : `verify`, `run`, `serve`, `version`.
+The wrapper then relays all subcommands as-is: `verify`, `run`, `serve`, `version`.

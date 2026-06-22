@@ -14,94 +14,94 @@ metadata:
   version: 0.2.0
 ---
 
-# feelc-rules — écrire des règles métier vérifiables
+# feelc-rules — writing verifiable business rules
 
-Cette skill aide à **rédiger, vérifier et tester** des règles métier dans le langage **feelc**
-(paradigme DMN : un graphe de décisions liées, chacune une table de décision ou une expression,
-le tout en FEEL). feelc compile la source en moteur **déterministe** : à l'exécution, aucun LLM,
-décisions reproductibles et auditables. **Ton rôle = rédiger le DSL** ; le binaire `feelc` est
-l'**oracle déterministe** (compilation + vérification + évaluation). Ne décide JAMAIS d'un résultat
-de règle « de tête » : lance toujours `feelc`.
+This skill helps you **write, verify and test** business rules in the **feelc** language
+(DMN paradigm: a graph of linked decisions, each one a decision table or an expression,
+all in FEEL). feelc compiles the source into a **deterministic** engine: at runtime, no LLM,
+reproducible and auditable decisions. **Your role = writing the DSL**; the `feelc` binary is
+the **deterministic oracle** (compilation + verification + evaluation). NEVER decide a rule
+outcome "in your head": always run `feelc`.
 
-## Quand l'utiliser
+## When to use it
 
-- L'utilisateur veut encoder une politique métier (éligibilité, scoring, tarification, barème,
-  remises, droits/prestations…) en règles exécutables.
-- Il veut une table de décision **vérifiée** (pas de trou, pas de conflit) et **rejouable**.
-- Il mentionne DMN, FEEL, « moteur de règles », ou `feelc`.
+- The user wants to encode a business policy (eligibility, scoring, pricing, scale,
+  discounts, rights/benefits…) as executable rules.
+- They want a **verified** decision table (no gap, no conflict) that is **replayable**.
+- They mention DMN, FEEL, "rule engine", or `feelc`.
 
-## Pré-requis : le binaire `feelc`
+## Prerequisite: the `feelc` binary
 
-Toutes les commandes passent par le wrapper portable `scripts/feelc-skill.mjs`, qui localise
-`feelc` (variable `FEELC_BIN`, PATH, checkout voisin, ou build via `go build`). Vérifie d'abord :
+All commands go through the portable wrapper `scripts/feelc-skill.mjs`, which locates
+`feelc` (the `FEELC_BIN` variable, PATH, a sibling checkout, or a build via `go build`). Check first:
 
 ```sh
 node scripts/feelc-skill.mjs version
 ```
 
-Si ça échoue, le wrapper imprime comment fournir `feelc` (voir `references/install.md`).
-Tu peux aussi appeler `feelc` directement s'il est sur le PATH.
+If this fails, the wrapper prints how to provide `feelc` (see `references/install.md`).
+You can also call `feelc` directly if it is on the PATH.
 
-## Le flux (red → green, piloté par l'oracle)
+## The flow (red → green, driven by the oracle)
 
-Crée une todo par étape et suis-les dans l'ordre.
+Create one todo per step and follow them in order.
 
-1. **Interviewer** (ne devine pas). Établis : les **entrées** (Input Data) et leurs **domaines**
-   (`in [a..b]`, `>= 0`, `in {…}`), les **décisions** et leurs dépendances, la **hit policy** de
-   chaque table, les **cas limites**. Voir `references/authoring.md`.
-2. **Rédiger** le fichier `.rules`. Reste STRICTEMENT dans le sous-ensemble supporté
-   (`references/feel.md`) — tout construct hors-périmètre fait échouer la compilation, c'est
-   voulu. Utilise les 4 modèles de `references/examples.md` comme gabarits.
-3. **Compiler + vérifier** (gate déterministe) :
+1. **Interview** (do not guess). Establish: the **inputs** (Input Data) and their **domains**
+   (`in [a..b]`, `>= 0`, `in {…}`), the **decisions** and their dependencies, the **hit policy** of
+   each table, the **edge cases**. See `references/authoring.md`.
+2. **Write** the `.rules` file. Stay STRICTLY within the supported subset
+   (`references/feel.md`) — any out-of-scope construct makes the compilation fail, this is
+   intentional. Use the 4 templates in `references/examples.md` as starting points.
+3. **Compile + verify** (deterministic gate):
    ```sh
    node scripts/feelc-skill.mjs verify --rules model.rules --json
    ```
-   - Erreurs de **compilation** (type, référence, syntaxe) → avec `--json`, elles sortent en objet
-     structuré `{file,line,col,code,message,suggestion}` sur stdout : exploite `line`/`col` pour
-     localiser et `suggestion` pour corriger, puis relance. Catalogue de codes stables :
+   - **Compilation** errors (type, reference, syntax) → with `--json`, they come out as a
+     structured object `{file,line,col,code,message,suggestion}` on stdout: use `line`/`col` to
+     locate and `suggestion` to fix, then re-run. Stable code catalog:
      `docs/error-schema.md`.
-   - **Bloqueurs** de vérification (`severity: "error"` : trou de complétude avec contre-exemple,
-     conflit UNIQUE/ANY) → corrige. Lis `references/verify.md`.
-4. **Tester** sur des cas concrets (y compris les cas limites de l'interview) :
+   - Verification **blockers** (`severity: "error"`: completeness gap with counter-example,
+     UNIQUE/ANY conflict) → fix. Read `references/verify.md`.
+4. **Test** on concrete cases (including the edge cases from the interview):
    ```sh
-   node scripts/feelc-skill.mjs run --rules model.rules --decision <nom> --input '{…}' --json
+   node scripts/feelc-skill.mjs run --rules model.rules --decision <name> --input '{…}' --json
    ```
-   Compare à l'attendu. Itère jusqu'à concordance.
-5. **(Optionnel) Gate Layer-2 sémantique** — vérifier que les règles disent bien ce que le besoin
-   voulait. Décompose la spec/le besoin en **claims** atomiques `{decision, input, expect}` (TON
-   travail d'IA), écris-les dans un `claims.json` (`{"claims":[…]}`), puis laisse la VM trancher :
+   Compare with the expected result. Iterate until they match.
+5. **(Optional) Semantic Layer-2 gate** — verify that the rules really say what the requirement
+   wanted. Break down the spec/requirement into atomic **claims** `{decision, input, expect}` (YOUR
+   AI work), write them in a `claims.json` (`{"claims":[…]}`), then let the VM decide:
    ```sh
    node scripts/feelc-skill.mjs check --rules model.rules --claims claims.json --json
    ```
-   `supported` = la règle confirme le claim ; `contradicted`/`error` = bloquant (la règle ne fait
-   pas ce que le besoin disait, ou ton claim est faux → corrige l'un ou l'autre). « Le LLM propose,
-   la VM dispose » : n'invente jamais un seuil pour faire passer un claim.
-6. **Itérer** jusqu'au critère d'arrêt.
+   `supported` = the rule confirms the claim; `contradicted`/`error` = blocking (the rule does
+   not do what the requirement said, or your claim is false → fix one or the other). "The LLM
+   proposes, the VM disposes": never invent a threshold to make a claim pass.
+6. **Iterate** until the stopping criterion.
 
-## Critère d'arrêt : « zéro bloqueur, pas zéro finding »
+## Stopping criterion: "zero blocker, not zero finding"
 
-- **Buildable** = `verify` ne renvoie **aucun bloqueur** (`severity: "error"`). Les `warning`
-  (règle masquée…) et `info` (default inutile…) sont à **signaler**, pas forcément à corriger.
-- **Convergent** = `run` reproduit les cas de référence/limites validés avec l'utilisateur.
+- **Buildable** = `verify` returns **no blocker** (`severity: "error"`). The `warning`
+  (shadowed rule…) and `info` (useless default…) findings should be **reported**, not necessarily fixed.
+- **Convergent** = `run` reproduces the reference/edge cases validated with the user.
 
-N'invente jamais un seuil ou une valeur pour « faire passer » : si une ambiguïté du besoin
-est irréductible, **remonte la question à l'utilisateur**.
+Never invent a threshold or a value to "make it pass": if an ambiguity in the requirement
+is irreducible, **raise the question with the user**.
 
-## À NE PAS faire
+## What NOT to do
 
-- ❌ Ne calcule pas un résultat de règle toi-même — lance `feelc run`.
-- ❌ N'utilise pas de constructs hors sous-ensemble (fonctions FEEL, `if/then/else` dans une
-  expression, regex, dates/fuseaux, lambdas) : ça ne compile pas. Voir `references/feel.md`.
-- ❌ Ne laisse pas une table single-hit (FIRST/UNIQUE/ANY/PRIORITY) **incomplète** sans `default`
-  assumé : `verify` signalera un trou avec un contre-exemple.
-- ❌ Ne maquille pas un `warning`/`info` en succès, et ne supprime pas une règle juste pour
-  taire un diagnostic sans comprendre pourquoi.
+- ❌ Do not compute a rule result yourself — run `feelc run`.
+- ❌ Do not use constructs outside the subset (FEEL functions, `if/then/else` inside an
+  expression, regex, dates/timezones, lambdas): it does not compile. See `references/feel.md`.
+- ❌ Do not leave a single-hit table (FIRST/UNIQUE/ANY/PRIORITY) **incomplete** without an assumed
+  `default`: `verify` will report a gap with a counter-example.
+- ❌ Do not dress up a `warning`/`info` as a success, and do not delete a rule just to
+  silence a diagnostic without understanding why.
 
-## Références (divulgation progressive)
+## References (progressive disclosure)
 
-- `references/authoring.md` — l'interview et la structure d'un modèle.
-- `references/feel.md` — le sous-ensemble DSL/FEEL supporté (et ce qui ne l'est pas).
-- `references/verify.md` — lire `feelc verify`, bloqueurs vs remarques.
-- `references/examples.md` — les 4 modèles de référence comme gabarits.
-- `references/forbidden-patterns.md` — pièges classiques (chevauchement, défaut manquant…).
-- `references/install.md` — fournir le binaire `feelc`.
+- `references/authoring.md` — the interview and the structure of a model.
+- `references/feel.md` — the supported DSL/FEEL subset (and what is not).
+- `references/verify.md` — reading `feelc verify`, blockers vs. remarks.
+- `references/examples.md` — the 4 reference models as templates.
+- `references/forbidden-patterns.md` — classic pitfalls (overlap, missing default…).
+- `references/install.md` — providing the `feelc` binary.

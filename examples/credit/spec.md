@@ -1,28 +1,28 @@
-# Exemple de référence — Éligibilité / scoring de crédit
+# Reference example — Credit eligibility / scoring
 
-L'exemple canonique d'un BRMS (le « hello world » d'IBM ODM). Il exerce les briques clés de feelc :
-décisions **liées** (DRG), **expression FEEL** intermédiaire, **table** avec ranges et comparaisons,
-hit policy **FIRST**, ligne **default**, et sortie **context** multi-champs.
+The canonical example of a BRMS (the "hello world" of IBM ODM). It exercises the key building blocks of feelc:
+**linked** decisions (DRG), intermediate **FEEL expression**, **table** with ranges and comparisons,
+**FIRST** hit policy, **default** row, and multi-field **context** output.
 
-## Entrées (Input Data)
+## Inputs (Input Data)
 
-| Nom             | Type   | Domaine        |
+| Name            | Type   | Domain         |
 |-----------------|--------|----------------|
 | `credit_score`  | number | `[300..850]`   |
 | `annual_income` | number | `>= 0`         |
 | `monthly_debt`  | number | `>= 0`         |
 | `age`           | number | `[0..120]`     |
 
-## Décisions
+## Decisions
 
-1. **`dti`** (number) — taux d'endettement mensuel : `monthly_debt / (annual_income / 12)`.
-2. **`eligibility`** (context `{eligible, reason}`) — table FIRST sur `credit_score`, `dti`, `age`.
+1. **`dti`** (number) — monthly debt-to-income ratio: `monthly_debt / (annual_income / 12)`.
+2. **`eligibility`** (context `{eligible, reason}`) — FIRST table on `credit_score`, `dti`, `age`.
 
-## Règles métier (ordre = priorité)
+## Business rules (order = priority)
 
-1. score `< 580` → refus « score insuffisant »
-2. `dti > 0.43` → refus « endettement trop élevé »
-3. `age < 18` → refus « mineur »
-4. score `[580..680)` et `dti <= 0.43` et `age >= 18` → accord « approuvé sous conditions »
-5. score `>= 680` et `dti <= 0.43` et `age >= 18` → accord « approuvé »
-6. sinon (`default`) → refus « non couvert »
+1. score `< 580` → denial "insufficient score"
+2. `dti > 0.43` → denial "debt level too high"
+3. `age < 18` → denial "minor"
+4. score `[580..680)` and `dti <= 0.43` and `age >= 18` → approval "approved with conditions"
+5. score `>= 680` and `dti <= 0.43` and `age >= 18` → approval "approved"
+6. otherwise (`default`) → denial "not covered"

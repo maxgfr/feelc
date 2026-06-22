@@ -1,31 +1,31 @@
-# Lire `feelc verify`
+# Reading `feelc verify`
 
 ```sh
 node scripts/feelc-skill.mjs verify --rules model.rules --json
 ```
 
-Sortie JSON : `{ "findings": [ { decision, kind, severity, message, witness?, rules? }, … ] }`.
-La commande **exit 1** s'il existe au moins un finding `severity: "error"` (bloqueur), 0 sinon.
+JSON output: `{ "findings": [ { decision, kind, severity, message, witness?, rules? }, … ] }`.
+The command **exits 1** if there is at least one finding with `severity: "error"` (blocker), 0 otherwise.
 
-## Sévérités
+## Severities
 
-- **`error` (bloqueur)** — à corriger avant de considérer le modèle « buildable » :
-  - `gap` : un cas n'est couvert par **aucune** règle (table single-hit, sans `default`).
-    `witness` donne un **contre-exemple concret** (ex. `{"n":"45"}`) → ajoute une règle ou un `default`.
-  - `conflict` : sous `unique`, deux règles se chevauchent ; sous `any`, elles donnent des sorties
-    différentes. `witness` + `rules` pointent le problème.
-- **`warning`** (à signaler, pas toujours à corriger) :
-  - `gap` rattrapé par `default` ; `dead-rule` (règle jamais atteignable, ou masquée par une règle
-    antérieure sous `first`). Souvent le signe d'une règle redondante ou mal ordonnée.
-- **`info`** :
-  - `unreachable-default` : la ligne `default` n'est jamais utilisée (les règles couvrent déjà tout).
-  - `not-verifiable` : table non prouvable géométriquement (cellule `Op=Prog`, c.-à-d. comparaison à
-    une autre colonne, ou grille trop grande). Honnête : **non prouvé**, jamais « conforme » en silence.
+- **`error` (blocker)** — must be fixed before considering the model "buildable":
+  - `gap`: a case is covered by **no** rule (single-hit table, without `default`).
+    `witness` gives a **concrete counter-example** (e.g. `{"n":"45"}`) → add a rule or a `default`.
+  - `conflict`: under `unique`, two rules overlap; under `any`, they give different
+    outputs. `witness` + `rules` point to the problem.
+- **`warning`** (to report, not always to fix):
+  - `gap` caught by `default`; `dead-rule` (rule never reachable, or shadowed by an earlier
+    rule under `first`). Often a sign of a redundant or badly ordered rule.
+- **`info`**:
+  - `unreachable-default`: the `default` line is never used (the rules already cover everything).
+  - `not-verifiable`: table not geometrically provable (cell `Op=Prog`, i.e. comparison to
+    another column, or grid too large). Honest: **not proven**, never silently "compliant".
 
-## Critère d'arrêt
+## Stopping criterion
 
-> **Buildable** = 0 bloqueur (`error`). **Convergent** = `run` reproduit les cas de référence.
+> **Buildable** = 0 blocker (`error`). **Convergent** = `run` reproduces the reference cases.
 
-Ne supprime pas une règle juste pour faire taire un `warning` : comprends d'abord *pourquoi* il
-apparaît (souvent un chevauchement ou un ordre de lignes à revoir). Les `error` doivent disparaître ;
-les `warning`/`info` se **commentent** à l'utilisateur.
+Do not remove a rule just to silence a `warning`: first understand *why* it
+appears (often an overlap or a row ordering to review). The `error`s must disappear;
+the `warning`/`info` are **commented** to the user.

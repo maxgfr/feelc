@@ -1,36 +1,36 @@
-# Rédiger un modèle feelc — l'interview
+# Writing a feelc model — the interview
 
-Ne devine pas la logique métier : élicite-la. Pose ces questions (regroupe-les, mais couvre tout) :
+Don't guess the business logic: elicit it. Ask these questions (group them, but cover everything):
 
-## 1. Les entrées (Input Data)
-- Quelles données alimentent la décision ? Pour chacune : **nom**, **type** (number/string/boolean),
-  et surtout son **domaine** (`number in [0..120]`, `>= 0`, `string in {"urban","rural"}`).
-  → Les domaines rendent la **complétude vérifiable** : déclare-les dès que possible.
+## 1. The inputs (Input Data)
+- What data feeds the decision? For each one: **name**, **type** (number/string/boolean),
+  and above all its **domain** (`number in [0..120]`, `>= 0`, `string in {"urban","rural"}`).
+  → Domains make **completeness verifiable**: declare them as early as possible.
 
-## 2. Les décisions et leur graphe (DRG)
-- Quelle(s) **décision(s) finale(s)** ? Quelles **décisions intermédiaires** (ex. un ratio, un
-  score) ? Une décision peut dépendre d'une autre via `needs:` → feelc l'évalue à la demande.
-- Une décision intermédiaire calculée = **literal-expression** : `decision dti : number = a / b`.
-- Une décision à base de cas = **table**.
+## 2. The decisions and their graph (DRG)
+- What is/are the **final decision(s)**? What **intermediate decisions** (e.g. a ratio, a
+  score)? A decision can depend on another via `needs:` → feelc evaluates it on demand.
+- A computed intermediate decision = **literal-expression**: `decision dti : number = a / b`.
+- A case-based decision = **table**.
 
-## 3. Pour chaque table : la hit policy
-- Les cas sont-ils **mutuellement exclusifs** ? → `unique` (et `verify` prouvera l'exclusivité).
-- Veut-on l'**ordre de priorité** des lignes ? → `first` (refus prioritaires d'abord, p. ex.).
-- Plusieurs effets **cumulables** ? → `collect` (liste) ou `collect sum` (somme).
-- La **meilleure** valeur ? → `collect max` / `collect min`.
-- Voir `references/feel.md` pour la liste complète.
+## 3. For each table: the hit policy
+- Are the cases **mutually exclusive**? → `unique` (and `verify` will prove exclusivity).
+- Do you want the rows' **priority order**? → `first` (priority rejections first, for instance).
+- Several **cumulative** effects? → `collect` (list) or `collect sum` (sum).
+- The **best** value? → `collect max` / `collect min`.
+- See `references/feel.md` for the complete list.
 
-## 4. La sortie
-- Une seule valeur → type scalaire (`: number` / `: string` / `: boolean`).
-- Plusieurs champs (ex. `{eligible, reason}`) → déclare un `type … = context { … }`.
+## 4. The output
+- A single value → scalar type (`: number` / `: string` / `: boolean`).
+- Several fields (e.g. `{eligible, reason}`) → declare a `type … = context { … }`.
 
-## 5. Les cas limites
-- Que se passe-t-il aux **bornes** (égalité, min/max du domaine) ? Encode-les explicitement.
-- Y a-t-il un cas **par défaut** ? Pour une table single-hit, ajoute une ligne `default` si tous
-  les cas ne sont pas couverts (sinon `verify` signalera un trou — ce qui est souvent le signal
-  qu'il manque une règle).
+## 5. The edge cases
+- What happens at the **bounds** (equality, domain min/max)? Encode them explicitly.
+- Is there a **default** case? For a single-hit table, add a `default` row if not all
+  cases are covered (otherwise `verify` will flag a gap — which is often the sign
+  that a rule is missing).
 
-## Squelette de départ
+## Starting skeleton
 
 ```
 model "<domaine>" {}
@@ -48,4 +48,4 @@ decision <final> : Resultat {
 }
 ```
 
-Puis : `verify` (gate déterministe) → `run` sur les cas limites → itère.
+Then: `verify` (deterministic gate) → `run` on the edge cases → iterate.

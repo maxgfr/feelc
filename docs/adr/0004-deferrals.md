@@ -1,63 +1,63 @@
-# ADR 0004 — Reports assumés : BKM paramétré et extension SMT
+# ADR 0004 — Acknowledged deferrals: parameterized BKM and SMT extension
 
-- **Statut** : accepté (2026-06-22)
-- **Décideurs** : maxgfr
+- **Status**: accepted (2026-06-22)
+- **Deciders**: maxgfr
 
-Conformément à l'éthique du projet (« jamais conformer/prétendre en silence »), on documente
-explicitement deux fonctionnalités du périmètre « complet » qui sont **reportées**, avec leur raison.
+In line with the project's ethics ("never silently conform/pretend"), we explicitly document
+two features of the "complete" scope that are **deferred**, along with their rationale.
 
-## 1. BKM / Invocation paramétrée (Tranche 7) — ✅ LEVÉ (2026-06-22, Tranche 13)
+## 1. BKM / Parameterized invocation (Slice 7) — ✅ LIFTED (2026-06-22, Slice 13)
 
-> **Statut mis à jour : report LEVÉ.** Le BKM paramétré est implémenté. On a **forké** et vendorisé
-> `pbinitiative/feel` sous `third_party/feel` (épinglé via `replace`) pour **exporter `FunCall.Args`**
-> (`[]FunCallArg{Name, Arg}`), ce qui débloque la lecture des arguments. La syntaxe est
-> `bkm name(p:t, …):ret = expr` (signature parsée côté DSL, pas dans le fork) ; l'invocation
-> `name(a, b)` est **inlinée à la compilation** par substitution AST des paramètres
-> (`internal/compiler/lower_expr.go`) — **zéro nouvel opcode**, la VM/IR inchangées. Récursion
-> (auto/mutuelle) détectée statiquement et **rejetée franchement** ; garde-fous de profondeur et de
-> budget d'instructions (RAM bornée). Le fork corrige aussi un **DoS amont** (boucle infinie du
-> parseur sur un `?` explicite). Le constat historique ci-dessous est conservé pour mémoire.
+> **Status updated: deferral LIFTED.** Parameterized BKM is implemented. We **forked** and vendored
+> `pbinitiative/feel` under `third_party/feel` (pinned via `replace`) to **export `FunCall.Args`**
+> (`[]FunCallArg{Name, Arg}`), which unblocks reading the arguments. The syntax is
+> `bkm name(p:t, …):ret = expr` (signature parsed on the DSL side, not in the fork); the invocation
+> `name(a, b)` is **inlined at compile time** through AST substitution of the parameters
+> (`internal/compiler/lower_expr.go`) — **zero new opcode**, the VM/IR unchanged. Recursion
+> (self/mutual) is detected statically and **rejected outright**; depth and instruction-budget
+> guardrails (bounded RAM). The fork also fixes an **upstream DoS** (infinite parser loop on an
+> explicit `?`). The historical observation below is kept for the record.
 
-**Constat technique (historique).** feelc réutilise `github.com/pbinitiative/feel` comme parseur FEEL
-(ADR 0001). Or son nœud d'AST `FunCall` expose `Args []funcallArg` où **`funcallArg` est un type
-non exporté** dont les champs (`argName`, `arg`) sont eux aussi non exportés. Il est donc impossible,
-via l'API publique, de **lire les arguments d'un appel de fonction** `nom(arg1, arg2)`. Implémenter
-une invocation BKM paramétrée nécessiterait de **forker** le parseur (ce que l'ADR 0001 anticipait
-comme recours).
+**Technical observation (historical).** feelc reuses `github.com/pbinitiative/feel` as the FEEL parser
+(ADR 0001). However, its AST node `FunCall` exposes `Args []funcallArg` where **`funcallArg` is an
+unexported type** whose fields (`argName`, `arg`) are themselves unexported. It is therefore
+impossible, via the public API, to **read the arguments of a function call** `name(arg1, arg2)`.
+Implementing a parameterized BKM invocation would require **forking** the parser (which ADR 0001
+anticipated as a fallback).
 
-**Décision.** Reporter le BKM paramétré. Coût/valeur défavorable maintenant :
-- **Aucun des 4 exemples de référence** n'en a besoin (la revue adverse l'avait souligné).
-- La **réutilisation non-paramétrée** est déjà couverte : une décision literal-expression
-  (`decision x : number = …`) est une expression nommée réutilisable, référencée par son nom dans
-  les `needs:` d'autres décisions (DRG).
+**Decision.** Defer parameterized BKM. The cost/value tradeoff is unfavorable for now:
+- **None of the 4 reference examples** need it (the adversarial review had pointed this out).
+- **Non-parameterized reuse** is already covered: a literal-expression decision
+  (`decision x : number = …`) is a reusable named expression, referenced by its name in
+  other decisions' `needs:` (DRG).
 
-**Reprise.** Forker `pbinitiative/feel` pour exporter `funcallArg` (ou écrire le parseur FEEL maison
-prévu en repli par l'ADR 0001), puis inliner les invocations à la compilation (pas de frame d'appel).
+**Resumption.** Fork `pbinitiative/feel` to export `funcallArg` (or write the in-house FEEL parser
+planned as a fallback by ADR 0001), then inline invocations at compile time (no call frame).
 
-## 2. Extension SMT (Z3) — reporté (optionnel, derrière build tag)
+## 2. SMT extension (Z3) — deferred (optional, behind build tag)
 
-La vérification formelle (Tranche 4) repose sur une **algèbre d'hyper-rectangles** : elle couvre les
-tables dont toutes les cellules sont des `CellTest` normalisés (comparaisons, intervalles, ensembles).
-Les cellules `Op=Prog` (référence à une autre colonne, arithmétique inter-colonnes) ne sont **pas**
-décidables géométriquement et sont déjà signalées en **dégradation honnête** (`not-verifiable`).
+Formal verification (Slice 4) relies on a **hyper-rectangle algebra**: it covers tables whose
+cells are all normalized `CellTest` (comparisons, intervals, sets). Cells with `Op=Prog`
+(reference to another column, inter-column arithmetic) are **not** geometrically decidable and
+are already reported as **honest degradation** (`not-verifiable`).
 
-**Décision.** L'extension SMT (Z3) pour prouver des propriétés sur ces cellules non-rectangulaires
-reste **optionnelle et différée**, derrière un build tag, hors du chemin critique. La géométrie
-couvre l'essentiel des tables DMN sans dépendance externe (ni CGo ni binaire Z3).
+**Decision.** The SMT extension (Z3) for proving properties on these non-rectangular cells
+remains **optional and deferred**, behind a build tag, off the critical path. The geometry
+covers the bulk of DMN tables without an external dependency (neither CGo nor a Z3 binary).
 
-**Reprise.** Quand un besoin réel de conditions inter-colonnes prouvables apparaît : intégrer Z3
-(via binaire ou binding) sous `//go:build smt`, et router les cellules `Op=Prog` vers le solveur.
+**Resumption.** When a real need for provable inter-column conditions arises: integrate Z3
+(via binary or binding) under `//go:build smt`, and route `Op=Prog` cells to the solver.
 
-## 3. Built-ins FEEL multi-arguments — reporté (Tranche 22)
+## 3. Multi-argument FEEL built-ins — deferred (Slice 22)
 
-La Tranche 22 ajoute les built-ins **purs mono-arg** `floor` / `ceiling` / `round(x)` (+ `not`),
-`if/then/else`, et `not(<test>)` géométrique. Les built-ins **multi-arguments** restent **hors
-périmètre** et **échouent franchement** (jamais conformés en silence) :
+Slice 22 adds the **pure single-arg** built-ins `floor` / `ceiling` / `round(x)` (+ `not`),
+`if/then/else`, and geometric `not(<test>)`. The **multi-argument** built-ins remain **out of
+scope** and **fail outright** (never silently conformed):
 
-- `round(x, n)` (arrondi à `n` décimales),
-- `substring(s, start[, len])`, et les autres built-ins chaîne/liste multi-args.
+- `round(x, n)` (rounding to `n` decimals),
+- `substring(s, start[, len])`, and the other multi-arg string/list built-ins.
 
-**Raison.** Le périmètre v2 reste volontairement minimal (sous-ensemble décidable, déterministe) ;
-ces fonctions ajouteraient une sémantique (gestion des décimales, indices de chaîne) sans exemple
-justificatif. Le lowerer émet un diagnostic explicite renvoyant à cet ADR. **Reprise.** Ajouter
-l'opcode/lowering dédié + tests quand un besoin réel apparaît.
+**Rationale.** The v2 scope deliberately stays minimal (decidable, deterministic subset);
+these functions would add semantics (decimal handling, string indices) with no justifying
+example. The lowerer emits an explicit diagnostic referring to this ADR. **Resumption.** Add
+the dedicated opcode/lowering + tests when a real need arises.

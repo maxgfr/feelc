@@ -1,84 +1,84 @@
-# Sous-ensemble DSL / FEEL supporté par feelc (v2)
+# DSL / FEEL subset supported by feelc (v2)
 
-> Le typecheck est le gardien : tout construct hors de ce périmètre **fait échouer la
-> compilation** avec un message clair. C'est voulu (refuser plutôt qu'accepter-puis-mal-interpréter).
+> The typecheck is the gatekeeper: any construct outside this scope **fails
+> compilation** with a clear message. This is intentional (reject rather than accept-then-misinterpret).
 
-## Structure d'un fichier `.rules`
+## Structure of a `.rules` file
 
 ```
-model "nom" {
-  rounding: half_even          # optionnel
+model "name" {
+  rounding: half_even          # optional
 }
 
-input <nom> : <type> [<domaine>]
-type <Nom> = context { f1: t1, f2: t2 }     # type de sortie multi-champs (optionnel)
+input <name> : <type> [<domain>]
+type <Name> = context { f1: t1, f2: t2 }     # multi-field output type (optional)
 
-# Décision = expression littérale (type scalaire) :
-decision <nom> : <type> = <expression FEEL>
+# Decision = literal expression (scalar type):
+decision <name> : <type> = <FEEL expression>
 
-# Décision = table :
-decision <nom> : <type|TypeContext> {
-  needs: a, b, c                 # colonnes d'entrée (inputs OU décisions amont -> DRG)
-  hit: <politique>
-  priority: v1, v2, ...          # UNIQUEMENT si hit: priority (du + au - prioritaire)
-  cellule | cellule | ... => sortie | sortie | ...
-  default  | ...        => sortie | ...        # optionnel : sinon non-match = null
+# Decision = table:
+decision <name> : <type|ContextType> {
+  needs: a, b, c                 # input columns (inputs OR upstream decisions -> DRG)
+  hit: <policy>
+  priority: v1, v2, ...          # ONLY if hit: priority (from most to least prioritized)
+  cell | cell | ... => output | output | ...
+  default  | ...        => output | ...        # optional: otherwise non-match = null
 }
 ```
 
 ## Types
 
-`number` (décimal **exact**, jamais flottant), `string`, `boolean`, et les types `context { … }`
-déclarés (sortie multi-colonnes). Une décision `: number|string|boolean` a **une** sortie scalaire ;
-une décision `: MonContext` a une sortie par champ du context (autant de colonnes de sortie).
+`number` (**exact** decimal, never floating-point), `string`, `boolean`, and the declared
+`context { … }` types (multi-column output). A decision `: number|string|boolean` has **one** scalar output;
+a decision `: MyContext` has one output per context field (as many output columns).
 
-## Domaines d'entrée (servent à la vérification de complétude)
+## Input domains (used for completeness checking)
 
 `in [a..b]` · `[a..b)` · `(a..b]` · `(a..b)` · `>= x` · `> x` · `<= x` · `< x` · `in {v1, v2, …}`
 
-## Cellules de condition (unary tests)
+## Condition cells (unary tests)
 
-| Forme | Sens |
+| Form | Meaning |
 |---|---|
-| `-` | n'importe quoi (don't care) |
-| `580`, `"gold"`, `true` | égalité au littéral |
-| `< x` `<= x` `> x` `>= x` `!= x` | comparaison (x = littéral, **ou une autre colonne/variable**) |
-| `[a..b)` etc. | intervalle (bornes ouvertes/fermées) |
-| `"a","b"` ou `1,2,3` | ensemble = OU (appartenance) |
-| `not(littéral)` | négation d'un littéral |
+| `-` | anything (don't care) |
+| `580`, `"gold"`, `true` | equality to the literal |
+| `< x` `<= x` `> x` `>= x` `!= x` | comparison (x = literal, **or another column/variable**) |
+| `[a..b)` etc. | interval (open/closed bounds) |
+| `"a","b"` or `1,2,3` | set = OR (membership) |
+| `not(literal)` | negation of a literal |
 
-⚠️ `not(< 18)` (négation d'une comparaison) **n'est pas** supporté.
+⚠️ `not(< 18)` (negation of a comparison) is **not** supported.
 
-## Sorties de table
+## Table outputs
 
-**Littéraux uniquement** (`true`, `"texte"`, `42`). Une sortie calculée se fait via une **décision
-literal-expression** séparée (`decision x : number = …`), pas dans une cellule de sortie.
+**Literals only** (`true`, `"text"`, `42`). A computed output is done via a separate
+**literal-expression decision** (`decision x : number = …`), not in an output cell.
 
-## Expressions (dans `decision … = <expr>` et cellules `?`-vs-colonne)
+## Expressions (in `decision … = <expr>` and `?`-vs-column cells)
 
-Supporté : littéraux, variables (input ou décision amont), `+ - * /`, comparaisons
-`< <= > >= = !=`, `and`, `or`, parenthèses. Exemple : `monthly_debt / (annual_income / 12)`.
+Supported: literals, variables (input or upstream decision), `+ - * /`, comparisons
+`< <= > >= = !=`, `and`, `or`, parentheses. Example: `monthly_debt / (annual_income / 12)`.
 
-**NON supporté en v2** (échoue à la compilation) : appels de fonction (`sum(...)`, `floor(...)`…),
-`if/then/else`, `not(...)` en expression, `**`, listes/ranges en expression, moins unaire,
-dates/durées/fuseaux. ⚠️ `sum`/`min`/`max`/`count` n'existent **pas** comme fonctions FEEL — ce
-sont des **agrégations de hit policy COLLECT** (voir ci-dessous).
+**NOT supported in v2** (fails compilation): function calls (`sum(...)`, `floor(...)`…),
+`if/then/else`, `not(...)` as an expression, `**`, lists/ranges as expressions, unary minus,
+dates/durations/timezones. ⚠️ `sum`/`min`/`max`/`count` do **not** exist as FEEL functions — they
+are **COLLECT hit policy aggregations** (see below).
 
 ## Hit policies
 
-| `hit:` | Sémantique |
+| `hit:` | Semantics |
 |---|---|
-| `unique` | au plus 1 règle matche ; ≥2 → **erreur** |
-| `any` | plusieurs peuvent matcher mais **mêmes sorties** ; sorties divergentes → **erreur** |
-| `first` | la 1re règle qui matche gagne (l'ordre = la priorité) |
-| `priority` | parmi les règles qui matchent, la sortie la plus prioritaire (ligne `priority:`) |
-| `collect` | liste de toutes les sorties qui matchent |
-| `collect sum` / `min` / `max` / `count` | agrégation numérique des sorties qui matchent |
-| `rule order` | liste des sorties, dans l'ordre des règles |
+| `unique` | at most 1 rule matches; ≥2 → **error** |
+| `any` | several may match but with **same outputs**; divergent outputs → **error** |
+| `first` | the 1st matching rule wins (order = priority) |
+| `priority` | among the matching rules, the highest-priority output (`priority:` line) |
+| `collect` | list of all matching outputs |
+| `collect sum` / `min` / `max` / `count` | numeric aggregation of matching outputs |
+| `rule order` | list of outputs, in rule order |
 
-## Valeurs `null` et erreurs (déterministe, figé)
+## `null` values and errors (deterministic, frozen)
 
-- Cellule testée contre `null` → **ne matche pas** (tombe sur `default`, sinon décision = `null`).
-- Arithmétique avec un opérande `null` → résultat **`null`** (propagation).
-- **Division par zéro** → **erreur**.
-- Entrée requise **manquante** → **erreur**.
+- Cell tested against `null` → **does not match** (falls to `default`, otherwise decision = `null`).
+- Arithmetic with a `null` operand → result **`null`** (propagation).
+- **Division by zero** → **error**.
+- Required input **missing** → **error**.

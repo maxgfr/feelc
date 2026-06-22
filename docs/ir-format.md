@@ -1,48 +1,48 @@
-# Format de l'IR et sérialisation `.ir.bin`
+# IR format and `.ir.bin` serialization
 
-L'**IR** (`internal/ir`) est le modèle compilé, immuable, que la VM exécute et que la vérification
-analyse. Trois couches : (1) graphe de décisions (DRG) ; (2) tables normalisées en `CellTest`
-(forme géométrique analysable) ; (3) bytecode plat par expression/cellule Op=Prog.
+The **IR** (`internal/ir`) is the compiled, immutable model that the VM executes and that
+verification analyzes. Three layers: (1) decision graph (DRG); (2) tables normalized into `CellTest`
+(an analyzable geometric form); (3) flat bytecode per expression/cell Op=Prog.
 
-## Sérialisation canonique (`feelc compile -o model.ir.bin`)
+## Canonical serialization (`feelc compile -o model.ir.bin`)
 
-Codec : `internal/ir/codec.go` ([ADR 0006](adr/0006-ir-serialization.md)). **Manuel,
-length-prefixed, big-endian.** `gob` est proscrit (non canonique → incompatible avec le
-déterminisme bit-à-bit, thèse du projet).
+Codec: `internal/ir/codec.go` ([ADR 0006](adr/0006-ir-serialization.md)). **Manual,
+length-prefixed, big-endian.** `gob` is forbidden (non-canonical → incompatible with
+bit-for-bit determinism, the project's thesis).
 
-### En-tête
+### Header
 
 ```
 magic  : 4 octets  "FLIR"
 version: uint16     (1)
 ```
 
-`ir.IsEncoded(b)` teste le magic → le CLI distingue une source `.rules` d'un `.ir.bin` sans se
-fier à l'extension. `run` / `verify` / `check` / `explain` acceptent les deux.
+`ir.IsEncoded(b)` tests the magic → the CLI distinguishes a `.rules` source from an `.ir.bin` without
+relying on the extension. `run` / `verify` / `check` / `explain` accept both.
 
-### Règles d'encodage
+### Encoding rules
 
-- entiers : big-endian (`uint8`/`uint16`/`uint32`) ;
-- chaînes / octets : `uint32` longueur + octets ;
-- booléens : 1 octet ;
-- **maps** (`Inputs`, `Domains`, `context`) : émises en **ordre de clé trié** (déterminisme) ;
-- **décimaux** : via `MarshalText` (texte **exact**, sans `Reduce`) → aucune perte, arch-indépendant ;
-- pointeurs (`Table`, `Expr`, `Prog`) : 1 octet de présence puis le contenu.
+- integers: big-endian (`uint8`/`uint16`/`uint32`);
+- strings / bytes: `uint32` length + bytes;
+- booleans: 1 byte;
+- **maps** (`Inputs`, `Domains`, `context`): emitted in **sorted key order** (determinism);
+- **decimals**: via `MarshalText` (**exact** text, without `Reduce`) → no loss, arch-independent;
+- pointers (`Table`, `Expr`, `Prog`): 1 presence byte then the content.
 
-### Robustesse (blob non fiable)
+### Robustness (untrusted blob)
 
-`Decode` ingère des `.ir.bin` arbitraires : toute longueur est **bornée aux octets restants**
-(`count()`, pas de `make` géant → pas d'OOM) et la **profondeur de récursion** est plafonnée
-(`maxDecodeDepth`, pas de débordement de pile). Tout dépassement échoue franchement.
+`Decode` ingests arbitrary `.ir.bin`: every length is **bounded to the remaining bytes**
+(`count()`, no giant `make` → no OOM) and the **recursion depth** is capped
+(`maxDecodeDepth`, no stack overflow). Any overflow fails outright.
 
-## Hash du modèle (`ir.Hash`)
+## Model hash (`ir.Hash`)
 
-`Hash(cm) = sha256(Encode(cm))` : identité **canonique du modèle compilé** (pas du texte source).
-`loader.Compile` l'expose en hex (champ `hash` du service, goldens de déterminisme). **Breaking
-voulu** : deux sources qui compilent vers le même IR partagent le hash.
+`Hash(cm) = sha256(Encode(cm))`: the **canonical identity of the compiled model** (not the source text).
+`loader.Compile` exposes it in hex (the service's `hash` field, determinism goldens). **Intended
+breaking**: two sources that compile to the same IR share the hash.
 
-## Positions source
+## Source positions
 
-`CellTest.Src/Line`, `Rule.Line/OutputSrc`, `Decision.ExprSrc/Line` portent la trace source
-(justification `feelc explain`). Un `.ir.bin` chargé conserve ces champs (ils sont sérialisés) ;
-s'ils sont absents (0/""), `explain` dégrade honnêtement.
+`CellTest.Src/Line`, `Rule.Line/OutputSrc`, `Decision.ExprSrc/Line` carry the source trace
+(justification for `feelc explain`). A loaded `.ir.bin` preserves these fields (they are serialized);
+if they are absent (0/""), `explain` degrades honestly.

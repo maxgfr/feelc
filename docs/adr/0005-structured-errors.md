@@ -1,41 +1,39 @@
-# ADR 0005 — Erreurs de compilation structurées et positionnées
+# ADR 0005 — Structured and positioned compilation errors
 
-- **Statut** : accepté (2026-06-22)
-- **Décideurs** : maxgfr
+- **Status**: accepted (2026-06-22)
+- **Deciders**: maxgfr
 
-## Contexte
+## Context
 
-Les erreurs de compilation (`dsl.Parse` + `compiler.Compile`) étaient des `fmt.Errorf` plats
-au format `"ligne %d: <message>"`. La skill d'autoring a besoin, pour sa boucle red→green, d'un
-diagnostic **machine-exploitable** : fichier, ligne, **colonne**, code stable et suggestion de
-correction. Par ailleurs `model.Cell.Col` était déclaré mais **jamais renseigné** (toujours 0).
+Compilation errors (`dsl.Parse` + `compiler.Compile`) were flat `fmt.Errorf`
+in the format `"ligne %d: <message>"`. The authoring skill needs, for its red→green loop, a
+**machine-exploitable** diagnostic: file, line, **column**, stable code and fix suggestion. Moreover `model.Cell.Col` was declared but **never populated** (always 0).
 
-## Décision
+## Decision
 
-Introduire `internal/diag.Error{File, Line, Col, Code, Message, Suggestion, Cause}` qui :
+Introduce `internal/diag.Error{File, Line, Col, Code, Message, Suggestion, Cause}` which:
 
-1. **Reste rétro-compatible** en texte : `Error()` rend exactement `"ligne N: <message>"` quand
-   aucun fichier n'est connu (les tests existants matchent des sous-chaînes FR — filet de sécurité
-   anti-régression). Avec un fichier : `"file:line[:col]: message"`. La **suggestion n'est jamais**
-   dans `Error()`.
-2. Expose `MarshalJSON` → `{file,line,col,code,message,suggestion}` (omitempty), rendu sur stdout
-   par `feelc run|verify|check --json`.
-3. Préserve le chaînage `%w` historique via `Cause` + `Unwrap()` (les erreurs FEEL brutes restent
-   enveloppées, jamais réécrites).
+1. **Stays backward-compatible** in text: `Error()` renders exactly `"ligne N: <message>"` when
+   no file is known (existing tests match FR substrings — anti-regression safety net). With a file: `"file:line[:col]: message"`. The **suggestion is never**
+   in `Error()`.
+2. Exposes `MarshalJSON` → `{file,line,col,code,message,suggestion}` (omitempty), rendered on stdout
+   by `feelc run|verify|check --json`.
+3. Preserves the historical `%w` chaining via `Cause` + `Unwrap()` (raw FEEL errors stay
+   wrapped, never rewritten).
 
-**Positions.** `model.Cell.Col` est désormais rempli, **calculé au split DSL** (offset cumulé du
-segment de cellule dans la ligne source). Piège évité : `feel.Node.TextRange().Column` est relatif
-à la cellule isolée (chaque cellule est parsée seule) — inexploitable comme colonne de ligne. La
-propagation du **nom de fichier** passe par `dsl.ParseFile(path, src)` / `loader.CompileFile(path, src)` ;
-`Parse`/`Compile` restent des wrappers `file=""` (compat). `engine.Run` reste `file=""`.
+**Positions.** `model.Cell.Col` is now filled, **computed at the DSL split** (cumulative offset of the
+cell segment in the source line). Pitfall avoided: `feel.Node.TextRange().Column` is relative
+to the isolated cell (each cell is parsed alone) — unusable as a line column. The
+propagation of the **file name** goes through `dsl.ParseFile(path, src)` / `loader.CompileFile(path, src)`;
+`Parse`/`Compile` remain `file=""` wrappers (compat). `engine.Run` remains `file=""`.
 
-**Codes.** Catalogue stable `DSL*` / `CMP*` figé dans `docs/error-schema.md` — contrat consommé par
-la skill, non renuméroté.
+**Codes.** Stable `DSL*` / `CMP*` catalog frozen in `docs/error-schema.md` — contract consumed by
+the skill, not renumbered.
 
-## Conséquences
+## Consequences
 
-- La skill peut localiser et corriger une erreur sans parser de texte FR.
-- Périmètre tenu : seules les **erreurs de compilation** sont structurées ; les rapports `verify`/`check`
-  gardent leur forme (alignée sur le même style JSON), pas de scope-creep.
-- `col` n'est fiable que pour les cellules de table ; pour les statements mono-ligne, `line` suffit
-  (on ne promet pas une colonne fausse — honnêteté).
+- The skill can locate and fix an error without parsing FR text.
+- Scope kept: only **compilation errors** are structured; the `verify`/`check` reports
+  keep their form (aligned with the same JSON style), no scope-creep.
+- `col` is only reliable for table cells; for single-line statements, `line` is enough
+  (we do not promise a wrong column — honesty).

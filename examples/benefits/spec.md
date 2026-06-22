@@ -1,17 +1,17 @@
-# Exemple de référence — Éligibilité aides / prestations
+# Reference example — Benefits / allowances eligibility
 
-Exerce **COLLECT brut (liste)**, des conditions imbriquées et un test **booléen**. Les aides
-sont cumulables ; la décision renvoie la liste des aides accordées.
+Exercises **COLLECT raw (list)**, nested conditions and a **boolean** test. The allowances
+are cumulative; the decision returns the list of granted allowances.
 
-## Entrées
+## Inputs
 - `income` (number, `>= 0`), `children` (number, `[0..15]`), `is_student` (boolean).
 
-## Décision
-- **`aids`** (string, `collect`) — liste des aides :
+## Decision
+- **`aids`** (string, `collect`) — list of allowances:
   - `income < 1500` → `"housing"` ; `children >= 1` → `"family"` ;
-    `income < 1000` et `is_student = true` → `"student_grant"`.
+    `income < 1000` and `is_student = true` → `"student_grant"`.
 
-## Exemples
-- income 900 / 2 enfants / étudiant → `["housing", "family", "student_grant"]`.
-- income 2000 / 0 enfant / non-étudiant → `[]`.
-- income 1200 / 1 enfant / non-étudiant → `["housing", "family"]`.
+## Examples
+- income 900 / 2 children / student → `["housing", "family", "student_grant"]`.
+- income 2000 / 0 children / non-student → `[]`.
+- income 1200 / 1 child / non-student → `["housing", "family"]`.

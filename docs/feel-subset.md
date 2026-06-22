@@ -1,45 +1,45 @@
-# Sous-ensemble FEEL supporté
+# Supported FEEL subset
 
-feelc réutilise le parseur `pbinitiative/feel` (forké et vendorisé sous `third_party/feel`, cf.
-[ADR 0001](adr/0001-feel-frontend.md) et [ADR 0004 §1](adr/0004-deferrals.md)) mais **n'exécute
-pas** son évaluateur : feelc compile vers son propre bytecode déterministe (décimaux exacts, cf.
-[ADR 0002](adr/0002-decimal.md)). Le périmètre est volontairement borné ; **tout le reste échoue
-franchement** (le compilateur est le gardien du périmètre).
+feelc reuses the `pbinitiative/feel` parser (forked and vendored under `third_party/feel`, cf.
+[ADR 0001](adr/0001-feel-frontend.md) and [ADR 0004 §1](adr/0004-deferrals.md)) but **does not run**
+its evaluator: feelc compiles to its own deterministic bytecode (exact decimals, cf.
+[ADR 0002](adr/0002-decimal.md)). The scope is deliberately bounded; **everything else fails
+loudly** (the compiler is the guardian of the scope).
 
-## Expressions (literal-expression et cellules Op=Prog)
+## Expressions (literal-expression and Op=Prog cells)
 
-Supporté (`internal/compiler/lower_expr.go`) :
+Supported (`internal/compiler/lower_expr.go`):
 
-- **littéraux** : nombres (décimaux exacts), chaînes, booléens ;
-- **variables** : noms d'inputs / de décisions amont ; `?` = valeur de la colonne courante
-  (cellules de table uniquement) ;
-- **arithmétique** : `+ - * /` (décimale exacte, division par zéro = erreur) ;
-- **comparaisons** : `= != < <= > >=` ;
-- **logique** : `and`, `or`, `not(x)` ;
-- **conditionnel** : `if c then a else b` (compilé en sauts `OpJmpFalse`/`OpJmp`) ;
-- **built-ins mono-arg purs** : `floor(x)`, `ceiling(x)`, `round(x)` (arrondi HALF_EVEN, déterministe) ;
-- **invocation de BKM** : `nom(a, b)` — **inlinée** à la compilation (substitution AST, zéro frame
-  d'appel ; récursion auto/mutuelle détectée et **rejetée**).
+- **literals**: numbers (exact decimals), strings, booleans;
+- **variables**: input / upstream decision names; `?` = value of the current column
+  (table cells only);
+- **arithmetic**: `+ - * /` (exact decimal, division by zero = error);
+- **comparisons**: `= != < <= > >=`;
+- **logic**: `and`, `or`, `not(x)`;
+- **conditional**: `if c then a else b` (compiled into `OpJmpFalse`/`OpJmp` jumps);
+- **pure single-arg built-ins**: `floor(x)`, `ceiling(x)`, `round(x)` (HALF_EVEN rounding, deterministic);
+- **BKM invocation**: `name(a, b)` — **inlined** at compile time (AST substitution, zero call
+  frame; self/mutual recursion is detected and **rejected**).
 
-## Cellules de table (unary tests)
+## Table cells (unary tests)
 
-`-` (any), littéral (égalité), `< x` / `<= x` / `> x` / `>= x`, intervalle `[a..b]` / `(a..b)` /
-`[a..b)`, ensemble `a, b, c`, négation `not(<test>)` (reste **géométrique**, donc analysable par la
-vérification), et expression libre (référence `?`/autres colonnes → *Op=Prog*, non géométrique).
+`-` (any), literal (equality), `< x` / `<= x` / `> x` / `>= x`, interval `[a..b]` / `(a..b)` /
+`[a..b)`, set `a, b, c`, negation `not(<test>)` (stays **geometric**, hence analyzable by
+verification), and free expression (reference `?`/other columns → *Op=Prog*, non-geometric).
 
-## Hors périmètre (échec franc)
+## Out of scope (loud failure)
 
-- built-ins **multi-arguments** : `round(x, n)`, `substring(s, i, n)`, etc. ([ADR 0004 §3](adr/0004-deferrals.md)) ;
-- `for` / `some` / `every`, listes/filtres, fonctions d'ordre supérieur, `function(...)` ;
-- types **temporels** (`date`, `time`, `dateTime`, `duration`) ;
-- `**` (puissance), opérateurs non listés ;
-- `?` dans une expression **literal-expression** (réservé aux cellules de table) ;
-- arguments **nommés** (kwargs) dans une invocation de BKM.
+- **multi-argument** built-ins: `round(x, n)`, `substring(s, i, n)`, etc. ([ADR 0004 §3](adr/0004-deferrals.md));
+- `for` / `some` / `every`, lists/filters, higher-order functions, `function(...)`;
+- **temporal** types (`date`, `time`, `dateTime`, `duration`);
+- `**` (power), operators not listed;
+- `?` inside a **literal-expression** (reserved for table cells);
+- **named** arguments (kwargs) in a BKM invocation.
 
-## Déterminisme
+## Determinism
 
-Contexte décimal **figé** (precision 34 / HALF_EVEN), aucune source d'indéterminisme dans le
-chemin de décision. Les sorties sont rejouables bit-à-bit inter-plateforme (goldens CI amd64+arm64).
-La vérification formelle ([verify](../README.md)) prouve complétude/conflits/subsumption sur la
-couche géométrique ; les cellules Op=Prog sont signalées `not-verifiable` (ou routées vers SMT
-sous `-tags smt`, [ADR 0007](adr/0007-smt-backend.md)).
+**Frozen** decimal context (precision 34 / HALF_EVEN), no source of nondeterminism in the
+decision path. Outputs are bit-for-bit replayable across platforms (CI goldens amd64+arm64).
+Formal verification ([verify](../README.md)) proves completeness/conflicts/subsumption on the
+geometric layer; Op=Prog cells are reported as `not-verifiable` (or routed to SMT
+under `-tags smt`, [ADR 0007](adr/0007-smt-backend.md)).
