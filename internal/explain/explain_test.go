@@ -89,6 +89,34 @@ func TestExplainCreditApproved(t *testing.T) {
 	}
 }
 
+// Régression (revue adverse) : sous FIRST, Trace doit COURT-CIRCUITER comme Eval. La règle 1
+// (géométrique) matche pour x=0 ; la règle 2 a une cellule Op=Prog qui erre (division par zéro).
+// Eval renvoie "zero" sans toucher la règle 2 → Trace ne doit PAS errer non plus.
+func TestExplainFirstShortCircuitsBeforeErroringRule(t *testing.T) {
+	m, err := dsl.Parse(`model "m" {}
+input x : number
+decision d : string {
+  needs: x
+  hit: first
+  0           => "zero"
+  100 / ? = 0 => "never"
+}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cm, err := compiler.Compile(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr, err := explain.Explain(cm, "d", map[string]any{"x": 0})
+	if err != nil {
+		t.Fatalf("Trace a erré là où Eval réussit (divergence FIRST): %v", err)
+	}
+	if tr.RuleIndex != 1 || tr.Output != "zero" {
+		t.Errorf("attendu règle #1 -> \"zero\", obtenu #%d -> %v", tr.RuleIndex, tr.Output)
+	}
+}
+
 // Une décision literal-expression (dti) est marquée 'non géométrique' sans mentir, avec sa source.
 func TestExplainLiteralExprIsHonest(t *testing.T) {
 	cm := loadCredit(t)

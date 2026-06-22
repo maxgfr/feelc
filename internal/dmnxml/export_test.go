@@ -133,3 +133,40 @@ func TestExportWarnsOnDroppedDomain(t *testing.T) {
 		t.Errorf("attendu un avertissement de domaine non exporté, obtenu: %v", warns)
 	}
 }
+
+// Régression (revue adverse) : une ligne `default` doit être SIGNALÉE (DMN n'a pas de default).
+func TestExportWarnsOnDefaultRow(t *testing.T) {
+	m, err := dsl.Parse(`model "m" {}
+input a : number
+decision d : number {
+  needs: a
+  hit: first
+  >= 0 => 1
+  default => 0
+}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, warns, _ := dmnxml.Export(m)
+	if !strings.Contains(strings.Join(warns, "\n"), "default") {
+		t.Errorf("attendu un avertissement sur la ligne `default`, obtenu: %v", warns)
+	}
+}
+
+// Régression (revue adverse) : les valeurs d'attribut sont échappées en XML (pas via %q Go).
+func TestExportEscapesAttributes(t *testing.T) {
+	m, err := dsl.Parse("model \"a&b\" {}\ninput x : number\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	xml, _, err := dmnxml.Export(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(xml), `name="a&amp;b"`) {
+		t.Errorf("le `&` du nom de modèle doit être échappé `&amp;`:\n%s", xml)
+	}
+	if strings.Contains(string(xml), `name="a&b"`) {
+		t.Errorf("attribut non échappé (XML invalide):\n%s", xml)
+	}
+}

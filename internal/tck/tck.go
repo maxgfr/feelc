@@ -200,8 +200,17 @@ func runModel(dmnPath string, rep *Report) {
 				}
 				got, err := engine.Eval(cm, rn.Name, inputs)
 				if err != nil {
-					rep.add(CaseResult{Model: model, Case: c.ID, Decision: rn.Name, Status: Skipped,
-						Reason: "évaluation: " + err.Error() + " (dépendance DRG non câblée ?)"})
+					// Distinguer une dépendance hors-périmètre (non câblée par l'import → SKIP honnête)
+					// d'un VRAI bug d'exécution sur un modèle compilé (division par zéro, conflit de
+					// hit policy…) qui est une NON-CONFORMITÉ et doit compter comme FAIL (jamais conformer
+					// en silence en gonflant le %). (Revue adverse, Tranche 4.)
+					if isUnwiredError(err) {
+						rep.add(CaseResult{Model: model, Case: c.ID, Decision: rn.Name, Status: Skipped,
+							Reason: "dépendance DRG / variable non câblée par l'import: " + err.Error()})
+					} else {
+						rep.add(CaseResult{Model: model, Case: c.ID, Decision: rn.Name, Status: Fail,
+							Reason: "erreur d'évaluation", Expected: fmt.Sprint(expect), Got: "erreur: " + err.Error()})
+					}
 					continue
 				}
 				if check.Equal(expect, got) {
@@ -215,9 +224,11 @@ func runModel(dmnPath string, rep *Report) {
 	}
 }
 
-// findTestFiles renvoie les XML de cas associés à un .dmn (mêmes répertoire, motif *test*.xml).
+// findTestFiles renvoie les XML de cas du MODÈLE (convention TCK `<modèle>-test-*.xml`), pour ne
+// PAS appliquer les cas d'un modèle à un autre dans un répertoire multi-modèles (revue adverse).
 func findTestFiles(dmnPath string) []string {
 	dir := filepath.Dir(dmnPath)
+	base := strings.TrimSuffix(filepath.Base(dmnPath), ".dmn")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
@@ -225,12 +236,22 @@ func findTestFiles(dmnPath string) []string {
 	var out []string
 	for _, e := range entries {
 		n := e.Name()
-		if !e.IsDir() && strings.HasSuffix(n, ".xml") && strings.Contains(n, "test") {
+		if e.IsDir() || !strings.HasSuffix(n, ".xml") {
+			continue
+		}
+		// Associé au modèle : `<base>-test*.xml` ou `<base>-<...>.xml` (le `-` évite le préfixe partiel).
+		if strings.HasPrefix(n, base+"-") || strings.HasPrefix(n, base+"_") {
 			out = append(out, filepath.Join(dir, n))
 		}
 	}
 	sort.Strings(out)
 	return out
+}
+
+// isUnwiredError distingue une erreur d'exécution due à une dépendance/variable NON câblée par
+// l'import DMN (hors-périmètre → skip honnête) d'un vrai bug d'évaluation (→ fail).
+func isUnwiredError(err error) bool {
+	return strings.Contains(err.Error(), "inconnue") // "variable inconnue ..." / "décision inconnue ..."
 }
 
 func loadSuite(path string) (*tckSuite, error) {
@@ -285,22 +306,23 @@ func decodeValue(v tckValue) (any, error) {
 		}
 		return m, nil
 	}
-	text := strings.TrimSpace(v.Text)
 	typ := localType(v.Type)
 	switch typ {
-	case "string", "":
-		if typ == "" && text == "" {
+	case "string":
+		return v.Text, nil // NE PAS trimmer : un xsd:string peut porter des espaces significatifs
+	case "":
+		if strings.TrimSpace(v.Text) == "" {
 			return nil, nil
 		}
-		return text, nil
+		return v.Text, nil
 	case "boolean":
-		b, err := strconv.ParseBool(text)
+		b, err := strconv.ParseBool(strings.TrimSpace(v.Text))
 		if err != nil {
-			return nil, fmt.Errorf("booléen invalide %q", text)
+			return nil, fmt.Errorf("booléen invalide %q", v.Text)
 		}
 		return b, nil
 	case "integer", "int", "long", "short", "decimal", "double", "float":
-		return json.Number(text), nil
+		return json.Number(strings.TrimSpace(v.Text)), nil
 	case "date", "time", "datetime", "duration", "dayTimeDuration", "yearMonthDuration", "function":
 		return nil, fmt.Errorf("type TCK %q non supporté", typ)
 	default:

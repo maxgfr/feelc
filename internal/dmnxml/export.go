@@ -18,10 +18,10 @@ func Export(m *model.Model) ([]byte, []string, error) {
 	var warns []string
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
-	fmt.Fprintf(&b, `<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" name=%q>`+"\n", m.Name)
+	fmt.Fprintf(&b, `<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" name=%s>`+"\n", xmlAttr(m.Name))
 
 	for _, in := range m.Inputs {
-		fmt.Fprintf(&b, "  <inputData name=%q><variable typeRef=%q/></inputData>\n", in.Name, string(in.Type))
+		fmt.Fprintf(&b, "  <inputData name=%s><variable typeRef=%s/></inputData>\n", xmlAttr(in.Name), xmlAttr(string(in.Type)))
 		if in.Domain != "" {
 			warns = append(warns, fmt.Sprintf("input %q: domaine %q non exporté (hors decisionTable DMN)", in.Name, in.Domain))
 		}
@@ -38,8 +38,8 @@ func Export(m *model.Model) ([]byte, []string, error) {
 
 func writeDecisionXML(b *strings.Builder, m *model.Model, d model.Decision, warns *[]string) {
 	if d.Expr != nil {
-		fmt.Fprintf(b, "  <decision name=%q>\n", d.Name)
-		fmt.Fprintf(b, "    <variable typeRef=%q/>\n", d.TypeName)
+		fmt.Fprintf(b, "  <decision name=%s>\n", xmlAttr(d.Name))
+		fmt.Fprintf(b, "    <variable typeRef=%s/>\n", xmlAttr(d.TypeName))
 		fmt.Fprintf(b, "    <literalExpression><text>%s</text></literalExpression>\n", xmlEsc(d.Expr.Src))
 		b.WriteString("  </decision>\n")
 		return
@@ -49,24 +49,30 @@ func writeDecisionXML(b *strings.Builder, m *model.Model, d model.Decision, warn
 	if hp == "PRIORITY" && len(d.Priority) > 0 {
 		*warns = append(*warns, fmt.Sprintf("décision %q: la ligne `priority:` n'est pas exprimable en DMN standard — perdue à l'export", d.Name))
 	}
-	fmt.Fprintf(b, "  <decision name=%q>\n", d.Name)
+	for _, r := range d.Rules {
+		if r.IsDefault {
+			*warns = append(*warns, fmt.Sprintf("décision %q: ligne `default` émise comme règle « tout any » (DMN n'a pas de mot-clé default) — sémantique approximée", d.Name))
+			break
+		}
+	}
+	fmt.Fprintf(b, "  <decision name=%s>\n", xmlAttr(d.Name))
 	outs := outputCols(m, d)
 	if len(outs) == 1 {
-		fmt.Fprintf(b, "    <variable typeRef=%q/>\n", outs[0].typ)
+		fmt.Fprintf(b, "    <variable typeRef=%s/>\n", xmlAttr(outs[0].typ))
 	} else {
-		fmt.Fprintf(b, "    <variable typeRef=%q/>\n", d.TypeName)
+		fmt.Fprintf(b, "    <variable typeRef=%s/>\n", xmlAttr(d.TypeName))
 	}
 	if agg != "" {
-		fmt.Fprintf(b, "    <decisionTable hitPolicy=%q aggregation=%q>\n", hp, agg)
+		fmt.Fprintf(b, "    <decisionTable hitPolicy=%s aggregation=%s>\n", xmlAttr(hp), xmlAttr(agg))
 	} else {
-		fmt.Fprintf(b, "    <decisionTable hitPolicy=%q>\n", hp)
+		fmt.Fprintf(b, "    <decisionTable hitPolicy=%s>\n", xmlAttr(hp))
 	}
 	for _, n := range d.Needs {
-		fmt.Fprintf(b, "      <input><inputExpression typeRef=%q><text>%s</text></inputExpression></input>\n",
-			inputType(m, n), xmlEsc(n))
+		fmt.Fprintf(b, "      <input><inputExpression typeRef=%s><text>%s</text></inputExpression></input>\n",
+			xmlAttr(inputType(m, n)), xmlEsc(n))
 	}
 	for _, o := range outs {
-		fmt.Fprintf(b, "      <output name=%q typeRef=%q/>\n", o.name, o.typ)
+		fmt.Fprintf(b, "      <output name=%s typeRef=%s/>\n", xmlAttr(o.name), xmlAttr(o.typ))
 	}
 	for _, r := range d.Rules {
 		b.WriteString("      <rule>\n")
@@ -154,3 +160,7 @@ func xmlEsc(s string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;")
 	return r.Replace(s)
 }
+
+// xmlAttr rend une valeur d'attribut XML échappée et entre guillemets (et NON via %q, qui applique
+// l'échappement Go, pas XML).
+func xmlAttr(s string) string { return `"` + xmlEsc(s) + `"` }

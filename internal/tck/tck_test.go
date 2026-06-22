@@ -2,11 +2,45 @@ package tck_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/maxgfr/feelc/internal/tck"
 )
+
+// Régression (revue adverse) : une erreur d'exécution sur un modèle COMPILÉ (ex: division par
+// zéro) est une NON-CONFORMITÉ → FAIL, pas un skip (sinon on gonfle le % en silence). Seules les
+// dépendances non câblées par l'import sont skippées.
+func TestRunClassifiesEvalErrorAsFail(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "dz")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dmn := `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" name="dz">
+  <decision name="r"><variable typeRef="number"/><literalExpression><text>1 / 0</text></literalExpression></decision>
+</definitions>`
+	test := `<?xml version="1.0" encoding="UTF-8"?>
+<testCases xmlns="http://www.omg.org/spec/DMN/20160719/testcase" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <testCase id="c1"><resultNode name="r"><expected><value xsi:type="xsd:integer">5</value></expected></resultNode></testCase>
+</testCases>`
+	if err := os.WriteFile(filepath.Join(dir, "dz.dmn"), []byte(dmn), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "dz-test-01.xml"), []byte(test), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := tck.Run(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Failed != 1 || rep.Skipped != 0 {
+		t.Errorf("division par zéro = NON-CONFORMITÉ : attendu 1 fail / 0 skip, obtenu %d fail / %d skip ; %+v",
+			rep.Failed, rep.Skipped, rep.Cases)
+	}
+}
 
 // Décodeur de valeur TCK : exactitude décimale (json.Number), types de base, et skip honnête
 // des types non supportés.

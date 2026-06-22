@@ -83,6 +83,23 @@ func (e *evaluator) traceTable(t *ir.DecisionTable, tr *DecisionTrace) error {
 		cols[i] = v
 	}
 
+	// FIRST : court-circuite à la 1re règle qui matche, EXACTEMENT comme evalTable. Ne PAS évaluer
+	// les règles suivantes : une cellule Op=Prog ultérieure qui erre (ex: division par zéro) ferait
+	// échouer Trace là où Eval réussit → divergence. (Revue adverse, Tranche 4.)
+	if t.HitPolicy == ir.HitFirst {
+		for ri := range t.Rules {
+			ok, err := e.matches(t.Rules[ri], cols)
+			if err != nil {
+				return err
+			}
+			if ok {
+				e.fillWinner(t, ri, cols, tr)
+				return nil
+			}
+		}
+		return e.fillFallback(t, tr)
+	}
+
 	var matched []int
 	for ri := range t.Rules {
 		ok, err := e.matches(t.Rules[ri], cols)
@@ -110,13 +127,10 @@ func (e *evaluator) traceTable(t *ir.DecisionTable, tr *DecisionTrace) error {
 		return nil
 	}
 
-	// Single-hit : déterminer la VRAIE règle retenue par la politique (pas juste le 1er match).
+	// UNIQUE / ANY / PRIORITY : ces politiques évaluent TOUTES les règles (comme evalTable), donc
+	// pas de divergence possible. On détermine la VRAIE règle retenue.
 	winner := -1
 	switch t.HitPolicy {
-	case ir.HitFirst:
-		if len(matched) > 0 {
-			winner = matched[0]
-		}
 	case ir.HitUnique:
 		if len(matched) > 1 {
 			return fmt.Errorf("hit policy UNIQUE: %d règles matchent (au plus 1 attendue)", len(matched))
@@ -148,15 +162,14 @@ func (e *evaluator) traceTable(t *ir.DecisionTable, tr *DecisionTrace) error {
 	}
 
 	if winner < 0 {
-		out, err := e.fallback(t)
-		if err != nil {
-			return err
-		}
-		tr.Fallback = true
-		tr.Output = out.ToAny()
-		return nil
+		return e.fillFallback(t, tr)
 	}
+	e.fillWinner(t, winner, cols, tr)
+	return nil
+}
 
+// fillWinner renseigne la règle gagnante + ses cellules justifiantes (test vrai, non `-`).
+func (e *evaluator) fillWinner(t *ir.DecisionTable, winner int, cols []ir.Value, tr *DecisionTrace) {
 	tr.Matched = true
 	tr.RuleIndex = winner + 1
 	tr.RuleLine = t.Rules[winner].Line
@@ -170,6 +183,15 @@ func (e *evaluator) traceTable(t *ir.DecisionTable, tr *DecisionTrace) error {
 			tr.NotGeometric = true // cellule expression : justification évaluée, non géométrique
 		}
 	}
+}
+
+func (e *evaluator) fillFallback(t *ir.DecisionTable, tr *DecisionTrace) error {
+	out, err := e.fallback(t)
+	if err != nil {
+		return err
+	}
+	tr.Fallback = true
+	tr.Output = out.ToAny()
 	return nil
 }
 
