@@ -58,6 +58,45 @@ func TestServiceDecision(t *testing.T) {
 	}
 }
 
+func TestServiceExplain(t *testing.T) {
+	h := creditHandler(t)
+	body := `{"credit_score":500,"annual_income":60000,"monthly_debt":1500,"age":40}`
+	req := httptest.NewRequest("POST", "/v1/decisions/eligibility/explain", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("code = %d, attendu 200 ; corps: %s", rec.Code, rec.Body.String())
+	}
+	var tr struct {
+		Matched   bool   `json:"matched"`
+		RuleIndex int    `json:"ruleIndex"`
+		HitPolicy string `json:"hitPolicy"`
+		Cells     []struct {
+			Input string `json:"input"`
+			Value string `json:"value"`
+		} `json:"cells"`
+		Output map[string]any `json:"output"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &tr); err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Matched || tr.RuleIndex != 1 {
+		t.Errorf("attendu match règle #1, obtenu matched=%v ruleIndex=%d", tr.Matched, tr.RuleIndex)
+	}
+	if tr.Output["reason"] != "score insuffisant" {
+		t.Errorf("reason = %v, attendu \"score insuffisant\"", tr.Output["reason"])
+	}
+	found := false
+	for _, c := range tr.Cells {
+		if c.Input == "credit_score" && c.Value == "500" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("cellule justifiante credit_score=500 absente: %+v", tr.Cells)
+	}
+}
+
 func TestServiceBadInput(t *testing.T) {
 	h := creditHandler(t)
 	req := httptest.NewRequest("POST", "/v1/decisions/eligibility", strings.NewReader("pas du json"))

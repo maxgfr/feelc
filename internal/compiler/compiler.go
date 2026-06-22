@@ -72,7 +72,7 @@ func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]mode
 		if err := checkVars(prog.Vars, valid, d.Name, d.Line); err != nil {
 			return ir.Decision{}, err
 		}
-		return ir.Decision{Name: d.Name, Kind: ir.KindLiteralExpr, Expr: prog, Deps: prog.Vars}, nil
+		return ir.Decision{Name: d.Name, Kind: ir.KindLiteralExpr, Expr: prog, ExprSrc: d.Expr.Src, Deps: prog.Vars, Line: d.Line}, nil
 	}
 
 	hp, agg, err := parseHitPolicy(d.HitPolicy, d.Line)
@@ -126,7 +126,7 @@ func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]mode
 			return ir.Decision{}, diag.Newf(diag.CodeArity, r.Line,
 				"décision %q: %d conditions pour %d colonnes `needs`", d.Name, len(r.Conds), len(d.Needs))
 		}
-		rule := ir.Rule{Outputs: outs}
+		rule := ir.Rule{Outputs: outs, Line: r.Line, OutputSrc: outputSrcs(r.Outputs)}
 		for _, c := range r.Conds {
 			ct, err := normalizeCell(c, valid, bkms, d.Name)
 			if err != nil {
@@ -136,7 +136,16 @@ func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]mode
 		}
 		table.Rules = append(table.Rules, rule)
 	}
-	return ir.Decision{Name: d.Name, Kind: ir.KindTable, Table: table, Deps: d.Needs}, nil
+	return ir.Decision{Name: d.Name, Kind: ir.KindTable, Table: table, Deps: d.Needs, Line: d.Line}, nil
+}
+
+// outputSrcs extrait le texte source des cellules de sortie (trace de justification).
+func outputSrcs(cells []model.Cell) []string {
+	srcs := make([]string, len(cells))
+	for i, c := range cells {
+		srcs[i] = c.Src
+	}
+	return srcs
 }
 
 // outputNames déduit les colonnes de sortie du type de la décision :
@@ -176,9 +185,16 @@ func literalOutputs(cells []model.Cell, want int, dec string, line int) ([]ir.Va
 // normalizeCell transforme une cellule de condition en CellTest géométrique (ou Op=Prog).
 func normalizeCell(c model.Cell, valid map[string]bool, bkms map[string]model.BKM, dec string) (ir.CellTest, error) {
 	if c.Dash {
-		return ir.CellTest{Op: ir.OpAny}, nil
+		return ir.CellTest{Op: ir.OpAny, Src: c.Src, Line: c.Line}, nil
 	}
-	return normalizeNode(c.Node, c.Src, valid, bkms, dec, c.Line, c.Col)
+	ct, err := normalizeNode(c.Node, c.Src, valid, bkms, dec, c.Line, c.Col)
+	if err != nil {
+		return ir.CellTest{}, err
+	}
+	// Trace de justification : Src/Line de la cellule de plus haut niveau (pas les sous-tests).
+	ct.Src = c.Src
+	ct.Line = c.Line
+	return ct, nil
 }
 
 func normalizeNode(node feel.Node, src string, valid map[string]bool, bkms map[string]model.BKM, dec string, line, col int) (ir.CellTest, error) {

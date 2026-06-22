@@ -35,6 +35,8 @@ type CellTest struct {
 	Negate bool         // `not(<test>)` : inverse le résultat géométrique (reste analysable)
 	Sub    []CellTest   // OpInSet : OU de sous-tests (sémantique virgule des unary tests DMN)
 	Prog   *ExprProgram // OpProg : cellule = expression libre (référence une autre colonne, arithmétique)
+	Src    string       // texte source de la cellule (trace de justification, `explain`)
+	Line   int          // ligne source 1-based (0 si inconnue, ex: chargé depuis un .ir.bin)
 }
 
 // HitPolicy : politique de résolution d'une table de décision (sémantique DMN).
@@ -51,8 +53,10 @@ const (
 
 // Rule : une ligne de table. Conds aligné sur les colonnes d'entrée, Outputs sur les sorties.
 type Rule struct {
-	Conds   []CellTest
-	Outputs []Value // littéraux en Tranche 1 (expressions en Tranche 2)
+	Conds     []CellTest
+	Outputs   []Value  // littéraux en Tranche 1 (expressions en Tranche 2)
+	Line      int      // ligne source 1-based de la règle (trace de justification)
+	OutputSrc []string // texte source des sorties (aligné sur Outputs)
 }
 
 // Aggregation : fonction d'agrégation d'une hit policy COLLECT.
@@ -87,11 +91,13 @@ const (
 
 // Decision : un nœud du graphe de décisions (DRG).
 type Decision struct {
-	Name  string
-	Kind  DecisionKind
-	Table *DecisionTable // si KindTable
-	Expr  *ExprProgram   // si KindLiteralExpr
-	Deps  []string       // dépendances (information requirements)
+	Name    string
+	Kind    DecisionKind
+	Table   *DecisionTable // si KindTable
+	Expr    *ExprProgram   // si KindLiteralExpr
+	ExprSrc string         // si KindLiteralExpr : texte source de l'expression (justification)
+	Deps    []string       // dépendances (information requirements)
+	Line    int            // ligne source 1-based de la décision
 }
 
 // Type : type statique d'une variable.

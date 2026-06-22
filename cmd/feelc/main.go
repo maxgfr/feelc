@@ -22,6 +22,7 @@ import (
 	"github.com/maxgfr/feelc/internal/diag"
 	"github.com/maxgfr/feelc/internal/dmnxml"
 	"github.com/maxgfr/feelc/internal/engine"
+	"github.com/maxgfr/feelc/internal/explain"
 	"github.com/maxgfr/feelc/internal/ir"
 	"github.com/maxgfr/feelc/internal/loader"
 	"github.com/maxgfr/feelc/internal/registry"
@@ -125,6 +126,8 @@ func main() {
 		err = cmdCompile(args)
 	case "verify":
 		err = cmdVerify(args)
+	case "explain":
+		err = cmdExplain(args)
 	case "check":
 		err = cmdCheck(args)
 	case "import":
@@ -172,6 +175,7 @@ Usage:
   feelc run     --rules <fichier.rules|.ir.bin> --decision <nom> --input '<json>' [--json]
   feelc compile --rules <fichier.rules> [-o <model.ir.bin>] [--json]
   feelc verify  --rules <fichier.rules|.ir.bin> [--json]
+  feelc explain --rules <fichier.rules|.ir.bin> --decision <nom> --input '<json>' [--json]
   feelc check  --rules <fichier.rules> --claims <claims.json> [--json]
   feelc import --in <modele.dmn> [-o <sortie.rules>]
   feelc serve  --rules <fichier.rules> [--addr :8080] [--watch] [--strict]
@@ -390,6 +394,63 @@ func cmdRun(args []string) error {
 }
 
 
+
+func cmdExplain(args []string) error {
+	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
+	rulesPath := fs.String("rules", "", "chemin du fichier .rules ou .ir.bin")
+	decision := fs.String("decision", "", "nom de la décision à expliquer")
+	inputJSON := fs.String("input", "{}", "données d'entrée au format JSON")
+	asJSON := fs.Bool("json", false, "sortie au format JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *rulesPath == "" || *decision == "" {
+		return fmt.Errorf("--rules et --decision sont requis")
+	}
+	inputs, err := decodeInputs(*inputJSON)
+	if err != nil {
+		return fmt.Errorf("--input: %w", err)
+	}
+	cm, _, err := loadModel(*rulesPath, *asJSON)
+	if err != nil {
+		return err
+	}
+	tr, err := explain.Explain(cm, *decision, inputs)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(tr)
+	}
+	renderTrace(tr)
+	return nil
+}
+
+// renderTrace rend une trace de justification de façon lisible.
+func renderTrace(tr *explain.Trace) {
+	fmt.Printf("décision %q = %v\n", tr.Decision, display(tr.Output))
+	switch {
+	case tr.Kind == "literal-expr":
+		fmt.Printf("  expression : %s  (évaluée, justification non géométrique)\n", tr.ExprSrc)
+	case len(tr.Contributors) > 0:
+		fmt.Printf("  hit policy %s — règles contributrices :\n", tr.HitPolicy)
+		for _, c := range tr.Contributors {
+			fmt.Printf("    • règle #%d (ligne %d)\n", c.Index, c.Line)
+		}
+	case tr.Fallback:
+		fmt.Println("  aucune règle ne matche → ligne `default` (ou null)")
+	case tr.Matched:
+		fmt.Printf("  règle #%d (ligne %d) — hit policy %s\n", tr.RuleIndex, tr.RuleLine, tr.HitPolicy)
+		for _, c := range tr.Cells {
+			fmt.Printf("    • %s %s  (valeur: %s, ligne %d)\n", c.Input, c.Src, c.Value, c.Line)
+		}
+		if tr.NotGeometric {
+			fmt.Println("    (une cellule est une expression : justification évaluée, non géométrique)")
+		}
+	}
+}
 
 // decodeInputs lit le JSON d'entrée en préservant l'exactitude des nombres (UseNumber).
 func decodeInputs(s string) (map[string]any, error) {

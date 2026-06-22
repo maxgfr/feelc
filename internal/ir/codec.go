@@ -138,6 +138,8 @@ func (e *encoder) putDomain(dom Domain) {
 func (e *encoder) putDecision(d Decision) {
 	e.putStr(d.Name)
 	e.putU8(uint8(d.Kind))
+	e.putU32(uint32(d.Line))
+	e.putStr(d.ExprSrc)
 	e.putU32(uint32(len(d.Deps)))
 	for _, dep := range d.Deps {
 		e.putStr(dep)
@@ -165,6 +167,8 @@ func (e *encoder) putTable(t *DecisionTable) {
 			e.putCellTest(c)
 		}
 		e.putValueSlice(r.Outputs)
+		e.putU32(uint32(r.Line))
+		e.putStrSlice(r.OutputSrc)
 	}
 	e.putValueSlice(t.Priority)
 	// Default : nil distinct de [] (présence)
@@ -188,6 +192,8 @@ func (e *encoder) putCellTest(c CellTest) {
 		e.putCellTest(s)
 	}
 	e.putProg(c.Prog)
+	e.putStr(c.Src)
+	e.putU32(uint32(c.Line))
 }
 
 func (e *encoder) putProg(p *ExprProgram) {
@@ -365,6 +371,8 @@ func (d *decoder) getDecision() Decision {
 	dec := Decision{}
 	dec.Name = d.getStr()
 	dec.Kind = DecisionKind(d.getU8())
+	dec.Line = int(d.getU32())
+	dec.ExprSrc = d.getStr()
 	ndeps := d.count()
 	for i := 0; i < ndeps && d.err == nil; i++ {
 		dec.Deps = append(dec.Deps, d.getStr())
@@ -390,6 +398,8 @@ func (d *decoder) getTable() *DecisionTable {
 			r.Conds = append(r.Conds, d.getCellTest())
 		}
 		r.Outputs = d.getValueSlice()
+		r.Line = int(d.getU32())
+		r.OutputSrc = d.getStrSlice()
 		t.Rules = append(t.Rules, r)
 	}
 	t.Priority = d.getValueSlice()
@@ -420,6 +430,8 @@ func (d *decoder) getCellTest() CellTest {
 		c.Sub = append(c.Sub, d.getCellTest())
 	}
 	c.Prog = d.getProg()
+	c.Src = d.getStr()
+	c.Line = int(d.getU32())
 	return c
 }
 

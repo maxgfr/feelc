@@ -12,6 +12,7 @@ import (
 
 	"github.com/maxgfr/feelc/internal/audit"
 	"github.com/maxgfr/feelc/internal/engine"
+	"github.com/maxgfr/feelc/internal/explain"
 	"github.com/maxgfr/feelc/internal/registry"
 )
 
@@ -30,6 +31,7 @@ func New(reg *registry.Registry, log *audit.Logger, reload func() error) *Server
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/decisions/{key}", s.handleDecision)
+	mux.HandleFunc("POST /v1/decisions/{key}/explain", s.handleExplain)
 	mux.HandleFunc("POST /v1/evaluate", s.handleEvaluate)
 	mux.HandleFunc("GET /v1/model", s.handleModel)
 	mux.HandleFunc("POST /v1/admin/reload", s.handleReload)
@@ -45,6 +47,27 @@ func (s *Server) handleDecision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.decide(w, r.PathValue("key"), inputs)
+}
+
+// handleExplain renvoie la trace de justification d'une décision (règle gagnante + cellules).
+// Snapshot du modèle courant (survit à un hot-swap), sous recoverMW comme les autres routes.
+func (s *Server) handleExplain(w http.ResponseWriter, r *http.Request) {
+	inputs, err := decodeInputs(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "entrée JSON invalide: "+err.Error())
+		return
+	}
+	entry := s.reg.Current()
+	if entry == nil {
+		writeErr(w, http.StatusServiceUnavailable, "aucun modèle chargé")
+		return
+	}
+	tr, err := explain.Explain(entry.Model, r.PathValue("key"), inputs)
+	if err != nil {
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, tr)
 }
 
 func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
