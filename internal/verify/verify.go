@@ -7,7 +7,9 @@
 // MÊME fonction ir.MatchCell que la VM -> preuve et exécution s'accordent). On en déduit :
 //   - complétude : un point couvert par 0 règle = TROU (avec contre-exemple concret) ;
 //   - conflits   : selon la hit policy (UNIQUE -> tout chevauchement ; ANY -> sorties divergentes) ;
-//   - règles mortes / masquées (FIRST/PRIORITY) ; ligne `default` inutile.
+//   - règles mortes / masquées (FIRST/PRIORITY) ; ligne `default` inutile ;
+//   - subsumption (ANY/PRIORITY) : règle dont la région est incluse dans une autre avec la même
+//     sortie -> REDONDANTE (supprimable), via une matrice d'inclusion (bitset) sur la même grille.
 //
 // Dégradation honnête : une table avec une cellule Op=Prog (non géométrique) ou une grille trop
 // grande est signalée « non prouvée formellement » — jamais conformée en silence.
@@ -38,7 +40,12 @@ const (
 	KindDeadRule           Kind = "dead-rule"
 	KindUnreachableDefault Kind = "unreachable-default"
 	KindNotVerifiable      Kind = "not-verifiable"
+	KindSubsumed           Kind = "subsumed" // règle dont la région est incluse dans une autre
 )
+
+// maxSubsumeRules : la matrice de subsumption tient dans un bitset uint64 jusqu'à 64 règles
+// (la table 8×50 du bench y tient). Au-delà, l'analyse de subsumption est honnêtement omise.
+const maxSubsumeRules = 64
 
 type Severity string
 
@@ -131,6 +138,25 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 	gaps := 0
 	conflicts := map[string]Finding{}
 
+	// Matrice de subsumption (bitset) : subset[a] a le bit b si "A ⊆ B" reste possible. Initialisée
+	// tout-à-vrai, on efface le bit b dès qu'un point-témoin couvert par A ne l'est PAS par B.
+	// Pertinente pour ANY / PRIORITY (chevauchement à sorties identiques = règle redondante, non
+	// signalé par ailleurs). UNIQUE = déjà conflit ; COLLECT/RULE ORDER = chevauchements voulus ;
+	// FIRST = déjà couvert par dead-rule. Bitset uint64 -> O(1) par règle couvrante et par point.
+	trackSub := len(t.Rules) >= 2 && len(t.Rules) <= maxSubsumeRules &&
+		(t.HitPolicy == ir.HitAny || t.HitPolicy == ir.HitPriority)
+	var subset []uint64
+	if trackSub {
+		all := uint64(0)
+		for i := range t.Rules {
+			all |= 1 << uint(i)
+		}
+		subset = make([]uint64, len(t.Rules))
+		for i := range subset {
+			subset[i] = all
+		}
+	}
+
 	err := eachPoint(dims, func(point []ir.Value) error {
 		var covering []int
 		for ri := range t.Rules {
@@ -140,6 +166,15 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 			}
 			if ok {
 				covering = append(covering, ri)
+			}
+		}
+		if trackSub {
+			var coverMask uint64
+			for _, ri := range covering {
+				coverMask |= 1 << uint(ri)
+			}
+			for _, a := range covering {
+				subset[a] &= coverMask // tout b non couvert ici est un témoin que A⊄B
 			}
 		}
 		if len(covering) == 0 {
@@ -192,10 +227,50 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 		}
 	}
 
+	// Subsumption : règle redondante (région incluse dans une autre, sortie identique).
+	if trackSub {
+		reportSubsumption(d.Name, t, subset, everCovers, rep)
+	}
+
 	// Ligne `default` inutile.
 	if t.Default != nil && allCovered {
 		rep.add(Finding{Decision: d.Name, Kind: KindUnreachableDefault, Severity: SevInfo,
 			Message: "ligne `default` jamais utilisée : les règles couvrent déjà tous les cas"})
+	}
+}
+
+// reportSubsumption signale les règles REDONDANTES : région incluse dans une autre règle avec
+// une sortie identique (donc supprimable sans changer la décision sous ANY/PRIORITY). subset[a]
+// porte le bit b ssi A⊆B sur la grille (inclusion EXACTE : les témoins couvrent toutes les
+// cellules atomiques). Les sorties différentes (dominance) sont hors périmètre v2 (trop
+// dépendantes de la politique) pour éviter le bruit. Plafonné à maxWitnessesPerKind.
+func reportSubsumption(dec string, t *ir.DecisionTable, subset []uint64, everCovers []bool, rep *Report) {
+	reported := 0
+	for a := range t.Rules {
+		if !everCovers[a] {
+			continue // jamais couverte -> déjà signalée dead-rule
+		}
+		for b := range t.Rules {
+			if a == b || subset[a]&(1<<uint(b)) == 0 || !everCovers[b] {
+				continue
+			}
+			mutual := subset[b]&(1<<uint(a)) != 0 // régions identiques
+			if mutual && b < a {
+				continue // paire mutuelle signalée une seule fois (a<b)
+			}
+			if !outputsEqual(t.Rules[a].Outputs, t.Rules[b].Outputs) {
+				continue // sorties différentes : pas "redondant"
+			}
+			if reported >= maxWitnessesPerKind {
+				return
+			}
+			reported++
+			msg := fmt.Sprintf("règle #%d redondante : région incluse dans la règle #%d avec une sortie identique (supprimable)", a+1, b+1)
+			if mutual {
+				msg = fmt.Sprintf("règles #%d et #%d : régions et sorties identiques (l'une est redondante)", a+1, b+1)
+			}
+			rep.add(Finding{Decision: dec, Kind: KindSubsumed, Severity: SevWarning, Rules: []int{a + 1, b + 1}, Message: msg})
+		}
 	}
 }
 
