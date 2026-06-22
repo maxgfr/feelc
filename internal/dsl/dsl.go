@@ -92,12 +92,28 @@ func (p *parser) parse() (*model.Model, error) {
 			}
 			m.Inputs = append(m.Inputs, in)
 			p.i++
+		case strings.HasPrefix(t, "type "):
+			td, err := parseTypeDecl(t, ln.no)
+			if err != nil {
+				return nil, err
+			}
+			m.Types = append(m.Types, td)
+			p.i++
 		case strings.HasPrefix(t, "decision "):
-			dec, err := p.parseDecision(t, ln.no)
+			if strings.Contains(t, "{") {
+				dec, err := p.parseDecision(t, ln.no) // table (avance p.i)
+				if err != nil {
+					return nil, err
+				}
+				m.Decisions = append(m.Decisions, dec)
+				continue
+			}
+			dec, err := parseExprDecision(t, ln.no) // literal-expression (1 ligne)
 			if err != nil {
 				return nil, err
 			}
 			m.Decisions = append(m.Decisions, dec)
+			p.i++
 		default:
 			return nil, fmt.Errorf("ligne %d: instruction non reconnue: %q", ln.no, t)
 		}
@@ -129,15 +145,21 @@ func parseModelHeader(t string, no int) (string, error) {
 
 func parseInput(t string, no int) (model.Input, error) {
 	rest := strings.TrimSpace(strings.TrimPrefix(t, "input"))
-	name, typ, ok := splitColon(rest)
+	name, typespec, ok := splitColon(rest)
 	if !ok {
 		return model.Input{}, fmt.Errorf("ligne %d: `input` attend `nom : type`", no)
 	}
-	mt, err := parseType(typ, no)
+	// typespec = "<type>" éventuellement suivi d'un domaine ("number in [300..850]", "number >= 0").
+	fields := strings.Fields(typespec)
+	if len(fields) == 0 {
+		return model.Input{}, fmt.Errorf("ligne %d: type d'entrée manquant", no)
+	}
+	mt, err := parseType(fields[0], no)
 	if err != nil {
 		return model.Input{}, err
 	}
-	return model.Input{Name: name, Type: mt, Line: no}, nil
+	domain := strings.TrimSpace(strings.TrimPrefix(typespec, fields[0]))
+	return model.Input{Name: name, Type: mt, Domain: domain, Line: no}, nil
 }
 
 func (p *parser) parseDecision(header string, no int) (model.Decision, error) {
@@ -156,12 +178,8 @@ func (p *parser) parseDecision(header string, no int) (model.Decision, error) {
 		return dec, fmt.Errorf("ligne %d: en-tête de décision attendu `decision nom : type {`", no)
 	}
 	dec.Name = strings.TrimSpace(name)
-	mt, err := parseType(strings.TrimSpace(typ), no)
-	if err != nil {
-		return dec, err
-	}
-	dec.Type = mt
-	p.i++ // consommer l'en-tête (le `{` en fin de ligne a déjà été validé plus haut)
+	dec.TypeName = strings.TrimSpace(typ) // builtin ou type context déclaré : résolu par le compilateur
+	p.i++                                  // consommer l'en-tête (le `{` en fin de ligne a déjà été validé plus haut)
 
 	for p.i < len(p.lines) {
 		ln := p.lines[p.i]
@@ -199,12 +217,17 @@ func parseRule(t string, no int) (model.Rule, error) {
 		return model.Rule{}, fmt.Errorf("ligne %d: règle sans `=>`", no)
 	}
 	r := model.Rule{Line: no}
-	for _, c := range splitCells(lhs) {
-		cell, err := parseCell(c, no, false)
-		if err != nil {
-			return model.Rule{}, err
+	condCells := splitCells(lhs)
+	if isDefaultLHS(condCells) {
+		r.IsDefault = true // ligne `default` : pas de conditions
+	} else {
+		for _, c := range condCells {
+			cell, err := parseCell(c, no, false)
+			if err != nil {
+				return model.Rule{}, err
+			}
+			r.Conds = append(r.Conds, cell)
 		}
-		r.Conds = append(r.Conds, cell)
 	}
 	for _, c := range splitCells(rhs) {
 		cell, err := parseCell(c, no, true)
@@ -214,6 +237,78 @@ func parseRule(t string, no int) (model.Rule, error) {
 		r.Outputs = append(r.Outputs, cell)
 	}
 	return r, nil
+}
+
+// isDefaultLHS reconnaît une ligne `default` (ses autres cellules ne sont que de l'alignement vide).
+func isDefaultLHS(cells []string) bool {
+	if len(cells) == 0 || cells[0] != "default" {
+		return false
+	}
+	for _, c := range cells[1:] {
+		if c != "" {
+			return false
+		}
+	}
+	return true
+}
+
+// parseExprDecision parse `decision <name> : <type> = <expr FEEL>` (décision literal-expression).
+func parseExprDecision(t string, no int) (model.Decision, error) {
+	h := strings.TrimSpace(strings.TrimPrefix(t, "decision"))
+	name, rest, ok := splitColon(h)
+	if !ok {
+		return model.Decision{}, fmt.Errorf("ligne %d: décision: `nom : type ...` attendu", no)
+	}
+	typeName, exprSrc, ok := strings.Cut(rest, "=")
+	if !ok {
+		return model.Decision{}, fmt.Errorf("ligne %d: décision %q: attendu `{` (table) ou `= expression`", no, name)
+	}
+	exprSrc = strings.TrimSpace(exprSrc)
+	node, err := feel.ParseString(exprSrc)
+	if err != nil {
+		return model.Decision{}, fmt.Errorf("ligne %d: expression FEEL invalide %q: %w", no, exprSrc, err)
+	}
+	return model.Decision{
+		Name:     name,
+		TypeName: strings.TrimSpace(typeName),
+		Expr:     &model.Cell{Src: exprSrc, Node: node, Line: no},
+		Line:     no,
+	}, nil
+}
+
+// parseTypeDecl parse `type <Name> = context { f1: t1, f2: t2 }` (sur une ligne en v2).
+func parseTypeDecl(t string, no int) (model.TypeDecl, error) {
+	rest := strings.TrimSpace(strings.TrimPrefix(t, "type"))
+	name, rhs, ok := strings.Cut(rest, "=")
+	if !ok {
+		return model.TypeDecl{}, fmt.Errorf("ligne %d: `type Nom = context { ... }` attendu", no)
+	}
+	rhs = strings.TrimSpace(rhs)
+	if !strings.HasPrefix(rhs, "context") {
+		return model.TypeDecl{}, fmt.Errorf("ligne %d: seuls les types `context { ... }` sont supportés en v2", no)
+	}
+	open := strings.IndexByte(rhs, '{')
+	closeB := strings.LastIndexByte(rhs, '}')
+	if open < 0 || closeB < 0 || closeB < open {
+		return model.TypeDecl{}, fmt.Errorf("ligne %d: type context : `{ ... }` attendu sur une ligne", no)
+	}
+	td := model.TypeDecl{Name: strings.TrimSpace(name), Line: no}
+	for _, f := range strings.Split(rhs[open+1:closeB], ",") {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		fn, ft, ok := splitColon(f)
+		if !ok {
+			return model.TypeDecl{}, fmt.Errorf("ligne %d: champ de context: `nom: type` attendu, obtenu %q", no, f)
+		}
+		mt, err := parseType(ft, no)
+		if err != nil {
+			return model.TypeDecl{}, err
+		}
+		td.Fields = append(td.Fields, model.Field{Name: fn, Type: mt})
+	}
+	return td, nil
 }
 
 // parseCell normalise une cellule. isOutput=false pour une condition, true pour une sortie.

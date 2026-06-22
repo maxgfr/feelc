@@ -28,10 +28,12 @@ const (
 // (comparaison/intervalle/ensemble) que le vérificateur sait décomposer.
 type CellTest struct {
 	Op    Op
-	A     Value // comparand (Eq/Ne/Lt..) ou borne basse (InRange)
-	B     Value // borne haute (InRange)
-	AOpen bool  // borne basse exclue ?
-	BOpen bool  // borne haute exclue ?
+	A     Value        // comparand (Eq/Ne/Lt..) ou borne basse (InRange)
+	B     Value        // borne haute (InRange)
+	AOpen bool         // borne basse exclue ?
+	BOpen bool         // borne haute exclue ?
+	Sub   []CellTest   // OpInSet : OU de sous-tests (sémantique virgule des unary tests DMN)
+	Prog  *ExprProgram // OpProg : cellule = expression libre (référence une autre colonne, arithmétique)
 }
 
 // HitPolicy : politique de résolution d'une table de décision (sémantique DMN).
@@ -55,9 +57,10 @@ type Rule struct {
 // DecisionTable : la logique d'une décision sous forme de table.
 type DecisionTable struct {
 	Inputs    []string // noms des variables d'entrée, dans l'ordre des colonnes
-	Outputs   []string // noms des sorties
+	Outputs   []string // noms des sorties (1 = sortie scalaire ; >1 = context)
 	Rules     []Rule
 	HitPolicy HitPolicy
+	Default   []Value // sortie de la ligne `default` (nil si absente)
 }
 
 // DecisionKind distingue table et expression littérale.
@@ -72,8 +75,9 @@ const (
 type Decision struct {
 	Name  string
 	Kind  DecisionKind
-	Table *DecisionTable
-	Deps  []string // dépendances (information requirements)
+	Table *DecisionTable // si KindTable
+	Expr  *ExprProgram   // si KindLiteralExpr
+	Deps  []string       // dépendances (information requirements)
 }
 
 // Type : type statique d'une variable.

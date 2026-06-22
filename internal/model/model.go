@@ -5,7 +5,7 @@ package model
 
 import feel "github.com/pbinitiative/feel"
 
-// Type : type déclaré d'une variable (forme source).
+// Type : type scalaire déclaré d'une variable (forme source).
 type Type string
 
 const (
@@ -16,9 +16,23 @@ const (
 
 // Input : une donnée d'entrée déclarée (Input Data DMN).
 type Input struct {
+	Name   string
+	Type   Type
+	Domain string // contrainte de domaine brute (ex: "in [300..850]", ">= 0") ; exploitée par la vérif (T4)
+	Line   int
+}
+
+// Field : un champ d'un type context (sortie multi-colonnes).
+type Field struct {
 	Name string
 	Type Type
-	Line int
+}
+
+// TypeDecl : déclaration `type Name = context { f1: t1, f2: t2 }`.
+type TypeDecl struct {
+	Name   string
+	Fields []Field
+	Line   int
 }
 
 // Cell : une cellule de table (condition d'entrée ou sortie), avec sa trace source.
@@ -30,20 +44,22 @@ type Cell struct {
 	Col  int
 }
 
-// Rule : une ligne de table (conditions => sorties).
+// Rule : une ligne de table (conditions => sorties), ou la ligne `default`.
 type Rule struct {
-	Conds   []Cell
-	Outputs []Cell
-	Line    int
+	Conds     []Cell
+	Outputs   []Cell
+	IsDefault bool // ligne `default` : s'applique quand aucune règle ne matche
+	Line      int
 }
 
-// Decision : une décision du DRG (table en Tranche 1).
+// Decision : une décision du DRG. Soit une table (Rules), soit une expression (Expr).
 type Decision struct {
 	Name      string
-	Type      Type
+	TypeName  string // "number"/"string"/"boolean" ou un nom de type context déclaré
 	Needs     []string
 	HitPolicy string
 	Rules     []Rule
+	Expr      *Cell // si != nil : décision literal-expression (TypeName scalaire), pas de table
 	Line      int
 }
 
@@ -51,5 +67,16 @@ type Decision struct {
 type Model struct {
 	Name      string
 	Inputs    []Input
+	Types     []TypeDecl
 	Decisions []Decision
+}
+
+// Type retrouve une déclaration de type context par nom.
+func (m *Model) Type(name string) (TypeDecl, bool) {
+	for _, t := range m.Types {
+		if t.Name == name {
+			return t, true
+		}
+	}
+	return TypeDecl{}, false
 }
