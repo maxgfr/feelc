@@ -130,6 +130,13 @@ func (p *parser) parse() (*model.Model, error) {
 			}
 			m.Types = append(m.Types, td)
 			p.i++
+		case strings.HasPrefix(t, "bkm "):
+			b, err := parseBKM(t, ln.no)
+			if err != nil {
+				return nil, err
+			}
+			m.BKMs = append(m.BKMs, b)
+			p.i++
 		case strings.HasPrefix(t, "decision "):
 			if strings.Contains(t, "{") {
 				dec, err := p.parseDecision(t, ln.no, indent) // table (avance p.i)
@@ -323,6 +330,57 @@ func parseExprDecision(t string, no int) (model.Decision, error) {
 		Expr:     &model.Cell{Src: exprSrc, Node: node, Line: no},
 		Line:     no,
 	}, nil
+}
+
+// parseBKM parse `bkm <name>(p1:t1, p2:t2):ret = <expr FEEL>`.
+// La signature `(p:t):ret` est de la syntaxe DSL feelc (pas du FEEL standard) — découpée ici ;
+// seul le corps `= expr` est confié au parseur FEEL.
+func parseBKM(t string, no int) (model.BKM, error) {
+	rest := strings.TrimSpace(strings.TrimPrefix(t, "bkm"))
+	op := strings.IndexByte(rest, '(')
+	cp := strings.IndexByte(rest, ')')
+	if op < 0 || cp < 0 || cp < op {
+		return model.BKM{}, diag.New(diag.CodeBKM, no,
+			"`bkm` attend `nom(p1:t1, ...):type = expression`").
+			WithSuggestion("exemple : bkm dti(debt:number, income:number):number = debt / (income / 12)")
+	}
+	name := strings.TrimSpace(rest[:op])
+	if name == "" {
+		return model.BKM{}, diag.New(diag.CodeBKM, no, "nom de BKM manquant avant `(`")
+	}
+	bkm := model.BKM{Name: name, Line: no}
+	for _, p := range splitList(rest[op+1 : cp]) {
+		pn, pt, ok := splitColon(p)
+		if !ok {
+			return model.BKM{}, diag.Newf(diag.CodeBKM, no, "paramètre de BKM: `nom: type` attendu, obtenu %q", p)
+		}
+		mt, err := parseType(pt, no)
+		if err != nil {
+			return model.BKM{}, err
+		}
+		bkm.Params = append(bkm.Params, model.Field{Name: pn, Type: mt})
+	}
+	after := strings.TrimSpace(rest[cp+1:])
+	if !strings.HasPrefix(after, ":") {
+		return model.BKM{}, diag.New(diag.CodeBKM, no, "type de retour attendu après `)` : `):type = expr`")
+	}
+	retName, bodySrc, ok := strings.Cut(after[1:], "=")
+	if !ok {
+		return model.BKM{}, diag.New(diag.CodeBKM, no, "corps de BKM attendu : `= expression`")
+	}
+	ret, err := parseType(strings.TrimSpace(retName), no)
+	if err != nil {
+		return model.BKM{}, err
+	}
+	bkm.Ret = ret
+	bodySrc = strings.TrimSpace(bodySrc)
+	node, err := feel.ParseString(bodySrc)
+	if err != nil {
+		return model.BKM{}, diag.Wrap(diag.CodeFeelSyntax, no,
+			fmt.Sprintf("corps de BKM FEEL invalide %q", bodySrc), err)
+	}
+	bkm.Body = &model.Cell{Src: bodySrc, Node: node, Line: no}
+	return bkm, nil
 }
 
 // parseTypeDecl parse `type <Name> = context { f1: t1, f2: t2 }` (sur une ligne en v2).

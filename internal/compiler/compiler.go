@@ -32,6 +32,8 @@ func Compile(m *model.Model) (*ir.CompiledModel, error) {
 		cm.Domains[in.Name] = dom
 	}
 	// Noms résolvables : entrées externes + décisions (une cellule/expr peut référencer une décision amont).
+	// Les BKM ne sont PAS des noms résolvables (pas dans `valid`) : ce sont des fonctions pures,
+	// référençables uniquement par invocation `name(...)`, inlinées par le lowerer.
 	valid := map[string]bool{}
 	for n := range cm.Inputs {
 		valid[n] = true
@@ -39,8 +41,12 @@ func Compile(m *model.Model) (*ir.CompiledModel, error) {
 	for _, d := range m.Decisions {
 		valid[d.Name] = true
 	}
+	bkms := map[string]model.BKM{}
+	for _, b := range m.BKMs {
+		bkms[b.Name] = b
+	}
 	for _, d := range m.Decisions {
-		dec, err := compileDecision(m, valid, d)
+		dec, err := compileDecision(m, valid, bkms, d)
 		if err != nil {
 			return nil, err
 		}
@@ -49,9 +55,9 @@ func Compile(m *model.Model) (*ir.CompiledModel, error) {
 	return cm, nil
 }
 
-func compileDecision(m *model.Model, valid map[string]bool, d model.Decision) (ir.Decision, error) {
+func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]model.BKM, d model.Decision) (ir.Decision, error) {
 	if d.Expr != nil {
-		prog, err := lowerExpr(d.Expr.Node)
+		prog, err := lowerExpr(d.Expr.Node, bkms)
 		if err != nil {
 			return ir.Decision{}, diag.Wrap(diag.CodeUnsupported, d.Line, fmt.Sprintf("décision %q", d.Name), err).
 				WithCol(d.Expr.Col)
@@ -115,7 +121,7 @@ func compileDecision(m *model.Model, valid map[string]bool, d model.Decision) (i
 		}
 		rule := ir.Rule{Outputs: outs}
 		for _, c := range r.Conds {
-			ct, err := normalizeCell(c, valid, d.Name)
+			ct, err := normalizeCell(c, valid, bkms, d.Name)
 			if err != nil {
 				return ir.Decision{}, err
 			}
@@ -161,14 +167,14 @@ func literalOutputs(cells []model.Cell, want int, dec string, line int) ([]ir.Va
 }
 
 // normalizeCell transforme une cellule de condition en CellTest géométrique (ou Op=Prog).
-func normalizeCell(c model.Cell, valid map[string]bool, dec string) (ir.CellTest, error) {
+func normalizeCell(c model.Cell, valid map[string]bool, bkms map[string]model.BKM, dec string) (ir.CellTest, error) {
 	if c.Dash {
 		return ir.CellTest{Op: ir.OpAny}, nil
 	}
-	return normalizeNode(c.Node, c.Src, valid, dec, c.Line, c.Col)
+	return normalizeNode(c.Node, c.Src, valid, bkms, dec, c.Line, c.Col)
 }
 
-func normalizeNode(node feel.Node, src string, valid map[string]bool, dec string, line, col int) (ir.CellTest, error) {
+func normalizeNode(node feel.Node, src string, valid map[string]bool, bkms map[string]model.BKM, dec string, line, col int) (ir.CellTest, error) {
 	switch n := node.(type) {
 	case *feel.RangeNode:
 		lo, err := literalValue(n.Start)
@@ -183,7 +189,7 @@ func normalizeNode(node feel.Node, src string, valid map[string]bool, dec string
 	case *feel.MultiTests:
 		ct := ir.CellTest{Op: ir.OpInSet}
 		for _, el := range n.Elements {
-			sub, err := normalizeNode(el, src, valid, dec, line, col)
+			sub, err := normalizeNode(el, src, valid, bkms, dec, line, col)
 			if err != nil {
 				return ir.CellTest{}, err
 			}
@@ -200,9 +206,9 @@ func normalizeNode(node feel.Node, src string, valid map[string]bool, dec string
 				return ir.CellTest{Op: op, A: lit}, nil
 			}
 			// "? op <expr non littérale>" (ex: "< monthly_debt") -> cellule Op=Prog
-			return progCell(node, valid, dec, line, col)
+			return progCell(node, valid, bkms, dec, line, col)
 		}
-		return progCell(node, valid, dec, line, col)
+		return progCell(node, valid, bkms, dec, line, col)
 	case *feel.NumberNode, *feel.StringNode, *feel.BoolNode:
 		lit, err := literalValue(node)
 		if err != nil {
@@ -215,8 +221,8 @@ func normalizeNode(node feel.Node, src string, valid map[string]bool, dec string
 }
 
 // progCell compile une cellule en expression booléenne (couche bytecode), `?` = valeur de colonne.
-func progCell(node feel.Node, valid map[string]bool, dec string, line, col int) (ir.CellTest, error) {
-	prog, err := lowerExpr(node)
+func progCell(node feel.Node, valid map[string]bool, bkms map[string]model.BKM, dec string, line, col int) (ir.CellTest, error) {
+	prog, err := lowerExpr(node, bkms)
 	if err != nil {
 		return ir.CellTest{}, diag.Wrap(diag.CodeUnsupported, line, "cellule", err).WithCol(col)
 	}

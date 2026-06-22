@@ -4,10 +4,27 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/maxgfr/feelc/internal/diag"
 	"github.com/maxgfr/feelc/internal/dsl"
 )
+
+// Régression (fork parser) : un `?` explicite dans une expression faisait boucler le parseur
+// FEEL amont à l'infini (croissance non bornée → OOM ~100 Go). Le fork consomme le token.
+// On garde un timeout court pour que toute régression ÉCHOUE VITE plutôt que de saturer la RAM.
+func TestParseDoesNotHangOnExplicitQuestionMark(t *testing.T) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = dsl.Parse("model \"m\" {}\nbkm bad(x:number):number = ? + x\n")
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("dsl.Parse a bouclé sur un `?` explicite — régression du correctif fork parser.go")
+	}
+}
 
 // Col doit être renseigné (1-based) pour chaque cellule, calculé au split DSL :
 // la colonne pointe le 1er caractère du contenu trimé dans la ligne source.

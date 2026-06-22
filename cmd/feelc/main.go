@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"runtime/debug"
+	"strconv"
 
 	apd "github.com/cockroachdb/apd/v3"
 
@@ -109,6 +111,7 @@ func cmdCompile(args []string) error {
 var Version = "0.0.0-dev"
 
 func main() {
+	applyMemoryLimit()
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)
@@ -145,6 +148,23 @@ func main() {
 	}
 }
 
+// applyMemoryLimit borne la RAM du process (garde-fou : un .rules pathologique ne doit jamais
+// faire exploser la mémoire). Soft limit GC (runtime/debug). Si l'utilisateur a déjà fixé
+// GOMEMLIMIT, le runtime l'applique nativement et on ne le surcharge pas ; sinon on impose un
+// plafond par défaut (généreux : invisible en usage normal), ajustable via FEELC_MEMLIMIT (octets).
+func applyMemoryLimit() {
+	if os.Getenv("GOMEMLIMIT") != "" {
+		return // déjà appliqué nativement par le runtime
+	}
+	limit := int64(2 << 30) // 2 GiB par défaut
+	if v := os.Getenv("FEELC_MEMLIMIT"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	debug.SetMemoryLimit(limit)
+}
+
 func usage() {
 	fmt.Fprint(os.Stderr, `feelc — moteur de règles métier (DMN/FEEL) compilé
 
@@ -156,6 +176,9 @@ Usage:
   feelc import --in <modele.dmn> [-o <sortie.rules>]
   feelc serve  --rules <fichier.rules> [--addr :8080] [--watch] [--strict]
   feelc version
+
+Environnement:
+  FEELC_MEMLIMIT  plafond mémoire (octets) du process (défaut 2 GiB ; GOMEMLIMIT a priorité)
 
 `)
 }

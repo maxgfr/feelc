@@ -21,3 +21,4 @@ go.work.sum
 
 # Spike (throwaway)
 /spike/**/go.sum
+/spike/feeleval

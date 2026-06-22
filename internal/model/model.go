@@ -64,12 +64,35 @@ type Decision struct {
 	Line      int
 }
 
+// BKM : Business Knowledge Model — une expression nommée paramétrée, réutilisable, inlinée
+// à la compilation par substitution AST des paramètres (zéro frame d'appel au runtime).
+// Forme source : `bkm name(p1:t1, p2:t2):ret = expr`. Référençable par invocation `name(a, b)`
+// dans n'importe quelle expression (décision literal-expr ou cellule Op=Prog).
+type BKM struct {
+	Name   string
+	Params []Field // paramètres positionnels (nom + type)
+	Ret    Type    // type de retour déclaré
+	Body   *Cell   // corps (Src + AST FEEL)
+	Line   int
+}
+
 // Model : un modèle complet.
 type Model struct {
 	Name      string
 	Inputs    []Input
 	Types     []TypeDecl
+	BKMs      []BKM
 	Decisions []Decision
+}
+
+// BKM retrouve un BKM par nom.
+func (m *Model) BKM(name string) (BKM, bool) {
+	for _, b := range m.BKMs {
+		if b.Name == name {
+			return b, true
+		}
+	}
+	return BKM{}, false
 }
 
 // Type retrouve une déclaration de type context par nom.

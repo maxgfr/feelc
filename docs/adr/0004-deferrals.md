@@ -6,9 +6,19 @@
 Conformément à l'éthique du projet (« jamais conformer/prétendre en silence »), on documente
 explicitement deux fonctionnalités du périmètre « complet » qui sont **reportées**, avec leur raison.
 
-## 1. BKM / Invocation paramétrée (Tranche 7) — reporté
+## 1. BKM / Invocation paramétrée (Tranche 7) — ✅ LEVÉ (2026-06-22, Tranche 13)
 
-**Constat technique bloquant.** feelc réutilise `github.com/pbinitiative/feel` comme parseur FEEL
+> **Statut mis à jour : report LEVÉ.** Le BKM paramétré est implémenté. On a **forké** et vendorisé
+> `pbinitiative/feel` sous `third_party/feel` (épinglé via `replace`) pour **exporter `FunCall.Args`**
+> (`[]FunCallArg{Name, Arg}`), ce qui débloque la lecture des arguments. La syntaxe est
+> `bkm name(p:t, …):ret = expr` (signature parsée côté DSL, pas dans le fork) ; l'invocation
+> `name(a, b)` est **inlinée à la compilation** par substitution AST des paramètres
+> (`internal/compiler/lower_expr.go`) — **zéro nouvel opcode**, la VM/IR inchangées. Récursion
+> (auto/mutuelle) détectée statiquement et **rejetée franchement** ; garde-fous de profondeur et de
+> budget d'instructions (RAM bornée). Le fork corrige aussi un **DoS amont** (boucle infinie du
+> parseur sur un `?` explicite). Le constat historique ci-dessous est conservé pour mémoire.
+
+**Constat technique (historique).** feelc réutilise `github.com/pbinitiative/feel` comme parseur FEEL
 (ADR 0001). Or son nœud d'AST `FunCall` expose `Args []funcallArg` où **`funcallArg` est un type
 non exporté** dont les champs (`argName`, `arg`) sont eux aussi non exportés. Il est donc impossible,
 via l'API publique, de **lire les arguments d'un appel de fonction** `nom(arg1, arg2)`. Implémenter

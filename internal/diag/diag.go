@@ -31,6 +31,7 @@ const (
 	CodeTypeDecl      = "DSL010" // déclaration `type` malformée
 	CodeUnknownType   = "DSL011" // type non supporté
 	CodeBraceTrailing = "DSL012" // contenu après `{` sur la ligne d'en-tête
+	CodeBKM           = "DSL013" // déclaration `bkm` malformée
 
 	// CMP — compilateur / typecheck
 	CodeUndeclared   = "CMP001" // référence à un nom non déclaré
