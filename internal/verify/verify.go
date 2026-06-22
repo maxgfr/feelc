@@ -120,6 +120,11 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 		}
 	}
 
+	// La complétude (absence de trou) n'a de sens que pour les politiques single-hit :
+	// pour COLLECT / RULE ORDER, une région couverte par 0 règle donne un résultat vide attendu.
+	singleHit := t.HitPolicy == ir.HitFirst || t.HitPolicy == ir.HitUnique ||
+		t.HitPolicy == ir.HitAny || t.HitPolicy == ir.HitPriority
+
 	everCovers := make([]bool, len(t.Rules))
 	everFirst := make([]bool, len(t.Rules))
 	allCovered := true
@@ -139,7 +144,7 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 		}
 		if len(covering) == 0 {
 			allCovered = false
-			if gaps < maxWitnessesPerKind {
+			if singleHit && gaps < maxWitnessesPerKind {
 				sev, msg := SevError, "cas non couvert par aucune règle (trou de complétude)"
 				if t.Default != nil {
 					sev, msg = SevWarning, "cas non couvert par une règle explicite (rattrapé par la ligne `default`)"
@@ -147,7 +152,9 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 				rep.add(Finding{Decision: d.Name, Kind: KindGap, Severity: sev, Message: msg,
 					Witness: witnessMap(dims, point)})
 			}
-			gaps++
+			if singleHit {
+				gaps++
+			}
 			return nil
 		}
 		for _, ri := range covering {
@@ -165,7 +172,7 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 		return
 	}
 
-	if gaps > maxWitnessesPerKind {
+	if singleHit && gaps > maxWitnessesPerKind {
 		rep.add(Finding{Decision: d.Name, Kind: KindGap, Severity: SevInfo,
 			Message: fmt.Sprintf("(%d cas non couverts supplémentaires non listés)", gaps-maxWitnessesPerKind)})
 	}

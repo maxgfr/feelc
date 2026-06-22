@@ -22,6 +22,12 @@ func Run(src, decision string, rawInputs map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	return Eval(cm, decision, rawInputs)
+}
+
+// Eval évalue une décision d'un modèle DÉJÀ COMPILÉ sur des entrées brutes (JSON-ish).
+// C'est le point d'entrée du service (pas de recompilation par requête).
+func Eval(cm *ir.CompiledModel, decision string, rawInputs map[string]any) (any, error) {
 	inputs := make(map[string]ir.Value, len(rawInputs))
 	for k, v := range rawInputs {
 		val, err := ir.FromAny(v)

@@ -8,13 +8,18 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 
 	apd "github.com/cockroachdb/apd/v3"
 
+	"github.com/maxgfr/feelc/internal/audit"
 	"github.com/maxgfr/feelc/internal/compiler"
 	"github.com/maxgfr/feelc/internal/dsl"
 	"github.com/maxgfr/feelc/internal/engine"
+	"github.com/maxgfr/feelc/internal/loader"
+	"github.com/maxgfr/feelc/internal/registry"
+	"github.com/maxgfr/feelc/internal/service"
 	"github.com/maxgfr/feelc/internal/verify"
 )
 
@@ -33,6 +38,8 @@ func main() {
 		err = cmdRun(args)
 	case "verify":
 		err = cmdVerify(args)
+	case "serve":
+		err = cmdServe(args)
 	case "version", "--version", "-v":
 		fmt.Println("feelc", Version)
 	case "help", "--help", "-h":
@@ -54,9 +61,60 @@ func usage() {
 Usage:
   feelc run    --rules <fichier.rules> --decision <nom> --input '<json>' [--json]
   feelc verify --rules <fichier.rules> [--json]
+  feelc serve  --rules <fichier.rules> [--addr :8080] [--watch] [--strict]
   feelc version
 
 `)
+}
+
+func cmdServe(args []string) error {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	rulesPath := fs.String("rules", "", "chemin du fichier .rules à servir")
+	addr := fs.String("addr", ":8080", "adresse d'écoute HTTP")
+	watch := fs.Bool("watch", false, "recharger à chaud sur modification du fichier")
+	strict := fs.Bool("strict", false, "refuser le (re)chargement si la vérification a des bloqueurs")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *rulesPath == "" {
+		return fmt.Errorf("--rules est requis")
+	}
+
+	reg := registry.New()
+	logReload := func(e *registry.Entry, rep *verify.Report, err error) {
+		switch {
+		case err != nil:
+			fmt.Fprintln(os.Stderr, "reload refusé (modèle courant conservé):", err)
+		case rep != nil && len(rep.Findings) > 0:
+			fmt.Fprintf(os.Stderr, "modèle v%d chargé (%s) — %d remarque(s) de vérification\n", e.Version, e.Hash, len(rep.Findings))
+		default:
+			fmt.Fprintf(os.Stderr, "modèle v%d chargé (%s) — vérification propre\n", e.Version, e.Hash)
+		}
+	}
+
+	// Chargement initial : doit réussir.
+	e, rep, err := loader.Reload(*rulesPath, reg, *strict)
+	if err != nil {
+		return fmt.Errorf("chargement initial: %w", err)
+	}
+	logReload(e, rep, nil)
+
+	if *watch {
+		stop, err := loader.Watch(*rulesPath, reg, *strict, logReload)
+		if err != nil {
+			return err
+		}
+		defer stop()
+	}
+
+	reloadFn := func() error {
+		e, rep, err := loader.Reload(*rulesPath, reg, *strict)
+		logReload(e, rep, err)
+		return err
+	}
+	srv := service.New(reg, audit.New(os.Stderr), reloadFn)
+	fmt.Fprintf(os.Stderr, "feelc serve sur %s (modèle %q)\n", *addr, e.Model.Name)
+	return http.ListenAndServe(*addr, srv.Handler())
 }
 
 func cmdVerify(args []string) error {
