@@ -14,6 +14,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"strings"
 
 	apd "github.com/cockroachdb/apd/v3"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/maxgfr/feelc/internal/dmnxml"
 	"github.com/maxgfr/feelc/internal/engine"
 	"github.com/maxgfr/feelc/internal/explain"
+	"github.com/maxgfr/feelc/internal/fmtrules"
 	"github.com/maxgfr/feelc/internal/ir"
 	"github.com/maxgfr/feelc/internal/loader"
 	"github.com/maxgfr/feelc/internal/registry"
@@ -130,6 +132,8 @@ func main() {
 		err = cmdExplain(args)
 	case "check":
 		err = cmdCheck(args)
+	case "fmt":
+		err = cmdFmt(args)
 	case "import":
 		err = cmdImport(args)
 	case "serve":
@@ -177,6 +181,7 @@ Usage:
   feelc verify  --rules <fichier.rules|.ir.bin> [--json]
   feelc explain --rules <fichier.rules|.ir.bin> --decision <nom> --input '<json>' [--json]
   feelc check  --rules <fichier.rules> --claims <claims.json> [--json]
+  feelc fmt    --rules <fichier.rules> [-w] [--check]
   feelc import --in <modele.dmn> [-o <sortie.rules>]
   feelc serve  --rules <fichier.rules> [--addr :8080] [--watch] [--strict]
   feelc version
@@ -185,6 +190,43 @@ Environnement:
   FEELC_MEMLIMIT  plafond mémoire (octets) du process (défaut 2 GiB ; GOMEMLIMIT a priorité)
 
 `)
+}
+
+func cmdFmt(args []string) error {
+	fs := flag.NewFlagSet("fmt", flag.ContinueOnError)
+	rulesPath := fs.String("rules", "", "chemin du fichier .rules")
+	write := fs.Bool("w", false, "réécrire le fichier en place")
+	check := fs.Bool("check", false, "échoue (exit≠0) si le fichier n'est pas déjà formaté ; n'écrit pas")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *rulesPath == "" {
+		return fmt.Errorf("--rules est requis")
+	}
+	src, err := os.ReadFile(*rulesPath)
+	if err != nil {
+		return err
+	}
+	formatted, err := fmtrules.Source(string(src))
+	if err != nil {
+		return err
+	}
+	// Signaler les pertes (jamais conformer en silence) — sur stderr, pas dans la sortie.
+	if strings.Contains(string(src), "#") || strings.Contains(string(src), "rounding:") {
+		fmt.Fprintln(os.Stderr, "note: `feelc fmt` ne préserve pas les commentaires ni le corps du bloc `model { ... }`")
+	}
+	switch {
+	case *check:
+		if string(src) != formatted {
+			return fmt.Errorf("%s n'est pas formaté (lancez `feelc fmt -w %s`)", *rulesPath, *rulesPath)
+		}
+		return nil
+	case *write:
+		return os.WriteFile(*rulesPath, []byte(formatted), 0o644)
+	default:
+		fmt.Print(formatted)
+		return nil
+	}
 }
 
 func cmdImport(args []string) error {

@@ -13,6 +13,47 @@ import (
 	"github.com/maxgfr/feelc/internal/ir"
 )
 
+// feelc fmt : stdout par défaut, -w idempotent, --check exit≠0 si non formaté.
+func TestCmdFmt(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "m.rules")
+	src := "model \"m\" {}\ninput a : number\ndecision d : number {\n  needs: a\n  hit: first\n  >= 1 => 10\n  default => 0\n}\n"
+	if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// stdout : produit une sortie non vide qui reparse.
+	out := captureStdout(t, func() {
+		if err := cmdFmt([]string{"--rules", p}); err != nil {
+			t.Fatalf("fmt stdout: %v", err)
+		}
+	})
+	if !strings.Contains(out, "decision d : number") {
+		t.Fatalf("sortie fmt inattendue: %q", out)
+	}
+	// -w deux fois : le fichier est stable au 2e passage (idempotence).
+	if err := cmdFmt([]string{"--rules", p, "-w"}); err != nil {
+		t.Fatal(err)
+	}
+	after1, _ := os.ReadFile(p)
+	if err := cmdFmt([]string{"--rules", p, "-w"}); err != nil {
+		t.Fatal(err)
+	}
+	after2, _ := os.ReadFile(p)
+	if string(after1) != string(after2) {
+		t.Errorf("fmt -w non idempotent:\n%s\n---\n%s", after1, after2)
+	}
+	// --check : sur un fichier déjà formaté -> exit 0 ; sinon erreur.
+	if err := cmdFmt([]string{"--rules", p, "--check"}); err != nil {
+		t.Errorf("--check sur fichier formaté devrait réussir: %v", err)
+	}
+	if err := os.WriteFile(p, []byte(src), 0o644); err != nil { // remet la version non-canonique
+		t.Fatal(err)
+	}
+	if err := cmdFmt([]string{"--rules", p, "--check"}); err == nil {
+		t.Errorf("--check sur fichier non formaté devrait échouer")
+	}
+}
+
 // feelc compile produit un .ir.bin canonique, et run/verify savent le recharger
 // (chargement direct de l'IR, sans recompilation).
 func TestCompileThenRunFromBinary(t *testing.T) {
