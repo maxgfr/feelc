@@ -19,6 +19,7 @@ const (
 	TagString
 	TagBool
 	TagContext // sortie multi-colonnes d'une décision (DMN context)
+	TagList    // liste (COLLECT brut / RULE ORDER)
 )
 
 // Value : valeur unboxée de taille fixe manipulée par la VM.
@@ -29,6 +30,7 @@ type Value struct {
 	Str  string
 	Bool bool
 	Ctx  map[string]Value // si TagContext
+	List []Value          // si TagList
 }
 
 func Null() Value             { return Value{Tag: TagNull} }
@@ -36,6 +38,7 @@ func Num(d *apd.Decimal) Value { return Value{Tag: TagNumber, Num: d} }
 func Str(s string) Value      { return Value{Tag: TagString, Str: s} }
 func Bool(b bool) Value       { return Value{Tag: TagBool, Bool: b} }
 func Ctx(m map[string]Value) Value { return Value{Tag: TagContext, Ctx: m} }
+func List(xs []Value) Value         { return Value{Tag: TagList, List: xs} }
 
 // FromAny convertit une entrée externe (map JSON-ish) en Value déterministe.
 // Les nombres repassent par leur représentation décimale pour rester exacts.
@@ -90,6 +93,12 @@ func (v Value) ToAny() any {
 			m[k] = f.ToAny()
 		}
 		return m
+	case TagList:
+		xs := make([]any, len(v.List))
+		for i, e := range v.List {
+			xs[i] = e.ToAny()
+		}
+		return xs
 	default:
 		return nil
 	}

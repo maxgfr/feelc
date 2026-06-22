@@ -1,0 +1,17 @@
+model "promo" {}
+
+input cart_total : number >= 0
+input is_member  : boolean
+input promo_code : string
+
+# On retient la MEILLEURE remise applicable (COLLECT C>, max).
+decision discount_pct : number {
+  needs: cart_total, is_member, promo_code
+  hit: collect max
+  #  cart_total | is_member | promo_code  => remise %
+     >= 50      | -         | -           => 5
+     >= 100     | -         | -           => 10
+     -          | true      | -           => 8
+     -          | -         | "WELCOME10" => 10
+     -          | -         | "BIG20"     => 20
+}

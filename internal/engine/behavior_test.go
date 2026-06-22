@@ -93,12 +93,12 @@ decision d : string {
 			wantErr: "non déclaré",
 		},
 		{
-			name: "hit policy non supportée en v1",
+			name: "hit policy non supportée (output order différée)",
 			src: `model "m" {}
 input a : number
 decision d : string {
   needs: a
-  hit: collect
+  hit: output order
   - => "x"
 }`,
 			dec:     "d",

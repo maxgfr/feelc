@@ -51,7 +51,7 @@ func compileDecision(m *model.Model, valid map[string]bool, d model.Decision) (i
 		return ir.Decision{Name: d.Name, Kind: ir.KindLiteralExpr, Expr: prog, Deps: prog.Vars}, nil
 	}
 
-	hp, err := parseHitPolicy(d.HitPolicy, d.Line)
+	hp, agg, err := parseHitPolicy(d.HitPolicy, d.Line)
 	if err != nil {
 		return ir.Decision{}, err
 	}
@@ -59,13 +59,32 @@ func compileDecision(m *model.Model, valid map[string]bool, d model.Decision) (i
 	if err != nil {
 		return ir.Decision{}, err
 	}
+	if agg != ir.AggNone && agg != ir.AggCount && len(outNames) != 1 {
+		return ir.Decision{}, fmt.Errorf("décision %q (ligne %d): l'agrégation COLLECT exige une sortie scalaire unique",
+			d.Name, d.Line)
+	}
 	for _, n := range d.Needs {
 		if !valid[n] {
 			return ir.Decision{}, fmt.Errorf("décision %q (ligne %d): `needs` référence %q, non déclaré",
 				d.Name, d.Line, n)
 		}
 	}
-	table := &ir.DecisionTable{Inputs: d.Needs, Outputs: outNames, HitPolicy: hp}
+	table := &ir.DecisionTable{Inputs: d.Needs, Outputs: outNames, HitPolicy: hp, Agg: agg}
+	if hp == ir.HitPriority {
+		if len(outNames) != 1 {
+			return ir.Decision{}, fmt.Errorf("décision %q (ligne %d): PRIORITY exige une sortie scalaire unique", d.Name, d.Line)
+		}
+		if len(d.Priority) == 0 {
+			return ir.Decision{}, fmt.Errorf("décision %q (ligne %d): PRIORITY exige une ligne `priority:` listant les sorties par ordre de priorité décroissant", d.Name, d.Line)
+		}
+		for _, c := range d.Priority {
+			v, err := literalValue(c.Node)
+			if err != nil {
+				return ir.Decision{}, fmt.Errorf("décision %q: valeur de priorité %q: %w", d.Name, c.Src, err)
+			}
+			table.Priority = append(table.Priority, v)
+		}
+	}
 	for _, r := range d.Rules {
 		outs, err := literalOutputs(r.Outputs, len(outNames), d.Name, r.Line)
 		if err != nil {
@@ -237,14 +256,32 @@ func mapOp(op string) (ir.Op, error) {
 	}
 }
 
-func parseHitPolicy(s string, no int) (ir.HitPolicy, error) {
+func parseHitPolicy(s string, no int) (ir.HitPolicy, ir.Aggregation, error) {
 	switch s {
-	case "first":
-		return ir.HitFirst, nil
 	case "":
-		return 0, fmt.Errorf("ligne %d: `hit:` manquant", no)
+		return 0, 0, fmt.Errorf("ligne %d: `hit:` manquant", no)
+	case "first":
+		return ir.HitFirst, ir.AggNone, nil
+	case "unique":
+		return ir.HitUnique, ir.AggNone, nil
+	case "any":
+		return ir.HitAny, ir.AggNone, nil
+	case "priority":
+		return ir.HitPriority, ir.AggNone, nil
+	case "rule order":
+		return ir.HitRuleOrder, ir.AggNone, nil
+	case "collect":
+		return ir.HitCollect, ir.AggNone, nil
+	case "collect sum":
+		return ir.HitCollect, ir.AggSum, nil
+	case "collect min":
+		return ir.HitCollect, ir.AggMin, nil
+	case "collect max":
+		return ir.HitCollect, ir.AggMax, nil
+	case "collect count":
+		return ir.HitCollect, ir.AggCount, nil
 	default:
-		return 0, fmt.Errorf("ligne %d: hit policy non supportée en v2: %q", no, s)
+		return 0, 0, fmt.Errorf("ligne %d: hit policy non supportée: %q", no, s)
 	}
 }
 

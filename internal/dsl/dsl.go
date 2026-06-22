@@ -197,6 +197,14 @@ func (p *parser) parseDecision(header string, no int) (model.Decision, error) {
 			dec.Needs = splitList(strings.TrimPrefix(t, "needs:"))
 		case strings.HasPrefix(t, "hit:"):
 			dec.HitPolicy = strings.TrimSpace(strings.TrimPrefix(t, "hit:"))
+		case strings.HasPrefix(t, "priority:"):
+			for _, c := range splitList(strings.TrimPrefix(t, "priority:")) {
+				cell, err := parseCell(c, ln.no, true)
+				if err != nil {
+					return dec, err
+				}
+				dec.Priority = append(dec.Priority, cell)
+			}
 		case strings.Contains(t, "=>"):
 			r, err := parseRule(t, ln.no)
 			if err != nil {

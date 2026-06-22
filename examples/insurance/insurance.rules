@@ -1,0 +1,22 @@
+model "insurance" {
+  rounding: half_even
+}
+
+input age          : number in [18..100]
+input region       : string in {"urban", "suburban", "rural"}
+input claims       : number >= 0
+input base_premium : number >= 0
+
+# Surcharges de risque cumulables -> somme (COLLECT C+).
+decision surcharge : number {
+  needs: age, region, claims
+  hit: collect sum
+  #  age      | region  | claims => montant
+     [18..25) | -       | -      => 300
+     -        | "urban" | -      => 150
+     -        | -       | >= 3   => 500
+     >= 70    | -       | -      => 200
+}
+
+# Prime finale = base + surcharge (DRG : premium dépend de surcharge).
+decision premium : number = base_premium + surcharge

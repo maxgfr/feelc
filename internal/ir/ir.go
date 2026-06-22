@@ -54,13 +54,26 @@ type Rule struct {
 	Outputs []Value // littéraux en Tranche 1 (expressions en Tranche 2)
 }
 
+// Aggregation : fonction d'agrégation d'une hit policy COLLECT.
+type Aggregation uint8
+
+const (
+	AggNone  Aggregation = iota // COLLECT brut -> liste des sorties
+	AggSum                      // C+
+	AggMin                      // C<
+	AggMax                      // C>
+	AggCount                    // C#
+)
+
 // DecisionTable : la logique d'une décision sous forme de table.
 type DecisionTable struct {
 	Inputs    []string // noms des variables d'entrée, dans l'ordre des colonnes
 	Outputs   []string // noms des sorties (1 = sortie scalaire ; >1 = context)
 	Rules     []Rule
 	HitPolicy HitPolicy
-	Default   []Value // sortie de la ligne `default` (nil si absente)
+	Agg       Aggregation // si HitCollect
+	Priority  []Value     // si HitPriority : valeurs de sortie, ordre décroissant de priorité
+	Default   []Value     // sortie de la ligne `default` (nil si absente)
 }
 
 // DecisionKind distingue table et expression littérale.

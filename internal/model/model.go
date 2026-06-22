@@ -58,6 +58,7 @@ type Decision struct {
 	TypeName  string // "number"/"string"/"boolean" ou un nom de type context déclaré
 	Needs     []string
 	HitPolicy string
+	Priority  []Cell // valeurs de sortie ordonnées (PRIORITY), de la plus prioritaire à la moins
 	Rules     []Rule
 	Expr      *Cell // si != nil : décision literal-expression (TypeName scalaire), pas de table
 	Line      int
