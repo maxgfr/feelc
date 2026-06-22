@@ -56,7 +56,10 @@ Crée une todo par étape et suis-les dans l'ordre.
    ```sh
    node scripts/feelc-skill.mjs verify --rules model.rules --json
    ```
-   - Erreurs de **compilation** (type, référence, syntaxe) → corrige et relance.
+   - Erreurs de **compilation** (type, référence, syntaxe) → avec `--json`, elles sortent en objet
+     structuré `{file,line,col,code,message,suggestion}` sur stdout : exploite `line`/`col` pour
+     localiser et `suggestion` pour corriger, puis relance. Catalogue de codes stables :
+     `docs/error-schema.md`.
    - **Bloqueurs** de vérification (`severity: "error"` : trou de complétude avec contre-exemple,
      conflit UNIQUE/ANY) → corrige. Lis `references/verify.md`.
 4. **Tester** sur des cas concrets (y compris les cas limites de l'interview) :

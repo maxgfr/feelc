@@ -1,13 +1,44 @@
 package loader_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/maxgfr/feelc/internal/diag"
 	"github.com/maxgfr/feelc/internal/loader"
 	"github.com/maxgfr/feelc/internal/registry"
 )
+
+// CompileFile propage le nom de fichier sur les erreurs structurées (parse ET compile).
+func TestCompileFileStampsFilename(t *testing.T) {
+	// Erreur de compilation (hit policy invalide) -> doit porter le fichier.
+	brokenCompile := `model "m" {}
+input n : number
+decision d : string {
+  needs: n
+  hit: bogus_policy
+  - => "x"
+}`
+	_, _, _, err := loader.CompileFile("foo.rules", []byte(brokenCompile))
+	var de *diag.Error
+	if !errors.As(err, &de) {
+		t.Fatalf("erreur non structurée: %T %v", err, err)
+	}
+	if de.File != "foo.rules" {
+		t.Errorf("File = %q, attendu foo.rules", de.File)
+	}
+
+	// Erreur de parse -> doit aussi porter le fichier.
+	_, _, _, err = loader.CompileFile("bar.rules", []byte("not a model\n"))
+	if !errors.As(err, &de) {
+		t.Fatalf("erreur de parse non structurée: %T %v", err, err)
+	}
+	if de.File != "bar.rules" {
+		t.Errorf("File (parse) = %q, attendu bar.rules", de.File)
+	}
+}
 
 const validRules = `model "m" {}
 input n : number

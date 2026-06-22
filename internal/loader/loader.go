@@ -16,21 +16,28 @@ import (
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/maxgfr/feelc/internal/compiler"
+	"github.com/maxgfr/feelc/internal/diag"
 	"github.com/maxgfr/feelc/internal/dsl"
 	"github.com/maxgfr/feelc/internal/ir"
 	"github.com/maxgfr/feelc/internal/registry"
 	"github.com/maxgfr/feelc/internal/verify"
 )
 
-// Compile parse + compile + vérifie une source. Renvoie le modèle, son hash de contenu et le rapport.
+// Compile parse + compile + vérifie une source (sans nom de fichier).
 func Compile(src []byte) (*ir.CompiledModel, string, *verify.Report, error) {
-	m, err := dsl.Parse(string(src))
+	return CompileFile("", src)
+}
+
+// CompileFile est Compile avec un nom de fichier propagé sur les erreurs structurées
+// (diag.Error.File), pour des diagnostics « file:line:col: ... » exploitables.
+func CompileFile(path string, src []byte) (*ir.CompiledModel, string, *verify.Report, error) {
+	m, err := dsl.ParseFile(path, string(src))
 	if err != nil {
-		return nil, "", nil, err
+		return nil, "", nil, err // déjà stampé par ParseFile
 	}
 	cm, err := compiler.Compile(m)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, "", nil, diag.WithFileIfDiag(err, path)
 	}
 	rep := verify.Verify(cm)
 	sum := sha256.Sum256(src)
@@ -44,7 +51,7 @@ func Reload(path string, reg *registry.Registry, strict bool) (*registry.Entry, 
 	if err != nil {
 		return nil, nil, err
 	}
-	cm, hash, rep, err := Compile(src)
+	cm, hash, rep, err := CompileFile(path, src)
 	if err != nil {
 		return nil, nil, err // erreur de compilation -> pas de swap
 	}

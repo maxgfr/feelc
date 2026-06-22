@@ -1,11 +1,10 @@
 package compiler
 
 import (
-	"fmt"
-
 	feel "github.com/pbinitiative/feel"
 
 	"github.com/maxgfr/feelc/internal/decimal"
+	"github.com/maxgfr/feelc/internal/diag"
 	"github.com/maxgfr/feelc/internal/ir"
 )
 
@@ -77,7 +76,7 @@ func (l *lowerer) emit(node feel.Node) error {
 		}
 		l.push(op, 0)
 	default:
-		return fmt.Errorf("expression non supportée en v2: %T", node)
+		return diag.Newf(diag.CodeUnsupported, 0, "expression non supportée en v2: %T", node)
 	}
 	return nil
 }
@@ -109,7 +108,7 @@ func binopcode(op string) (ir.Opcode, error) {
 	case "or":
 		return ir.OpOr, nil
 	default:
-		return 0, fmt.Errorf("opérateur non supporté en v2: %q", op)
+		return 0, diag.Newf(diag.CodeUnsupported, 0, "opérateur non supporté en v2: %q", op)
 	}
 }
 

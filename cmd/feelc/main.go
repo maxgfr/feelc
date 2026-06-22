@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -15,15 +16,33 @@ import (
 
 	"github.com/maxgfr/feelc/internal/audit"
 	"github.com/maxgfr/feelc/internal/check"
-	"github.com/maxgfr/feelc/internal/compiler"
+	"github.com/maxgfr/feelc/internal/diag"
 	"github.com/maxgfr/feelc/internal/dmnxml"
-	"github.com/maxgfr/feelc/internal/dsl"
 	"github.com/maxgfr/feelc/internal/engine"
 	"github.com/maxgfr/feelc/internal/loader"
 	"github.com/maxgfr/feelc/internal/registry"
 	"github.com/maxgfr/feelc/internal/service"
 	"github.com/maxgfr/feelc/internal/verify"
 )
+
+// errAlreadyReported signale à main() qu'une erreur a déjà été rendue (ex: JSON
+// structuré sur stdout) : exit 1 sans réémettre de texte.
+var errAlreadyReported = errors.New("")
+
+// reportCompileErr rend une erreur de compilation. En mode --json, si l'erreur est un
+// *diag.Error, l'émet en objet JSON {file,line,col,code,message,suggestion} sur stdout
+// (consommable par la skill) et renvoie errAlreadyReported ; sinon renvoie l'erreur telle
+// quelle (rendue en texte « file:line:col: message » par main).
+func reportCompileErr(err error, asJSON bool) error {
+	var de *diag.Error
+	if asJSON && errors.As(err, &de) {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(de)
+		return errAlreadyReported
+	}
+	return err
+}
 
 // Version est injectée au build (ldflags) ; valeur par défaut pour le dev.
 var Version = "0.0.0-dev"
@@ -56,7 +75,9 @@ func main() {
 		os.Exit(2)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "erreur:", err)
+		if !errors.Is(err, errAlreadyReported) {
+			fmt.Fprintln(os.Stderr, "erreur:", err)
+		}
 		os.Exit(1)
 	}
 }
@@ -118,13 +139,9 @@ func cmdCheck(args []string) error {
 	if err != nil {
 		return err
 	}
-	m, err := dsl.Parse(string(src))
+	cm, _, _, err := loader.CompileFile(*rulesPath, src)
 	if err != nil {
-		return err
-	}
-	cm, err := compiler.Compile(m)
-	if err != nil {
-		return err
+		return reportCompileErr(err, *asJSON)
 	}
 	cf, err := os.ReadFile(*claimsPath)
 	if err != nil {
@@ -228,15 +245,10 @@ func cmdVerify(args []string) error {
 	if err != nil {
 		return err
 	}
-	m, err := dsl.Parse(string(src))
+	_, _, rep, err := loader.CompileFile(*rulesPath, src)
 	if err != nil {
-		return err
+		return reportCompileErr(err, *asJSON)
 	}
-	cm, err := compiler.Compile(m)
-	if err != nil {
-		return err
-	}
-	rep := verify.Verify(cm)
 
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
@@ -286,7 +298,11 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return fmt.Errorf("--input: %w", err)
 	}
-	out, err := engine.Run(string(src), *decision, inputs)
+	cm, _, _, err := loader.CompileFile(*rulesPath, src)
+	if err != nil {
+		return reportCompileErr(err, *asJSON)
+	}
+	out, err := engine.Eval(cm, *decision, inputs)
 	if err != nil {
 		return err
 	}
