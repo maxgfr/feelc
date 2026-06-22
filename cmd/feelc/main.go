@@ -14,6 +14,7 @@ import (
 	apd "github.com/cockroachdb/apd/v3"
 
 	"github.com/maxgfr/feelc/internal/audit"
+	"github.com/maxgfr/feelc/internal/check"
 	"github.com/maxgfr/feelc/internal/compiler"
 	"github.com/maxgfr/feelc/internal/dsl"
 	"github.com/maxgfr/feelc/internal/engine"
@@ -38,6 +39,8 @@ func main() {
 		err = cmdRun(args)
 	case "verify":
 		err = cmdVerify(args)
+	case "check":
+		err = cmdCheck(args)
 	case "serve":
 		err = cmdServe(args)
 	case "version", "--version", "-v":
@@ -61,10 +64,72 @@ func usage() {
 Usage:
   feelc run    --rules <fichier.rules> --decision <nom> --input '<json>' [--json]
   feelc verify --rules <fichier.rules> [--json]
+  feelc check  --rules <fichier.rules> --claims <claims.json> [--json]
   feelc serve  --rules <fichier.rules> [--addr :8080] [--watch] [--strict]
   feelc version
 
 `)
+}
+
+func cmdCheck(args []string) error {
+	fs := flag.NewFlagSet("check", flag.ContinueOnError)
+	rulesPath := fs.String("rules", "", "chemin du fichier .rules")
+	claimsPath := fs.String("claims", "", "chemin du fichier de claims JSON (produit par l'IA)")
+	asJSON := fs.Bool("json", false, "sortie au format JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *rulesPath == "" || *claimsPath == "" {
+		return fmt.Errorf("--rules et --claims sont requis")
+	}
+	src, err := os.ReadFile(*rulesPath)
+	if err != nil {
+		return err
+	}
+	m, err := dsl.Parse(string(src))
+	if err != nil {
+		return err
+	}
+	cm, err := compiler.Compile(m)
+	if err != nil {
+		return err
+	}
+	cf, err := os.ReadFile(*claimsPath)
+	if err != nil {
+		return err
+	}
+	dec := json.NewDecoder(bytes.NewReader(cf))
+	dec.UseNumber() // exactitude des nombres attendus
+	var doc struct {
+		Claims []check.Claim `json:"claims"`
+	}
+	if err := dec.Decode(&doc); err != nil {
+		return fmt.Errorf("claims invalides: %w", err)
+	}
+	rep := check.Check(cm, doc.Claims)
+
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(rep); err != nil {
+			return err
+		}
+	} else {
+		for _, v := range rep.Verdicts {
+			line := fmt.Sprintf("[%s] %s", v.Status, v.Claim.Decision)
+			if v.Claim.Desc != "" {
+				line += " — " + v.Claim.Desc
+			}
+			if v.Detail != "" {
+				line += " (" + v.Detail + ")"
+			}
+			fmt.Println(line)
+		}
+	}
+	if n := rep.Blockers(); n > 0 {
+		return fmt.Errorf("%d claim(s) non supporté(s)", n)
+	}
+	return nil
 }
 
 func cmdServe(args []string) error {
