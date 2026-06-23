@@ -1,0 +1,7 @@
+model "a" {
+  rounding: half_even
+}
+
+input from_b : boolean
+
+decision a_out : boolean = from_b

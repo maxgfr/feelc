@@ -1,0 +1,7 @@
+model "good" {
+  rounding: half_even
+}
+
+input flag : boolean
+
+decision echo : boolean = flag

@@ -38,6 +38,27 @@ feelc graph   --rules m.rules [--format mermaid|dot|json]               # decisi
 feelc inputs  --rules m.rules --decision <name>                         # inputs a decision needs (question-flow)
 feelc docs    --rules m.rules [-o DOC.md]                               # Markdown reference + Mermaid graph
 feelc serve   --rules m.rules [--addr :8080] [--watch] [--strict] [--ui] # HTTP service + hot-reload (+ AI UI)
+feelc serve   --project <dir>  [--addr :8080] [--watch] [--strict] [--ui] [--allow-edit] # multi-module PROJECT
+```
+
+## Project mode
+
+For more than a single file, a **project** is a directory of `.rules` modules plus an optional
+`feelc.project.json` manifest. The modules are namespaced (`module__decision`) and **linked into one
+deterministic model** the engine runs unchanged — a single hash, one verification pass, one decision
+graph. Modules reference each other through a manifest `uses` binding (a local input wired to
+`other.decision`); cross-module cycles and dangling refs are rejected at load. The web UI (`--ui`) gains
+a module navigator, a project health dashboard, and a cross-module graph; adding **`--allow-edit`**
+(off by default — the editing surface is unauthenticated, so keep it on a trusted/loopback host) enables a
+per-module editor with server-side **Save** + create/delete, persisted to the mounted directory under a
+golden rule: an invalid edit is rejected and the live project is kept. See the
+**[project-mode guide](docs/project-mode.md)** (also on
+the [docs site](https://maxgfr.github.io/feelc/docs/project-mode.html)), [`sample-project/`](sample-project/),
+and ADR 0015. Ships as a Docker service:
+
+```sh
+docker build -t feelc .
+docker run --rm -p 8080:8080 -v "$PWD/sample-project:/work" feelc   # open http://localhost:8080/
 ```
 
 ## Status

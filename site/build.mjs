@@ -25,6 +25,7 @@ marked.setOptions({ gfm: true, breaks: false });
 const DOCS = [
   { slug: "index", file: "dsl-grammar.md", title: "DSL grammar" },
   { slug: "feel-subset", file: "feel-subset.md", title: "FEEL subset" },
+  { slug: "project-mode", file: "project-mode.md", title: "Project mode" },
   { slug: "ir-format", file: "ir-format.md", title: "IR format" },
   { slug: "error-schema", file: "error-schema.md", title: "Error schema" },
 ];

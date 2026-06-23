@@ -1,0 +1,11 @@
+{
+  "name": "lending",
+  "version": "0.1.0",
+  "modules": [
+    { "name": "kyc", "path": "kyc.rules" },
+    { "name": "pricing", "path": "pricing.rules" },
+    { "name": "loan", "path": "loan.rules", "uses": { "kyc_ok": "kyc.passed" } }
+  ],
+  "default": "loan__approved",
+  "tags": ["demo", "lending"]
+}

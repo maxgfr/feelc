@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/maxgfr/feelc/internal/audit"
@@ -23,6 +25,7 @@ import (
 	"github.com/maxgfr/feelc/internal/graph"
 	"github.com/maxgfr/feelc/internal/loader"
 	"github.com/maxgfr/feelc/internal/modelinfo"
+	"github.com/maxgfr/feelc/internal/project"
 	"github.com/maxgfr/feelc/internal/registry"
 )
 
@@ -32,12 +35,56 @@ type Server struct {
 	audit  *audit.Logger
 	reload func() error // manual reload (nil if not available)
 
+	// proj holds the current project when serving with `feelc serve --project` (nil in single-file
+	// mode). The project endpoints feature-detect on it (404 when absent). Lock-free, swapped on reload.
+	proj atomic.Pointer[project.Project]
+
+	// ws is the mutable workspace backing the module-editing endpoints (nil unless serving a project
+	// with editing enabled, i.e. `serve --project --allow-edit`).
+	ws *project.Workspace
+
+	// publishMu serializes PublishProject so the registry model and the project snapshot are swapped
+	// together (no split-brain between a watcher reload and an HTTP mutation).
+	publishMu sync.Mutex
+
 	// EnableUI serves the embedded authoring UI at `/` (set by `feelc serve --ui`).
 	EnableUI bool
 }
 
+// maxRequestBody caps every request body (DoS backstop on the file-writing endpoints). 8 MiB is ample
+// for a .rules source or a candidate project; larger bodies get 413 via http.MaxBytesReader.
+const maxRequestBody = 8 << 20
+
 func New(reg *registry.Registry, log *audit.Logger, reload func() error) *Server {
 	return &Server{reg: reg, audit: log, reload: reload}
+}
+
+// SetProject publishes the current project for the project endpoints (nil clears it). Called by the
+// serve command on initial load and after every project reload, mirroring the registry's atomic swap.
+func (s *Server) SetProject(p *project.Project) { s.proj.Store(p) }
+
+// CurrentProject returns the currently served project, or nil in single-file mode.
+func (s *Server) CurrentProject() *project.Project { return s.proj.Load() }
+
+// SetWorkspace attaches the mutable workspace that backs the module-editing endpoints.
+func (s *Server) SetWorkspace(ws *project.Workspace) { s.ws = ws }
+
+// PublishProject swaps the merged model into the registry and updates the project snapshot together
+// under publishMu, so a concurrent watcher reload and HTTP mutation cannot leave the two out of sync.
+// A redundant publish (same hash — e.g. the watcher re-reading our own atomic write) skips the registry
+// version bump but still refreshes the project object. The single-module source is kept so GET /v1/source
+// still works in that case.
+func (s *Server) PublishProject(p *project.Project) {
+	s.publishMu.Lock()
+	defer s.publishMu.Unlock()
+	if cur := s.reg.Current(); cur == nil || cur.Hash != p.Hash {
+		var src []byte
+		if len(p.Modules) == 1 {
+			src = p.Modules[0].Source
+		}
+		s.reg.StoreWithSource(p.Merged, p.Hash, src)
+	}
+	s.proj.Store(p)
 }
 
 // Handler builds the router (ServeMux 1.22, method+wildcard patterns).
@@ -47,23 +94,47 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/decisions/{key}/explain", s.handleExplain)
 	mux.HandleFunc("POST /v1/evaluate", s.handleEvaluate)
 	mux.HandleFunc("GET /v1/model", s.handleModel)
-	mux.HandleFunc("GET /v1/source", s.handleSource)           // current .rules source (web editor)
-	mux.HandleFunc("POST /v1/verify", s.handleVerifyCandidate) // verify a CANDIDATE source (without swap)
-	mux.HandleFunc("POST /v1/check", s.handleCheckCandidate)   // check claims against a CANDIDATE source
-	mux.HandleFunc("POST /v1/chat", s.handleChat)              // AI authoring: NL conversation -> .rules draft
-	mux.HandleFunc("POST /v1/ingest", s.handleIngest)          // AI ingestion: spec -> draft -> verify -> repair loop
-	mux.HandleFunc("POST /v1/assist", s.handleAssist)          // one-shot AI tasks: explain | tests
-	mux.HandleFunc("POST /v1/run", s.handleRun)                // evaluate a CANDIDATE source (without swap)
-	mux.HandleFunc("POST /v1/graph", s.handleGraph)            // DRG of a CANDIDATE source (mermaid/dot/json)
-	mux.HandleFunc("POST /v1/trace", s.handleTrace)            // source<->rule traceability + coverage of a CANDIDATE
-	mux.HandleFunc("POST /v1/required", s.handleRequired)      // inputs a decision transitively needs (question-flow)
+	mux.HandleFunc("GET /v1/source", s.handleSource)                      // current .rules source (web editor)
+	mux.HandleFunc("POST /v1/verify", s.handleVerifyCandidate)            // verify a CANDIDATE source (without swap)
+	mux.HandleFunc("POST /v1/check", s.handleCheckCandidate)              // check claims against a CANDIDATE source
+	mux.HandleFunc("POST /v1/chat", s.handleChat)                         // AI authoring: NL conversation -> .rules draft
+	mux.HandleFunc("POST /v1/ingest", s.handleIngest)                     // AI ingestion: spec -> draft -> verify -> repair loop
+	mux.HandleFunc("POST /v1/assist", s.handleAssist)                     // one-shot AI tasks: explain | tests
+	mux.HandleFunc("POST /v1/run", s.handleRun)                           // evaluate a CANDIDATE source (without swap)
+	mux.HandleFunc("POST /v1/graph", s.handleGraph)                       // DRG of a CANDIDATE source (mermaid/dot/json)
+	mux.HandleFunc("POST /v1/trace", s.handleTrace)                       // source<->rule traceability + coverage of a CANDIDATE
+	mux.HandleFunc("POST /v1/required", s.handleRequired)                 // inputs a decision transitively needs (question-flow)
+	mux.HandleFunc("GET /v1/project", s.handleProject)                    // project manifest + module list (404 in single-file mode)
+	mux.HandleFunc("GET /v1/project/health", s.handleProjectHealth)       // aggregated project verification report
+	mux.HandleFunc("POST /v1/project/verify", s.handleProjectVerify)      // verify a CANDIDATE multi-module project (no swap)
+	mux.HandleFunc("GET /v1/project/graph", s.handleProjectGraph)         // cross-module DRG of the merged model
+	mux.HandleFunc("GET /v1/modules", s.handleModules)                    // per-module summary (name, hash, blocker count)
+	mux.HandleFunc("GET /v1/modules/{name}/source", s.handleModuleSource) // a module's .rules source
+	mux.HandleFunc("PUT /v1/modules/{name}/source", s.handlePutModule)    // edit + persist a module (golden rule)
+	mux.HandleFunc("POST /v1/modules", s.handleCreateModule)              // create a module {name, source}
+	mux.HandleFunc("DELETE /v1/modules/{name}", s.handleDeleteModule)     // delete a module
 	mux.HandleFunc("POST /v1/admin/reload", s.handleReload)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	if s.EnableUI {
 		mux.Handle("GET /", http.FileServerFS(uiFS())) // embedded authoring UI (catch-all, least specific)
 	}
-	return corsMW(recoverMW(mux))
+	return corsMW(recoverMW(bodyLimitMW(mux)))
+}
+
+// bodyLimitMW caps every request body so the file-writing endpoints (and the candidate compilers) cannot
+// be made to buffer an unbounded upload into memory.
+func bodyLimitMW(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ContentLength > maxRequestBody {
+			writeErr(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBody) // also caps chunked / lying Content-Length
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // handleChat is the OPTIONAL AI authoring boundary (ADR 0008): it forwards the conversation to the
@@ -307,7 +378,13 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	}
 	decision, _ := body["decision"].(string)
 	if decision == "" {
-		writeErr(w, http.StatusBadRequest, "`decision` field required")
+		// In project mode a bare evaluate falls back to the manifest's `default` decision.
+		if p := s.proj.Load(); p != nil {
+			decision = p.Manifest.Default
+		}
+	}
+	if decision == "" {
+		writeErr(w, http.StatusBadRequest, "`decision` field required (or set a project `default`)")
 		return
 	}
 	input, _ := body["input"].(map[string]any)
@@ -450,7 +527,7 @@ func corsMW(next http.Handler) http.Handler {
 		if o := r.Header.Get("Origin"); isLoopbackOrigin(o) {
 			w.Header().Set("Access-Control-Allow-Origin", o)
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		}
 		if r.Method == http.MethodOptions {

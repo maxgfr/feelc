@@ -1,0 +1,7 @@
+{
+  "name": "agecheck",
+  "modules": [
+    { "name": "alpha", "path": "alpha.rules" },
+    { "name": "beta", "path": "beta.rules" }
+  ]
+}

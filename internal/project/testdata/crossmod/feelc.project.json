@@ -1,0 +1,7 @@
+{
+  "name": "lending",
+  "modules": [
+    { "name": "kyc", "path": "kyc.rules" },
+    { "name": "loan", "path": "loan.rules", "uses": { "kyc_ok": "kyc.passed" } }
+  ]
+}

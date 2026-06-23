@@ -1,0 +1,17 @@
+model "loan" {
+  rounding: half_even
+}
+
+input amount : number >= 0
+# kyc_ok is bound to kyc.passed by the project manifest; standalone it is a plain boolean input.
+input kyc_ok : boolean
+
+decision approved : boolean {
+  needs: kyc_ok, amount
+  hit: first
+  #  kyc_ok | amount    => approved
+     false  | -         => false
+     -      | > 100000  => false
+     true   | <= 100000 => true
+     default|           => false
+}

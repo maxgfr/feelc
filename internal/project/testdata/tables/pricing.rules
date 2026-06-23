@@ -1,0 +1,18 @@
+model "pricing" {
+  rounding: half_even
+}
+
+input amount    : number >= 0
+input threshold : number >= 0
+
+type Tier = context { label: string, surcharge: number }
+
+# Table with a CROSS-COLUMN cell (`>= threshold` in the amount column references the threshold
+# column -> Op=Prog) and a multi-output CONTEXT result (label, surcharge are field labels, not refs).
+decision tier : Tier {
+  needs: amount, threshold
+  hit: first
+  #  amount       | threshold => label  | surcharge
+     >= threshold | -         => "high" | 10
+     default      |           => "low"  | 0
+}

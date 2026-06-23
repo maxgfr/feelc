@@ -1,0 +1,7 @@
+model "alpha" {
+  rounding: half_even
+}
+
+input age : number in [0..120]
+
+decision adult : boolean = age >= 18

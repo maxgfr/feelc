@@ -1,0 +1,7 @@
+.git
+.github
+site/node_modules
+site/static/*.wasm
+*.ir.bin
+docs/superpowers
+.claude

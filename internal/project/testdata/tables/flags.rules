@@ -1,0 +1,7 @@
+model "flags" {
+  rounding: half_even
+}
+
+input vip : boolean
+
+decision priority : boolean = vip

@@ -1,0 +1,22 @@
+model "bad" {
+  rounding: half_even
+}
+
+input score : number in [0..100]
+
+# GAP: nothing covers score < 50 and there is no default.
+decision grade : string {
+  needs: score
+  hit: first
+  #  score   => grade
+     >= 50    => "pass"
+}
+
+# CONFLICT: under UNIQUE, score in [50..60] matches both rows with different outputs.
+decision label : string {
+  needs: score
+  hit: unique
+  #  score   => label
+     >= 50    => "high"
+     <= 60    => "low"
+}

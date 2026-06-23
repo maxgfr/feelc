@@ -15,6 +15,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/maxgfr/feelc/internal/graph"
 	"github.com/maxgfr/feelc/internal/ir"
 	"github.com/maxgfr/feelc/internal/loader"
+	"github.com/maxgfr/feelc/internal/project"
 	"github.com/maxgfr/feelc/internal/registry"
 	"github.com/maxgfr/feelc/internal/service"
 	"github.com/maxgfr/feelc/internal/tck"
@@ -649,15 +651,20 @@ func cmdGraph(args []string) error {
 func cmdServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	rulesPath := fs.String("rules", "", "path to the .rules file to serve")
+	projectPath := fs.String("project", "", "path to a project directory (or .rules file) to serve")
 	addr := fs.String("addr", ":8080", "HTTP listen address")
 	watch := fs.Bool("watch", false, "hot reload on file modification")
 	strict := fs.Bool("strict", false, "refuse (re)loading if verification has blockers")
 	ui := fs.Bool("ui", false, "serve the embedded AI authoring UI at /")
+	allowEdit := fs.Bool("allow-edit", false, "enable the project module-editing endpoints (PUT/POST/DELETE /v1/modules write to disk); trusted/loopback hosts only")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *rulesPath == "" && !*ui {
-		return fmt.Errorf("--rules is required (or pass --ui to start without a model and author one in the browser)")
+	if *rulesPath != "" && *projectPath != "" {
+		return fmt.Errorf("--rules and --project are mutually exclusive")
+	}
+	if *rulesPath == "" && *projectPath == "" && !*ui {
+		return fmt.Errorf("--rules or --project is required (or pass --ui to start empty and author in the browser)")
 	}
 
 	reg := registry.New()
@@ -672,10 +679,70 @@ func cmdServe(args []string) error {
 		}
 	}
 
-	// Initial load: must succeed when a file is given. With --ui and no --rules, start empty and
+	// srv and ws are referenced by the reload closure, so declare them before it.
+	var srv *service.Server
+	var ws *project.Workspace
+
+	logProject := func(p *project.Project) {
+		fmt.Fprintf(os.Stderr, "project %q loaded (%s) — %d module(s), %d blocker(s)\n",
+			p.Manifest.Name, p.Hash, len(p.Modules), p.Blockers())
+	}
+
+	reloadFn := func() error {
+		switch {
+		case *projectPath != "":
+			p, err := ws.Reload()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "reload refused (current project kept):", err)
+				return err
+			}
+			srv.PublishProject(p)
+			logProject(p)
+			return nil
+		case *rulesPath != "":
+			e, rep, err := loader.Reload(*rulesPath, reg, *strict)
+			logReload(e, rep, err)
+			return err
+		default:
+			return fmt.Errorf("nothing to reload")
+		}
+	}
+	srv = service.New(reg, audit.New(os.Stderr), reloadFn)
+	srv.EnableUI = *ui
+
+	// Initial load: must succeed when a file/project is given. With --ui and neither, start empty and
 	// let the user author a model in the browser (the model-backed endpoints stay 503 until then).
 	modelName := ""
-	if *rulesPath != "" {
+	switch {
+	case *projectPath != "":
+		w, err := project.OpenWorkspace(*projectPath, *strict)
+		if err != nil {
+			return fmt.Errorf("initial load: %w", err)
+		}
+		ws = w
+		// The workspace always backs --watch/reload, but the HTTP write endpoints are enabled ONLY with
+		// --allow-edit (otherwise PUT/POST/DELETE /v1/modules stay 404). Safe-by-default for exposed hosts.
+		if *allowEdit {
+			srv.SetWorkspace(ws)
+		}
+		srv.PublishProject(ws.Current())
+		logProject(ws.Current())
+		modelName = ws.Current().Manifest.Name
+		if *watch {
+			stop, err := ws.Watch(func(p *project.Project, err error) {
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "reload refused (current project kept):", err)
+					return
+				}
+				srv.PublishProject(p)
+				logProject(p)
+			})
+			if err != nil {
+				return err
+			}
+			defer stop()
+		}
+	case *rulesPath != "":
 		e, rep, err := loader.Reload(*rulesPath, reg, *strict)
 		if err != nil {
 			return fmt.Errorf("initial load: %w", err)
@@ -691,16 +758,6 @@ func cmdServe(args []string) error {
 		}
 	}
 
-	reloadFn := func() error {
-		if *rulesPath == "" {
-			return fmt.Errorf("no --rules configured: nothing to reload")
-		}
-		e, rep, err := loader.Reload(*rulesPath, reg, *strict)
-		logReload(e, rep, err)
-		return err
-	}
-	srv := service.New(reg, audit.New(os.Stderr), reloadFn)
-	srv.EnableUI = *ui
 	if modelName != "" {
 		fmt.Fprintf(os.Stderr, "feelc serve on %s (model %q)\n", *addr, modelName)
 	} else {
@@ -710,7 +767,25 @@ func cmdServe(args []string) error {
 		fmt.Fprintf(os.Stderr, "  UI:  %s\n", uiURL(*addr))
 		fmt.Fprintf(os.Stderr, "  LLM: %s\n", llmStatusLine())
 	}
-	return http.ListenAndServe(*addr, srv.Handler())
+	if *projectPath != "" {
+		if *allowEdit {
+			fmt.Fprintln(os.Stderr, "  edit: ON (PUT/POST/DELETE /v1/modules write to disk) — keep this on trusted/loopback hosts only")
+		} else {
+			fmt.Fprintln(os.Stderr, "  edit: off (read-only; pass --allow-edit to enable module writes)")
+		}
+	}
+	// Explicit http.Server with timeouts: the bare ListenAndServe has no read/idle deadlines, leaving the
+	// (unauthenticated) endpoints open to slowloris and connection exhaustion.
+	server := &http.Server{
+		Addr:              *addr,
+		Handler:           srv.Handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      120 * time.Second, // LLM proxy calls can be slow
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+	return server.ListenAndServe()
 }
 
 // uiURL renders a clickable URL for a net/http listen address (":8080" -> localhost).

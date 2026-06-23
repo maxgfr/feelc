@@ -1,0 +1,7 @@
+model "kyc" {
+  rounding: half_even
+}
+
+input score : number >= 0
+
+decision passed : boolean = score >= 600

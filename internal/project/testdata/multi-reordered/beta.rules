@@ -1,0 +1,7 @@
+model "beta" {
+  rounding: half_even
+}
+
+input age : number in [0..120]
+
+decision senior : boolean = age >= 65

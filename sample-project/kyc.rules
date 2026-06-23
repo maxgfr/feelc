@@ -1,0 +1,8 @@
+model "kyc" {
+  rounding: half_even
+}
+
+input score : number in [0..1000]
+
+# A reusable decision other modules bind to (see feelc.project.json `uses`).
+decision passed : boolean = score >= 600

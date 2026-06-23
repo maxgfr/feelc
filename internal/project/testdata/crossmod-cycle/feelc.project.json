@@ -1,0 +1,7 @@
+{
+  "name": "cyclic",
+  "modules": [
+    { "name": "a", "path": "a.rules", "uses": { "from_b": "b.b_out" } },
+    { "name": "b", "path": "b.rules", "uses": { "from_a": "a.a_out" } }
+  ]
+}
