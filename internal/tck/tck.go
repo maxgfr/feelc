@@ -323,7 +323,10 @@ func decodeValue(v tckValue) (any, error) {
 		return b, nil
 	case "integer", "int", "long", "short", "decimal", "double", "float":
 		return json.Number(strings.TrimSpace(v.Text)), nil
-	case "date", "time", "datetime", "duration", "dayTimeDuration", "yearMonthDuration", "function":
+	case "date", "duration", "daytimeduration":
+		// feelc renders date/duration as ISO strings (ADR 0014); compare textually.
+		return strings.TrimSpace(v.Text), nil
+	case "time", "datetime", "yearmonthduration", "function":
 		return nil, fmt.Errorf("unsupported TCK type %q", typ)
 	default:
 		return nil, fmt.Errorf("unsupported TCK type %q", v.Type)

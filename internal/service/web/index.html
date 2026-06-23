@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>feelc — AI authoring</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="brand">feelc<span> · AI-driven rule engine</span></div>
+    <div class="status" id="llm-status">LLM: not configured</div>
+    <button id="settings-btn" class="ghost">⚙ LLM settings</button>
+  </header>
+
+  <main>
+    <!-- Left: chat -->
+    <section class="pane chat">
+      <h2>Describe your rules</h2>
+      <div id="thread" class="thread"></div>
+      <form id="chat-form" class="chat-form">
+        <textarea id="chat-input" rows="3" placeholder="e.g. Credit eligibility from score, debt-to-income and age…"></textarea>
+        <div class="row">
+          <label class="auto"><input type="checkbox" id="auto-verify" checked /> auto-verify</label>
+          <button id="send-btn" type="submit">Send</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Right: editor + verify + run -->
+    <section class="pane editor">
+      <div class="tabbar">
+        <h2>.rules</h2>
+        <div class="actions">
+          <button id="verify-btn" class="primary">Verify</button>
+          <button id="graph-btn">Graph</button>
+          <button id="tests-btn" title="Ask the LLM to draft test cases, then check them deterministically">AI tests</button>
+        </div>
+      </div>
+      <textarea id="source" spellcheck="false" placeholder="The generated model appears here — editable."></textarea>
+
+      <div class="report" id="report"></div>
+      <div class="graph" id="graph"></div>
+
+      <div class="run">
+        <h3>Simulator</h3>
+        <div class="run-row">
+          <input id="decision" placeholder="decision name (e.g. eligibility)" />
+          <button id="form-btn">Build form</button>
+          <button id="run-btn">Run JSON</button>
+          <button id="explain-btn" title="Narrate the last result in plain English (LLM)">Explain</button>
+        </div>
+        <div id="sim-form" class="sim-form"></div>
+        <textarea id="input" rows="3" spellcheck="false" placeholder='{"credit_score":700,"annual_income":60000,"monthly_debt":1500,"age":40}'></textarea>
+        <div class="output" id="output"></div>
+        <div class="narration" id="narration"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- LLM settings dialog -->
+  <dialog id="settings">
+    <form method="dialog" id="settings-form">
+      <h3>LLM settings <span class="hint">(stored locally in your browser)</span></h3>
+      <label>Provider
+        <select id="cfg-provider">
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai">OpenAI-compatible</option>
+        </select>
+      </label>
+      <label>Model <input id="cfg-model" placeholder="claude-sonnet-4-6" /></label>
+      <label>Base URL <span class="hint">(optional)</span><input id="cfg-baseurl" placeholder="default" /></label>
+      <label>API key <input id="cfg-key" type="password" placeholder="sk-…" /></label>
+      <p class="note">The key is sent to your local <code>feelc serve</code>, which forwards the
+        request to the provider. It is not stored or logged server-side. Use only on a machine you trust.</p>
+      <div class="dialog-actions">
+        <button value="cancel" class="ghost">Close</button>
+        <button id="save-settings" value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

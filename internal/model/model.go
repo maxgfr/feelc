@@ -9,16 +9,33 @@ import feel "github.com/pbinitiative/feel"
 type Type string
 
 const (
-	TypeNumber Type = "number"
-	TypeString Type = "string"
-	TypeBool   Type = "boolean"
+	TypeNumber   Type = "number"
+	TypeString   Type = "string"
+	TypeBool     Type = "boolean"
+	TypeDate     Type = "date"
+	TypeDuration Type = "duration"
 )
+
+// Meta holds optional documentation/traceability annotations (`@title`, `@doc`, `@question`,
+// `@source`) attached to an input or decision. It is purely descriptive: it never affects
+// compilation, evaluation or the canonical model hash.
+type Meta struct {
+	Title    string // short human label
+	Doc      string // longer description
+	Question string // prompt shown when asking for this input (question-flow / simulator)
+	Source   string // traceability: the law article / spec reference this rule encodes
+}
+
+// Empty reports whether no annotation was set.
+func (m Meta) Empty() bool { return m == Meta{} }
 
 // Input: a declared input data (DMN Input Data).
 type Input struct {
 	Name   string
 	Type   Type
 	Domain string // raw domain constraint (e.g. "in [300..850]", ">= 0"); used by the check (T4)
+	Unit   string // optional physical unit (e.g. "EUR/month"); compile-time dimensional analysis only
+	Meta   Meta
 	Line   int
 }
 
@@ -54,14 +71,18 @@ type Rule struct {
 
 // Decision: a DRG decision. Either a table (Rules), or an expression (Expr).
 type Decision struct {
-	Name      string
-	TypeName  string // "number"/"string"/"boolean" or a declared context type name
-	Needs     []string
-	HitPolicy string
-	Priority  []Cell // ordered output values (PRIORITY), from highest priority to lowest
-	Rules     []Rule
-	Expr      *Cell // if != nil: literal-expression decision (scalar TypeName), no table
-	Line      int
+	Name          string
+	TypeName      string // "number"/"string"/"boolean" or a declared context type name
+	Needs         []string
+	HitPolicy     string
+	Priority      []Cell // ordered output values (PRIORITY), from highest priority to lowest
+	Rules         []Rule
+	Expr          *Cell  // if != nil: literal-expression decision (scalar TypeName), no table
+	Bracket       string // if != "": progressive-bracket decision over this input; Rules hold the tranches
+	Applicable    *Cell  // if != nil: applicability condition (the decision is non-applicable otherwise)
+	ApplicableNeg bool   // true for `not applicable if` (non-applicable WHEN the condition holds)
+	Meta          Meta
+	Line          int
 }
 
 // BKM: Business Knowledge Model — a named parameterized, reusable expression, inlined

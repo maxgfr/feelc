@@ -18,11 +18,13 @@ import (
 	"github.com/maxgfr/feelc/internal/diag"
 	"github.com/maxgfr/feelc/internal/ir"
 	"github.com/maxgfr/feelc/internal/model"
+	"github.com/maxgfr/feelc/internal/units"
 )
 
 // Compile typechecks then lowers the conceptual model into IR.
 func Compile(m *model.Model) (*ir.CompiledModel, error) {
-	cm := &ir.CompiledModel{Name: m.Name, Inputs: map[string]ir.Type{}, Domains: map[string]ir.Domain{}}
+	cm := &ir.CompiledModel{Name: m.Name, Inputs: map[string]ir.Type{}, Domains: map[string]ir.Domain{}, InputMeta: map[string]ir.Meta{}, Units: map[string]string{}}
+	inputUnits := map[string]units.Unit{}
 	for _, in := range m.Inputs {
 		cm.Inputs[in.Name] = irType(in.Type)
 		dom, err := parseDomain(in.Domain)
@@ -30,6 +32,17 @@ func Compile(m *model.Model) (*ir.CompiledModel, error) {
 			return nil, diag.Wrap(diag.CodeInputSyntax, in.Line, fmt.Sprintf("input %q", in.Name), err)
 		}
 		cm.Domains[in.Name] = dom
+		if md := irMeta(in.Meta); !md.Empty() {
+			cm.InputMeta[in.Name] = md
+		}
+		u, err := units.Parse(in.Unit)
+		if err != nil {
+			return nil, diag.Wrap(diag.CodeInputSyntax, in.Line, fmt.Sprintf("input %q unit", in.Name), err)
+		}
+		inputUnits[in.Name] = u
+		if s := u.String(); s != "" {
+			cm.Units[in.Name] = s
+		}
 	}
 	// Resolvable names: external inputs + decisions (a cell/expr may reference an upstream decision).
 	// BKMs are NOT resolvable names (not in `valid`): they are pure functions,
@@ -43,6 +56,10 @@ func Compile(m *model.Model) (*ir.CompiledModel, error) {
 	}
 	bkms := map[string]model.BKM{}
 	for _, b := range m.BKMs {
+		if reservedBuiltin[b.Name] {
+			return nil, diag.Newf(diag.CodeUnsupported, b.Line, "BKM %q uses a reserved built-in name", b.Name).
+				WithSuggestion("rename the BKM (reserved: date, duration, floor, ceiling, round, not)")
+		}
 		bkms[b.Name] = b
 	}
 	for _, d := range m.Decisions {
@@ -52,12 +69,30 @@ func Compile(m *model.Model) (*ir.CompiledModel, error) {
 		}
 		cm.Decisions = append(cm.Decisions, dec)
 	}
+	if err := checkUnits(cm, inputUnits); err != nil {
+		return nil, err
+	}
 	return cm, nil
 }
 
 func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]model.BKM, d model.Decision) (ir.Decision, error) {
+	if d.Bracket != "" {
+		return compileBracket(valid, bkms, d)
+	}
 	if d.Expr != nil {
-		prog, err := lowerExpr(d.Expr.Node, bkms)
+		// Applicability: gate the expression so a non-applicable case yields a non-applicable value
+		// (ADR 0013). Lowered to `if C then E else NA` (or the negation), reusing emitIf — the NA
+		// sentinel becomes a non-applicable constant, so the VM and codec need no special path.
+		node := d.Expr.Node
+		if d.Applicable != nil {
+			na := &feel.Var{Name: naSentinel}
+			if d.ApplicableNeg {
+				node = &feel.IfExpr{Cond: d.Applicable.Node, ThenBranch: na, ElseBranch: node}
+			} else {
+				node = &feel.IfExpr{Cond: d.Applicable.Node, ThenBranch: node, ElseBranch: na}
+			}
+		}
+		prog, err := lowerExpr(node, bkms)
 		if err != nil {
 			return ir.Decision{}, diag.Wrap(diag.CodeUnsupported, d.Line, fmt.Sprintf("decision %q", d.Name), err).
 				WithCol(d.Expr.Col)
@@ -72,9 +107,13 @@ func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]mode
 		if err := checkVars(prog.Vars, valid, d.Name, d.Line); err != nil {
 			return ir.Decision{}, err
 		}
-		return ir.Decision{Name: d.Name, Kind: ir.KindLiteralExpr, Expr: prog, ExprSrc: d.Expr.Src, Deps: prog.Vars, Line: d.Line}, nil
+		return ir.Decision{Name: d.Name, Kind: ir.KindLiteralExpr, Expr: prog, ExprSrc: d.Expr.Src, Deps: prog.Vars, Meta: irMeta(d.Meta), Line: d.Line}, nil
 	}
 
+	if d.Applicable != nil {
+		return ir.Decision{}, diag.Newf(diag.CodeUnsupported, d.Line,
+			"decision %q: `applicable if` is only supported on expression decisions (decision x : T { = <expr> applicable if ... })", d.Name)
+	}
 	hp, agg, err := parseHitPolicy(d.HitPolicy, d.Line)
 	if err != nil {
 		return ir.Decision{}, err
@@ -136,7 +175,76 @@ func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]mode
 		}
 		table.Rules = append(table.Rules, rule)
 	}
-	return ir.Decision{Name: d.Name, Kind: ir.KindTable, Table: table, Deps: d.Needs, Line: d.Line}, nil
+	return ir.Decision{Name: d.Name, Kind: ir.KindTable, Table: table, Deps: d.Needs, Meta: irMeta(d.Meta), Line: d.Line}, nil
+}
+
+// irMeta copies source-level documentation annotations into the IR (descriptive only).
+func irMeta(m model.Meta) ir.Meta {
+	return ir.Meta{Title: m.Title, Doc: m.Doc, Question: m.Question, Source: m.Source}
+}
+
+// compileBracket lowers a progressive-bracket decision into ARITHMETIC bytecode (no new VM opcode):
+// the marginal-rate tax of `x` is the sum over tranches [lo,hi) at rate r of
+// (clamp(x, lo, hi) - lo) * r, expressed with if/then/else + arithmetic and reusing lowerExpr. The
+// top tranche is written `>= lo` (unbounded). Rates may use percent literals (`30%`).
+func compileBracket(valid map[string]bool, bkms map[string]model.BKM, d model.Decision) (ir.Decision, error) {
+	if model.Type(d.TypeName) != model.TypeNumber {
+		return ir.Decision{}, diag.Newf(diag.CodeUnsupported, d.Line, "bracket decision %q must be `: number`", d.Name)
+	}
+	v := d.Bracket
+	if !valid[v] {
+		return ir.Decision{}, diag.Newf(diag.CodeUndeclared, d.Line, "bracket decision %q: input %q not declared", d.Name, v).
+			WithSuggestion("declared names: " + strings.Join(sortedKeys(valid), ", "))
+	}
+	if len(d.Rules) == 0 {
+		return ir.Decision{}, diag.Newf(diag.CodeDecisionBody, d.Line, "bracket decision %q has no tranches", d.Name)
+	}
+	varNode := func() feel.Node { return &feel.Var{Name: v} }
+	numNode := func(val ir.Value) feel.Node { return &feel.NumberNode{Value: val.Num.Text('f')} }
+	zero := &feel.NumberNode{Value: "0"}
+
+	var total feel.Node = zero
+	for _, r := range d.Rules {
+		if r.IsDefault {
+			return ir.Decision{}, diag.Newf(diag.CodeUnsupported, r.Line, "bracket decision %q: `default` is not allowed (tranches only)", d.Name)
+		}
+		if len(r.Conds) != 1 || len(r.Outputs) != 1 {
+			return ir.Decision{}, diag.Newf(diag.CodeArity, r.Line, "bracket decision %q: each tranche is `<range or >= lo> => <rate>`", d.Name)
+		}
+		ct, err := normalizeCell(r.Conds[0], valid, bkms, d.Name)
+		if err != nil {
+			return ir.Decision{}, err
+		}
+		rate, err := literalValue(r.Outputs[0].Node)
+		if err != nil || rate.Tag != ir.TagNumber {
+			return ir.Decision{}, diag.Newf(diag.CodeLiteral, r.Line, "bracket decision %q: rate must be a number or percent (e.g. 0.11 or 11%%)", d.Name)
+		}
+		// amount taxed within this tranche, as a function of x = the bracket input.
+		var amount feel.Node
+		diff := &feel.Binop{Op: "-", Left: varNode(), Right: numNode(ct.A)} // x - lo
+		switch ct.Op {
+		case ir.OpInRange: // [lo..hi): cap the amount at the tranche width
+			span := &feel.Binop{Op: "-", Left: numNode(ct.B), Right: numNode(ct.A)} // hi - lo
+			capped := &feel.IfExpr{Cond: &feel.Binop{Op: ">=", Left: varNode(), Right: numNode(ct.B)}, ThenBranch: span, ElseBranch: diff}
+			amount = &feel.IfExpr{Cond: &feel.Binop{Op: "<=", Left: varNode(), Right: numNode(ct.A)}, ThenBranch: zero, ElseBranch: capped}
+		case ir.OpGe, ir.OpGt: // top tranche `>= lo`: unbounded
+			amount = &feel.IfExpr{Cond: &feel.Binop{Op: "<=", Left: varNode(), Right: numNode(ct.A)}, ThenBranch: zero, ElseBranch: diff}
+		default:
+			return ir.Decision{}, diag.Newf(diag.CodeUnsupported, r.Line,
+				"bracket decision %q: a tranche must be a range `[lo..hi)` or `>= lo`", d.Name)
+		}
+		contribution := &feel.Binop{Op: "*", Left: amount, Right: numNode(rate)}
+		total = &feel.Binop{Op: "+", Left: total, Right: contribution}
+	}
+
+	prog, err := lowerExpr(total, bkms)
+	if err != nil {
+		return ir.Decision{}, diag.Wrap(diag.CodeUnsupported, d.Line, fmt.Sprintf("bracket decision %q", d.Name), err)
+	}
+	if err := checkVars(prog.Vars, valid, d.Name, d.Line); err != nil {
+		return ir.Decision{}, err
+	}
+	return ir.Decision{Name: d.Name, Kind: ir.KindLiteralExpr, Expr: prog, ExprSrc: "bracket(" + v + ")", Deps: prog.Vars, Meta: irMeta(d.Meta), Line: d.Line}, nil
 }
 
 // outputSrcs extracts the source text of the output cells (justification trace).
@@ -152,7 +260,7 @@ func outputSrcs(cells []model.Cell) []string {
 // scalar builtin -> 1 output (name = decision); context type -> the fields, in order.
 func outputNames(m *model.Model, d model.Decision) ([]string, error) {
 	switch model.Type(d.TypeName) {
-	case model.TypeNumber, model.TypeString, model.TypeBool:
+	case model.TypeNumber, model.TypeString, model.TypeBool, model.TypeDate, model.TypeDuration:
 		return []string{d.Name}, nil
 	}
 	td, ok := m.Type(d.TypeName)
@@ -245,6 +353,11 @@ func normalizeNode(node feel.Node, src string, valid map[string]bool, bkms map[s
 			return negateCell(n, src, valid, bkms, dec, line, col)
 		}
 		// Other invocation (BKM, floor/round) used as a boolean test -> Op=Prog cell.
+		return progCell(node, valid, bkms, dec, line, col)
+	case *feel.IfExpr:
+		// `if c then a else b` as a boolean test -> Op=Prog cell (non-geometric). Compiled to
+		// jumps by the same lowerer as a literal-expression decision; the SMT backend (ADR 0007)
+		// re-encodes it as `ite` for completeness/conflict proofs, the geometric layer degrades.
 		return progCell(node, valid, bkms, dec, line, col)
 	default:
 		return ir.CellTest{}, diag.Newf(diag.CodeUnsupported, line, "cell %q: construct not supported in v2", src).WithCol(col)
@@ -448,12 +561,22 @@ func parseDomain(s string) (ir.Domain, error) {
 	return ir.Domain{Kind: ir.DomNone}, nil
 }
 
+// reservedBuiltin lists function names the lowerer handles specially (single-arg built-ins and the
+// date/duration literal constructors); a BKM may not shadow them.
+var reservedBuiltin = map[string]bool{
+	"floor": true, "ceiling": true, "round": true, "not": true, "date": true, "duration": true,
+}
+
 func irType(t model.Type) ir.Type {
 	switch t {
 	case model.TypeString:
 		return ir.TypeString
 	case model.TypeBool:
 		return ir.TypeBool
+	case model.TypeDate:
+		return ir.TypeDate
+	case model.TypeDuration:
+		return ir.TypeDuration
 	default:
 		return ir.TypeNumber
 	}

@@ -21,13 +21,16 @@ dependency (neither CGo nor binary) in the default build.
   nil by default → unchanged behavior (`not-verifiable` on `Op=Prog`). A backend returns
   `true` if it handled the decision.
 - **PURE and testable encoder**: `internal/smt` translates the geometric layer (`CellTest`) and the
-  straight-line bytecode (`ExprProgram`) into SMT-LIB2 (Reals + Bools theory). **Without external
-  dependency → unit-tested without Z3.** Subset: arithmetic, comparisons, and/or/not,
-  intervals, sets, negation, number/boolean columns. Outside the subset (if/then/else
-  compiled to jumps, floor/ceiling/round, string columns, decision dependencies) → cleanly
-  refused (`ok=false`).
-- **Z3 wiring**: `internal/verify/verify_smt.go` (`//go:build smt`) plugs in `smtProve`, encodes
-  a completeness query (`unsat` ⇒ complete table), and invokes `z3 -in`.
+  bytecode (`ExprProgram`) into SMT-LIB2 (Reals + Bools + Ints theory). **Without external
+  dependency → unit-tested without Z3.** Subset: arithmetic +-*/ and unary negation, comparisons,
+  and/or/not, intervals, sets, negation; **if/then/else** (the strictly-nested `OpJmpFalse`/`OpJmp`
+  backpatch is reconstructed into `ite`); **floor/ceiling** (via `to_int`); **round** (HALF_EVEN, via
+  a fresh `Int` with parity constraints — needs an `Aux` sink); number/boolean columns. Outside the
+  subset (string columns, decision dependencies, an `Aux`-less round) → cleanly refused (`ok=false`).
+- **Z3 wiring**: `internal/verify/verify_smt.go` (`//go:build smt`) plugs in `smtProve`, encodes a
+  **completeness** query (`unsat` ⇒ complete table) **and a conflict** query (`sat` ⇒ overlapping
+  rules — UNIQUE: any overlap; ANY: divergent outputs, mirroring the geometric `recordConflict`),
+  and invokes `z3 -in`. Logic `ALL` (mixed Real/Int) for the `to_int`/`mod` terms.
 
 **HONEST degradation (never silently conform)**: z3 missing from PATH, or form outside the
 encodable subset → `not-verifiable` with the reason; never a false proof.
@@ -38,5 +41,9 @@ encodable subset → `not-verifiable` with the reason; never a false proof.
 - `-tags smt` build: `go build -tags smt`, requires `z3` in PATH for an effective proof
   (otherwise explicit `not-verifiable`). Reflects the final opcodes (post-Slice 22: if/built-ins).
 - The encoder is tested; the effective Z3 proof path is validated where `z3` is installed.
-- **Follow-up**: extend the encoder (if/then/else via `ite`, `floor/ceiling/round` via `to_int`),
-  and also route conflict detection to SMT.
+- **Follow-up (done, 2026-06-22)**: the encoder now handles **if/then/else** (`ite`), **floor/ceiling**
+  (`to_int`) and **round** (HALF_EVEN, exact — soundness pinned by `TestRoundSoundnessZ3`), and
+  conflict detection is routed to SMT (UNIQUE/ANY). if/then/else is now also accepted in cells
+  (compiler routes `IfExpr` → `Op=Prog`). See `examples/smt-residual/` for an end-to-end
+  `verify --tags smt` demo. Remaining: a `mod`-based encoding makes a non-half-integer `round`
+  domain larger; multi-arg built-ins stay deferred (ADR 0004 §3).

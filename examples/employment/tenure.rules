@@ -1,0 +1,19 @@
+model "employment" {}
+
+@title "Hire date"
+@question "On what date were you hired?"
+input hire_date : date
+@title "Reference date"
+@question "As of what date?"
+input as_of : date
+
+# Date/duration types (ADR 0014). Dates are calendar days; durations are whole days (ISO "P<n>D").
+# Supported: date - date = duration, date +/- duration = date, duration +/- duration, and
+# comparisons. Literals: date("YYYY-MM-DD"), duration("P365D").
+
+@title "Tenure"
+decision tenure : duration = as_of - hire_date
+
+@title "Eligible for long-service award (1 year)"
+@source "HR policy 4.2"
+decision eligible : boolean = as_of - hire_date >= duration("P365D")

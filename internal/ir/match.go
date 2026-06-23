@@ -15,25 +15,31 @@ func ValueEq(a, b Value) bool {
 		return false
 	}
 	switch a.Tag {
-	case TagNumber:
+	case TagNumber, TagDate, TagDuration:
 		return decimal.Cmp(a.Num, b.Num) == 0
 	case TagString:
 		return a.Str == b.Str
 	case TagBool:
 		return a.Bool == b.Bool
-	case TagNull:
+	case TagNull, TagNA:
 		return true
 	}
 	return false
 }
 
+// comparableNum reports whether a tag carries an ordered numeric magnitude in Num (number, date,
+// duration — all day/decimal integers internally).
+func comparableNum(t Tag) bool {
+	return t == TagNumber || t == TagDate || t == TagDuration
+}
+
 // NumCompare: numeric comparison. null satisfies no comparison (three-valued, ADR 0003).
 func NumCompare(op Op, v, a Value) (bool, error) {
-	if v.Tag == TagNull {
+	if v.Tag == TagNull || v.Tag == TagNA {
 		return false, nil
 	}
-	if v.Tag != TagNumber || a.Tag != TagNumber {
-		return false, fmt.Errorf("numeric comparison on a non-numeric value")
+	if !comparableNum(v.Tag) || v.Tag != a.Tag {
+		return false, fmt.Errorf("comparison requires two values of the same number/date/duration type")
 	}
 	c := decimal.Cmp(v.Num, a.Num)
 	switch op {
@@ -50,7 +56,7 @@ func NumCompare(op Op, v, a Value) (bool, error) {
 }
 
 func inRange(ct CellTest, v Value) (bool, error) {
-	if v.Tag == TagNull {
+	if v.Tag == TagNull || v.Tag == TagNA {
 		return false, nil
 	}
 	if v.Tag != TagNumber || ct.A.Tag != TagNumber || ct.B.Tag != TagNumber {
@@ -73,7 +79,7 @@ func MatchCell(ct CellTest, v Value) (bool, error) {
 		return false, err
 	}
 	if ct.Negate {
-		if v.Tag == TagNull {
+		if v.Tag == TagNull || v.Tag == TagNA {
 			return false, nil
 		}
 		return !res, nil

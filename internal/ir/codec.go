@@ -215,7 +215,7 @@ func (e *encoder) putProg(p *ExprProgram) {
 func (e *encoder) putValue(v Value) {
 	e.putU8(uint8(v.Tag))
 	switch v.Tag {
-	case TagNumber:
+	case TagNumber, TagDate, TagDuration: // date/duration carry an integer day-count in Num
 		if v.Num == nil {
 			e.putStr("")
 			return
@@ -461,7 +461,7 @@ func (d *decoder) getValue() Value {
 	}
 	v := Value{Tag: Tag(d.getU8())}
 	switch v.Tag {
-	case TagNumber:
+	case TagNumber, TagDate, TagDuration:
 		txt := d.getBytes()
 		if len(txt) > 0 {
 			num, err := decimal.Parse(string(txt))

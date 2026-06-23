@@ -68,8 +68,8 @@ func TestRunGradeFixture(t *testing.T) {
 			skipReason = c.Reason
 		}
 	}
-	if skipReason == "" || !strings.Contains(skipReason, "date") {
-		t.Errorf("the skip must mention the date type, got %q", skipReason)
+	if skipReason == "" || !strings.Contains(skipReason, "time") {
+		t.Errorf("the skip must mention the unsupported type, got %q", skipReason)
 	}
 }
 

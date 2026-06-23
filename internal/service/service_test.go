@@ -196,16 +196,30 @@ func TestServiceSource(t *testing.T) {
 	}
 }
 
-// CORS: preflight OPTIONS -> 204 + Access-Control-Allow-Origin header.
+// CORS: preflight OPTIONS -> 204; the Origin is reflected ONLY for loopback origins (the local API
+// proxies the user's LLM key, so it must not be exposed to arbitrary websites).
 func TestServiceCORS(t *testing.T) {
 	h := creditHandler(t)
+
+	// Loopback origin: reflected.
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("OPTIONS", "/v1/verify", nil))
+	req := httptest.NewRequest("OPTIONS", "/v1/verify", nil)
+	req.Header.Set("Origin", "http://localhost:3000")
+	h.ServeHTTP(rec, req)
 	if rec.Code != 204 {
 		t.Errorf("preflight: code %d, expected 204", rec.Code)
 	}
-	if rec.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Errorf("CORS header missing")
+	if rec.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3000" {
+		t.Errorf("loopback origin should be reflected, got %q", rec.Header().Get("Access-Control-Allow-Origin"))
+	}
+
+	// Arbitrary internet origin: NOT allowed.
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("OPTIONS", "/v1/verify", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	h.ServeHTTP(rec, req)
+	if rec.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("non-loopback origin must not be allowed, got %q", rec.Header().Get("Access-Control-Allow-Origin"))
 	}
 }
 

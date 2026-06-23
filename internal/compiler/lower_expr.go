@@ -22,6 +22,11 @@ const (
 	maxInstrBudget = 200_000 // max number of bytecode instructions emitted for an expression
 )
 
+// naSentinel is an internal FEEL var name (unreachable from source — it contains a NUL) that the
+// lowerer turns into a non-applicable constant. Applicability lowering injects it as the else/then
+// branch of an `if` (see compiler.go).
+const naSentinel = "\x00__na__"
+
 func lowerExpr(node feel.Node, bkms map[string]model.BKM) (*ir.ExprProgram, error) {
 	l := &lowerer{prog: &ir.ExprProgram{}, varIdx: map[string]int{}, bkms: bkms, recursive: recursiveBKMs(bkms)}
 	if err := l.emit(node); err != nil {
@@ -137,9 +142,13 @@ func (l *lowerer) emit(node feel.Node) error {
 	case *feel.BoolNode:
 		l.push(ir.OpPushConst, l.constIdx(ir.Bool(n.Value)))
 	case *feel.Var:
-		if n.Name == "?" {
+		switch n.Name {
+		case "?":
 			l.push(ir.OpLoadInput, 0)
-		} else {
+		case naSentinel:
+			// internal marker injected by applicability lowering -> push a non-applicable constant
+			l.push(ir.OpPushConst, l.constIdx(ir.NA()))
+		default:
 			l.push(ir.OpLoadVar, l.varIndex(n.Name))
 		}
 	case *feel.Binop:
@@ -211,6 +220,28 @@ func (l *lowerer) emitCall(fc *feel.FunCall) error {
 			return err
 		}
 		l.push(op, 0)
+		return nil
+	}
+	if ref.Name == "date" || ref.Name == "duration" {
+		// Temporal literal: date("YYYY-MM-DD") / duration("P30D") -> a compile-time constant (ADR 0014).
+		if len(fc.Args) != 1 || fc.Args[0].Name != "" {
+			return diag.Newf(diag.CodeUnsupported, 0, "%s(...) expects one string literal, e.g. %s(\"...\")", ref.Name, ref.Name)
+		}
+		s, ok := fc.Args[0].Arg.(*feel.StringNode)
+		if !ok {
+			return diag.Newf(diag.CodeUnsupported, 0, "%s(...) requires a string literal argument", ref.Name)
+		}
+		var v ir.Value
+		var err error
+		if ref.Name == "date" {
+			v, err = ir.ParseDate(s.Content())
+		} else {
+			v, err = ir.ParseDuration(s.Content())
+		}
+		if err != nil {
+			return diag.Wrap(diag.CodeLiteral, 0, ref.Name+" literal", err)
+		}
+		l.push(ir.OpPushConst, l.constIdx(v))
 		return nil
 	}
 	return l.emitBKMCall(fc)

@@ -1,0 +1,26 @@
+model "social_aid" {}
+
+@title "Monthly income"
+@question "What is your monthly income?"
+input income : number >= 0 unit "EUR"
+@question "Are you a registered student?"
+input is_student : boolean
+
+# Applicability (ADR 0013): a benefit that does not apply yields a NON-APPLICABLE value (distinct
+# from null/0). In a sum, non-applicable terms drop out (act as 0); if every term is non-applicable,
+# the total itself is non-applicable. This is Publicodes' `applicable si` / non-applicable semantics.
+
+@title "Housing aid"
+decision housing_aid : number {
+  = 200
+  applicable if income < 1500
+}
+
+@title "Student grant"
+decision student_aid : number {
+  = 150
+  applicable if is_student
+}
+
+@title "Total monthly aid"
+decision total_aid : number = housing_aid + student_aid

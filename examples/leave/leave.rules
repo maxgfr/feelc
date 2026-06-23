@@ -1,0 +1,24 @@
+model "leave" {}
+
+# Documentation/traceability annotations (@title/@doc/@question/@source) are descriptive only:
+# they drive `explain`, the graph labels, the simulator form and generated docs, and answer
+# Catala's "link a rule to the law article it encodes" — without affecting the model's hash.
+
+@title "Months employed"
+@question "How many months have you been employed?"
+@source "Labor Code, Art. L1225-35"
+input months_employed : number >= 0
+
+@title "Weekly hours"
+@question "How many hours per week do you work?"
+input weekly_hours : number in [0..60]
+
+@title "Parental leave eligibility"
+@doc "Eligible after one year of continuous employment, regardless of weekly hours."
+@source "Labor Code, Art. L1225-35"
+decision eligible : boolean {
+  needs: months_employed
+  hit: first
+  >= 12 => true
+  -     => false
+}

@@ -24,5 +24,8 @@ func Explain(cm *ir.CompiledModel, decision string, rawInputs map[string]any) (*
 		}
 		inputs[k] = val
 	}
+	if err := ir.CoerceInputs(cm, inputs); err != nil {
+		return nil, err
+	}
 	return vm.Trace(cm, decision, inputs)
 }

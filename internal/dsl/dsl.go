@@ -22,8 +22,10 @@ import (
 	"fmt"
 	"strings"
 
+	apd "github.com/cockroachdb/apd/v3"
 	feel "github.com/pbinitiative/feel"
 
+	"github.com/maxgfr/feelc/internal/decimal"
 	"github.com/maxgfr/feelc/internal/diag"
 	"github.com/maxgfr/feelc/internal/model"
 )
@@ -52,9 +54,17 @@ type line struct {
 }
 
 type parser struct {
-	lines []line
-	i     int
-	file  string
+	lines   []line
+	i       int
+	file    string
+	pending model.Meta // annotations (`@title`, …) awaiting the next input/decision
+}
+
+// takeMeta returns the accumulated annotations and clears them (consumed by an input/decision).
+func (p *parser) takeMeta() model.Meta {
+	m := p.pending
+	p.pending = model.Meta{}
+	return m
 }
 
 // cellSeg: a trimmed cell and its 1-based column in the source line.
@@ -105,7 +115,15 @@ func (p *parser) parse() (*model.Model, error) {
 		}
 		indent := indentOf(ln.text)
 		switch {
+		case strings.HasPrefix(t, "@"):
+			if err := p.parseAnnotation(t, ln.no); err != nil {
+				return nil, err
+			}
+			p.i++
 		case strings.HasPrefix(t, "model "):
+			if err := p.noDanglingMeta(ln.no); err != nil {
+				return nil, err
+			}
 			name, err := parseModelHeader(t, ln.no)
 			if err != nil {
 				return nil, err
@@ -121,9 +139,13 @@ func (p *parser) parse() (*model.Model, error) {
 			if err != nil {
 				return nil, err
 			}
+			in.Meta = p.takeMeta()
 			m.Inputs = append(m.Inputs, in)
 			p.i++
 		case strings.HasPrefix(t, "type "):
+			if err := p.noDanglingMeta(ln.no); err != nil {
+				return nil, err
+			}
 			td, err := parseTypeDecl(t, ln.no)
 			if err != nil {
 				return nil, err
@@ -131,6 +153,9 @@ func (p *parser) parse() (*model.Model, error) {
 			m.Types = append(m.Types, td)
 			p.i++
 		case strings.HasPrefix(t, "bkm "):
+			if err := p.noDanglingMeta(ln.no); err != nil {
+				return nil, err
+			}
 			b, err := parseBKM(t, ln.no)
 			if err != nil {
 				return nil, err
@@ -143,6 +168,7 @@ func (p *parser) parse() (*model.Model, error) {
 				if err != nil {
 					return nil, err
 				}
+				dec.Meta = p.takeMeta()
 				m.Decisions = append(m.Decisions, dec)
 				continue
 			}
@@ -150,6 +176,7 @@ func (p *parser) parse() (*model.Model, error) {
 			if err != nil {
 				return nil, err
 			}
+			dec.Meta = p.takeMeta()
 			m.Decisions = append(m.Decisions, dec)
 			p.i++
 		default:
@@ -157,11 +184,51 @@ func (p *parser) parse() (*model.Model, error) {
 				WithSuggestion("valid statements: `model`, `input`, `type`, `decision`")
 		}
 	}
+	if err := p.noDanglingMeta(len(p.lines)); err != nil {
+		return nil, err
+	}
 	if m.Name == "" {
 		return nil, diag.New(diag.CodeNoModel, 0, `model without a `+"`model \"...\"`"+` declaration`).
 			WithSuggestion("add a `model \"name\" {}` line at the top of the file")
 	}
 	return m, nil
+}
+
+// parseAnnotation parses a `@key "value"` documentation line into the pending Meta.
+func (p *parser) parseAnnotation(t string, no int) error {
+	rest := strings.TrimSpace(t[1:])
+	key := rest
+	if sp := strings.IndexAny(rest, " \t"); sp >= 0 {
+		key = rest[:sp]
+	}
+	val, ok := firstQuoted(rest)
+	if !ok {
+		return diag.Newf(diag.CodeUnknownStmt, no, "annotation @%s expects a quoted value", key).
+			WithSuggestion(`example: @title "Eligibility"`)
+	}
+	switch key {
+	case "title":
+		p.pending.Title = val
+	case "doc":
+		p.pending.Doc = val
+	case "question":
+		p.pending.Question = val
+	case "source":
+		p.pending.Source = val
+	default:
+		return diag.Newf(diag.CodeUnknownStmt, no, "unknown annotation @%s", key).
+			WithSuggestion("supported annotations: @title, @doc, @question, @source")
+	}
+	return nil
+}
+
+// noDanglingMeta errors if annotations were written but not immediately followed by an
+// input/decision (they would otherwise silently attach to the wrong statement).
+func (p *parser) noDanglingMeta(no int) error {
+	if !p.pending.Empty() {
+		return diag.New(diag.CodeUnknownStmt, no, "annotation (@…) must immediately precede an input or decision")
+	}
+	return nil
 }
 
 // skipBlock consumes lines until a line containing '}' (inclusive).
@@ -201,7 +268,21 @@ func parseInput(t string, no int) (model.Input, error) {
 		return model.Input{}, err
 	}
 	domain := strings.TrimSpace(strings.TrimPrefix(typespec, fields[0]))
-	return model.Input{Name: name, Type: mt, Domain: domain, Line: no}, nil
+	// Optional trailing `unit "..."` clause (numeric inputs only — the grammar allows units only
+	// there, and restricting it avoids the `unit ` substring colliding with a string-enum domain
+	// like `in {"unit price", "qty"}`).
+	unit := ""
+	if mt == model.TypeNumber {
+		if idx := strings.Index(domain, "unit "); idx >= 0 {
+			u, ok := firstQuoted(domain[idx:])
+			if !ok {
+				return model.Input{}, diag.New(diag.CodeInputSyntax, no, `input unit must be quoted, e.g. unit "EUR/month"`)
+			}
+			unit = u
+			domain = strings.TrimSpace(domain[:idx])
+		}
+	}
+	return model.Input{Name: name, Type: mt, Domain: domain, Unit: unit, Line: no}, nil
 }
 
 func (p *parser) parseDecision(header string, no, indent int) (model.Decision, error) {
@@ -239,6 +320,30 @@ func (p *parser) parseDecision(header string, no, indent int) (model.Decision, e
 		switch {
 		case strings.HasPrefix(t, "needs:"):
 			dec.Needs = splitList(strings.TrimPrefix(t, "needs:"))
+		case strings.HasPrefix(t, "bracket:"):
+			dec.Bracket = strings.TrimSpace(strings.TrimPrefix(t, "bracket:"))
+			if dec.Bracket == "" {
+				return dec, diag.New(diag.CodeDecisionBody, ln.no, "`bracket:` requires an input name, e.g. `bracket: income`")
+			}
+		case strings.HasPrefix(t, "= "):
+			// expression decision in block form (so it can carry `applicable if`)
+			cell, err := parseCell(strings.TrimSpace(t[1:]), ln.no, lineIndent+2, true)
+			if err != nil {
+				return dec, err
+			}
+			dec.Expr = &cell
+		case strings.HasPrefix(t, "not applicable if "):
+			cell, err := parseCell(strings.TrimSpace(strings.TrimPrefix(t, "not applicable if")), ln.no, lineIndent+18, true)
+			if err != nil {
+				return dec, err
+			}
+			dec.Applicable, dec.ApplicableNeg = &cell, true
+		case strings.HasPrefix(t, "applicable if "):
+			cell, err := parseCell(strings.TrimSpace(strings.TrimPrefix(t, "applicable if")), ln.no, lineIndent+14, true)
+			if err != nil {
+				return dec, err
+			}
+			dec.Applicable, dec.ApplicableNeg = &cell, false
 		case strings.HasPrefix(t, "hit:"):
 			dec.HitPolicy = strings.TrimSpace(strings.TrimPrefix(t, "hit:"))
 		case strings.HasPrefix(t, "priority:"):
@@ -432,6 +537,11 @@ func parseCell(src string, no, col int, isOutput bool) (model.Cell, error) {
 	if s == "" {
 		return model.Cell{}, diag.New(diag.CodeEmptyCell, no, "empty cell").WithCol(col)
 	}
+	// Percent literal: `30%` is the exact decimal 0.30 (Publicodes-style; useful for bracket rates).
+	if frac, ok := percentLiteral(s); ok {
+		cell.Node = &feel.NumberNode{Value: frac}
+		return cell, nil
+	}
 	node, err := feel.ParseString(s)
 	if err != nil {
 		return model.Cell{}, diag.Wrap(diag.CodeFeelSyntax, no,
@@ -439,6 +549,25 @@ func parseCell(src string, no, col int, isOutput bool) (model.Cell, error) {
 	}
 	cell.Node = node
 	return cell, nil
+}
+
+// percentLiteral converts a whole-cell percent literal (e.g. "30%", "2.5%") into its exact decimal
+// fraction string ("0.30", "0.025"). Returns ok=false if the cell is not a bare percentage.
+func percentLiteral(s string) (string, bool) {
+	if !strings.HasSuffix(s, "%") {
+		return "", false
+	}
+	num := strings.TrimSpace(s[:len(s)-1])
+	d, err := decimal.Parse(num)
+	if err != nil || d.Form != apd.Finite {
+		return "", false // reject "Inf%"/"NaN%": never inject a non-finite constant
+	}
+	res := decimal.FromInt(0)
+	if _, err := decimal.Ctx.Quo(res, d, decimal.FromInt(100)); err != nil {
+		return "", false
+	}
+	res.Reduce(res) // canonical, compact form: 30% -> "0.3" (matches the hand-written literal)
+	return res.Text('f'), true
 }
 
 // --- splitting helpers ---
@@ -532,8 +661,12 @@ func parseType(s string, no int) (model.Type, error) {
 		return model.TypeString, nil
 	case "boolean", "bool":
 		return model.TypeBool, nil
+	case "date":
+		return model.TypeDate, nil
+	case "duration":
+		return model.TypeDuration, nil
 	default:
-		return "", diag.Newf(diag.CodeUnknownType, no, "type not supported in v1: %q", s).
-			WithSuggestion("supported types: number, string, boolean")
+		return "", diag.Newf(diag.CodeUnknownType, no, "type not supported: %q", s).
+			WithSuggestion("supported types: number, string, boolean, date, duration")
 	}
 }

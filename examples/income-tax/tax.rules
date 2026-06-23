@@ -1,0 +1,20 @@
+model "income_tax" {}
+
+@title "Taxable income"
+@question "What is your annual taxable income?"
+input taxable : number >= 0 unit "EUR"
+
+# Progressive (marginal) income tax via the `bracket:` mechanism. Each tranche taxes only the part
+# of the income that falls inside it; the engine lowers this to plain arithmetic (no special runtime).
+# Rates use percent literals (`11%` == 0.11). The top tranche is open-ended (`>= ...`).
+@title "Income tax"
+@doc "Marginal-rate income tax (illustrative brackets)."
+@source "Tax code, progressive schedule"
+decision tax : number {
+  bracket: taxable
+  [0..11294)       => 0%
+  [11294..28797)   => 11%
+  [28797..82341)   => 30%
+  [82341..177106)  => 41%
+  >= 177106        => 45%
+}

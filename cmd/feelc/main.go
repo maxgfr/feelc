@@ -26,6 +26,7 @@ import (
 	"github.com/maxgfr/feelc/internal/engine"
 	"github.com/maxgfr/feelc/internal/explain"
 	"github.com/maxgfr/feelc/internal/fmtrules"
+	"github.com/maxgfr/feelc/internal/graph"
 	"github.com/maxgfr/feelc/internal/ir"
 	"github.com/maxgfr/feelc/internal/loader"
 	"github.com/maxgfr/feelc/internal/registry"
@@ -142,6 +143,12 @@ func main() {
 		err = cmdExport(args)
 	case "tck":
 		err = cmdTck(args)
+	case "graph":
+		err = cmdGraph(args)
+	case "inputs":
+		err = cmdInputs(args)
+	case "docs":
+		err = cmdDocs(args)
 	case "serve":
 		err = cmdServe(args)
 	case "version", "--version", "-v":
@@ -191,7 +198,10 @@ Usage:
   feelc import --in <model.dmn> [-o <output.rules>]
   feelc export --rules <file.rules> [-o <output.dmn>]
   feelc tck    --suite <dir-tck> [--json] [--min <pct>]
-  feelc serve  --rules <file.rules> [--addr :8080] [--watch] [--strict]
+  feelc graph  --rules <file.rules|.ir.bin> [--format mermaid|dot|json] [-o <file>]
+  feelc inputs --rules <file.rules|.ir.bin> --decision <name> [--json]
+  feelc docs   --rules <file.rules|.ir.bin> [-o <DOC.md>]
+  feelc serve  --rules <file.rules> [--addr :8080] [--watch] [--strict] [--ui]
   feelc version
 
 Environment:
@@ -396,17 +406,207 @@ func cmdCheck(args []string) error {
 	return nil
 }
 
+// cmdInputs lists the inputs a decision transitively requires (question-flow / simulator).
+func cmdInputs(args []string) error {
+	fs := flag.NewFlagSet("inputs", flag.ContinueOnError)
+	rulesPath := fs.String("rules", "", "path to the .rules|.ir.bin file")
+	decision := fs.String("decision", "", "target decision")
+	asJSON := fs.Bool("json", false, "JSON output")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *rulesPath == "" || *decision == "" {
+		return fmt.Errorf("--rules and --decision are required")
+	}
+	cm, _, err := loadModel(*rulesPath, *asJSON)
+	if err != nil {
+		return err
+	}
+	req, err := cm.RequiredInputs(*decision)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(map[string]any{"decision": *decision, "inputs": req})
+	}
+	fmt.Printf("decision %q requires %d input(s):\n", *decision, len(req))
+	for _, n := range req {
+		line := "  - " + n + " : " + inputTypeName(cm.Inputs[n])
+		if q := cm.InputMeta[n].Question; q != "" {
+			line += "   # " + q
+		}
+		fmt.Println(line)
+	}
+	return nil
+}
+
+func inputTypeName(t ir.Type) string {
+	switch t {
+	case ir.TypeNumber:
+		return "number"
+	case ir.TypeString:
+		return "string"
+	case ir.TypeBool:
+		return "boolean"
+	}
+	return "value"
+}
+
+// cmdDocs generates a Markdown reference for a model: inputs (type/unit/domain/question), decisions
+// (kind/hit/unit/deps/source) and an embedded Mermaid decision graph.
+func cmdDocs(args []string) error {
+	fs := flag.NewFlagSet("docs", flag.ContinueOnError)
+	rulesPath := fs.String("rules", "", "path to the .rules|.ir.bin file")
+	out := fs.String("o", "", "output file (stdout if absent)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *rulesPath == "" {
+		return fmt.Errorf("--rules is required")
+	}
+	cm, rep, err := loadModel(*rulesPath, false)
+	if err != nil {
+		return err
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Model: %s\n\n", cm.Name)
+
+	b.WriteString("## Inputs\n\n| Name | Type | Unit | Domain | Question |\n|---|---|---|---|---|\n")
+	inNames := make([]string, 0, len(cm.Inputs))
+	for n := range cm.Inputs {
+		inNames = append(inNames, n)
+	}
+	sortStrings(inNames)
+	for _, n := range inNames {
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s |\n",
+			n, inputTypeName(cm.Inputs[n]), cm.Units[n], mdDomain(cm.Domains[n]), cm.InputMeta[n].Question)
+	}
+
+	b.WriteString("\n## Decisions\n\n| Name | Kind | Hit policy | Unit | Depends on | Source |\n|---|---|---|---|---|---|\n")
+	for i := range cm.Decisions {
+		d := &cm.Decisions[i]
+		kind, hp := "expression", ""
+		if d.Kind == ir.KindTable && d.Table != nil {
+			kind, hp = "table", hitPolicyDoc(d.Table.HitPolicy)
+		}
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s | %s |\n",
+			d.Name, kind, hp, cm.Units[d.Name], strings.Join(d.Deps, ", "), d.Meta.Source)
+	}
+
+	b.WriteString("\n## Decision graph\n\n```mermaid\n")
+	b.WriteString(graph.Build(cm, rep).Mermaid())
+	b.WriteString("```\n")
+
+	if *out == "" {
+		fmt.Print(b.String())
+		return nil
+	}
+	return os.WriteFile(*out, []byte(b.String()), 0o644)
+}
+
+func sortStrings(xs []string) {
+	for i := 1; i < len(xs); i++ {
+		for j := i; j > 0 && xs[j-1] > xs[j]; j-- {
+			xs[j-1], xs[j] = xs[j], xs[j-1]
+		}
+	}
+}
+
+func mdDomain(d ir.Domain) string {
+	switch d.Kind {
+	case ir.DomNumeric:
+		lo, hi := "-inf", "+inf"
+		if !d.LoInf && d.Lo.Num != nil {
+			lo = d.Lo.Num.Text('f')
+		}
+		if !d.HiInf && d.Hi.Num != nil {
+			hi = d.Hi.Num.Text('f')
+		}
+		lb, rb := "[", "]"
+		if d.LoOpen {
+			lb = "("
+		}
+		if d.HiOpen {
+			rb = ")"
+		}
+		return lb + lo + ".." + hi + rb
+	case ir.DomEnum:
+		parts := make([]string, len(d.Enum))
+		for i, v := range d.Enum {
+			parts[i] = fmt.Sprint(v.ToAny())
+		}
+		return "{" + strings.Join(parts, ", ") + "}"
+	}
+	return ""
+}
+
+func hitPolicyDoc(h ir.HitPolicy) string {
+	switch h {
+	case ir.HitUnique:
+		return "unique"
+	case ir.HitAny:
+		return "any"
+	case ir.HitFirst:
+		return "first"
+	case ir.HitPriority:
+		return "priority"
+	case ir.HitCollect:
+		return "collect"
+	case ir.HitRuleOrder:
+		return "rule order"
+	}
+	return ""
+}
+
+// cmdGraph renders the decision requirements graph (DRG) with verification findings overlaid.
+func cmdGraph(args []string) error {
+	fs := flag.NewFlagSet("graph", flag.ContinueOnError)
+	rulesPath := fs.String("rules", "", "path to the .rules|.ir.bin file")
+	format := fs.String("format", "mermaid", "output format: mermaid|dot|json")
+	out := fs.String("o", "", "output file (stdout if absent)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *rulesPath == "" {
+		return fmt.Errorf("--rules is required")
+	}
+	cm, rep, err := loadModel(*rulesPath, false)
+	if err != nil {
+		return err
+	}
+	g := graph.Build(cm, rep)
+	var s string
+	switch *format {
+	case "mermaid":
+		s = g.Mermaid()
+	case "dot":
+		s = g.DOT()
+	case "json":
+		s = g.JSON()
+	default:
+		return fmt.Errorf("unknown --format %q (use mermaid|dot|json)", *format)
+	}
+	if *out == "" {
+		fmt.Println(s)
+		return nil
+	}
+	return os.WriteFile(*out, []byte(s), 0o644)
+}
+
 func cmdServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	rulesPath := fs.String("rules", "", "path to the .rules file to serve")
 	addr := fs.String("addr", ":8080", "HTTP listen address")
 	watch := fs.Bool("watch", false, "hot reload on file modification")
 	strict := fs.Bool("strict", false, "refuse (re)loading if verification has blockers")
+	ui := fs.Bool("ui", false, "serve the embedded AI authoring UI at /")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *rulesPath == "" {
-		return fmt.Errorf("--rules is required")
+	if *rulesPath == "" && !*ui {
+		return fmt.Errorf("--rules is required (or pass --ui to start without a model and author one in the browser)")
 	}
 
 	reg := registry.New()
@@ -421,29 +621,62 @@ func cmdServe(args []string) error {
 		}
 	}
 
-	// Initial load: must succeed.
-	e, rep, err := loader.Reload(*rulesPath, reg, *strict)
-	if err != nil {
-		return fmt.Errorf("initial load: %w", err)
-	}
-	logReload(e, rep, nil)
-
-	if *watch {
-		stop, err := loader.Watch(*rulesPath, reg, *strict, logReload)
+	// Initial load: must succeed when a file is given. With --ui and no --rules, start empty and
+	// let the user author a model in the browser (the model-backed endpoints stay 503 until then).
+	modelName := ""
+	if *rulesPath != "" {
+		e, rep, err := loader.Reload(*rulesPath, reg, *strict)
 		if err != nil {
-			return err
+			return fmt.Errorf("initial load: %w", err)
 		}
-		defer stop()
+		logReload(e, rep, nil)
+		modelName = e.Model.Name
+		if *watch {
+			stop, err := loader.Watch(*rulesPath, reg, *strict, logReload)
+			if err != nil {
+				return err
+			}
+			defer stop()
+		}
 	}
 
 	reloadFn := func() error {
+		if *rulesPath == "" {
+			return fmt.Errorf("no --rules configured: nothing to reload")
+		}
 		e, rep, err := loader.Reload(*rulesPath, reg, *strict)
 		logReload(e, rep, err)
 		return err
 	}
 	srv := service.New(reg, audit.New(os.Stderr), reloadFn)
-	fmt.Fprintf(os.Stderr, "feelc serve on %s (model %q)\n", *addr, e.Model.Name)
+	srv.EnableUI = *ui
+	if modelName != "" {
+		fmt.Fprintf(os.Stderr, "feelc serve on %s (model %q)\n", *addr, modelName)
+	} else {
+		fmt.Fprintf(os.Stderr, "feelc serve on %s (no model loaded — author one in the UI)\n", *addr)
+	}
+	if *ui {
+		fmt.Fprintf(os.Stderr, "  UI:  %s\n", uiURL(*addr))
+		fmt.Fprintf(os.Stderr, "  LLM: %s\n", llmStatusLine())
+	}
 	return http.ListenAndServe(*addr, srv.Handler())
+}
+
+// uiURL renders a clickable URL for a net/http listen address (":8080" -> localhost).
+func uiURL(addr string) string {
+	if strings.HasPrefix(addr, ":") {
+		return "http://localhost" + addr + "/"
+	}
+	return "http://" + addr + "/"
+}
+
+// llmStatusLine reports whether a default LLM key is available in the environment (otherwise the
+// user configures their LLM in the UI). The key itself is never printed.
+func llmStatusLine() string {
+	if os.Getenv("ANTHROPIC_API_KEY") != "" || os.Getenv("FEELC_LLM_API_KEY") != "" {
+		return "default API key found in env (override per-request in ⚙ settings)"
+	}
+	return "no env key — configure your LLM in the UI (⚙ LLM settings)"
 }
 
 func cmdVerify(args []string) error {
@@ -513,9 +746,18 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
+	unit := cm.Units[*decision]
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
-		return enc.Encode(map[string]any{"decision": *decision, "output": display(out)})
+		out := map[string]any{"decision": *decision, "output": display(out)}
+		if unit != "" {
+			out["unit"] = unit
+		}
+		return enc.Encode(out)
+	}
+	if unit != "" {
+		fmt.Printf("%v %s\n", display(out), unit)
+		return nil
 	}
 	fmt.Println(display(out))
 	return nil

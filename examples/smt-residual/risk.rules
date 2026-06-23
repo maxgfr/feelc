@@ -1,0 +1,28 @@
+model "smt_residual" {
+  rounding: half_even
+}
+
+input amount    : number in [0..1000]
+input threshold : number in [0..1000]
+
+# FIRST table whose cells are NON-GEOMETRIC (Op=Prog): each compares the column `?` against another
+# input (`threshold`), and one applies `floor`. The hyper-rectangle algebra cannot decide such
+# cross-column cells. `feelc verify --tags smt` (ADR 0007) re-encodes them (floor -> SMT `to_int`)
+# and PROVES completeness with Z3 (here: no gap). Without -tags smt, verification degrades honestly
+# to `not-verifiable` (never a false proof).
+decision band : string {
+  needs: amount
+  hit: first
+  floor(?) >= threshold => "exceeds"
+  ? >= threshold        => "at_threshold"
+  -                     => "under"
+}
+
+# UNIQUE table that tiles the domain by a cross-column split (`? < threshold` vs `? >= threshold`).
+# The SMT backend proves it is BOTH complete (no gap) AND conflict-free (no overlap).
+decision side : string {
+  needs: amount
+  hit: unique
+  ? < threshold  => "below"
+  ? >= threshold => "at_or_above"
+}

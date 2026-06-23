@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"errors"
 	"fmt"
 
 	apd "github.com/cockroachdb/apd/v3"
@@ -8,6 +9,11 @@ import (
 	"github.com/maxgfr/feelc/internal/decimal"
 	"github.com/maxgfr/feelc/internal/ir"
 )
+
+// errNAComparison: reaching a non-applicable value in an expression comparison is a loud error
+// (ADR 0013 honest-degradation). NumCompare/ValueEq keep treating NA like null for the GEOMETRIC
+// matching path (match.go); this guard applies only at the expression level (here).
+var errNAComparison = errors.New("non-applicable value reached in a comparison")
 
 // evalExpr executes a bytecode program. input != nil for an Op=Prog cell
 // (value of the `?` column). OpLoadVar goes through the demand-driven resolver.
@@ -45,12 +51,21 @@ func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (ir.Value, erro
 			push(r)
 		case ir.OpEqOp:
 			b, a := pop(), pop()
+			if a.Tag == ir.TagNA || b.Tag == ir.TagNA {
+				return ir.Value{}, errNAComparison
+			}
 			push(ir.Bool(ir.ValueEq(a, b)))
 		case ir.OpNeOp:
 			b, a := pop(), pop()
+			if a.Tag == ir.TagNA || b.Tag == ir.TagNA {
+				return ir.Value{}, errNAComparison
+			}
 			push(ir.Bool(!ir.ValueEq(a, b)))
 		case ir.OpLtOp, ir.OpLeOp, ir.OpGtOp, ir.OpGeOp:
 			b, a := pop(), pop()
+			if a.Tag == ir.TagNA || b.Tag == ir.TagNA {
+				return ir.Value{}, errNAComparison
+			}
 			ok, err := ir.NumCompare(cmpOp(in.Op), a, b)
 			if err != nil {
 				return ir.Value{}, err
@@ -102,6 +117,28 @@ func arith(op ir.Opcode, a, b ir.Value) (ir.Value, error) {
 	if a.Tag == ir.TagNull || b.Tag == ir.TagNull {
 		return ir.Null(), nil // null propagation (three-valued, cf. ADR 0003)
 	}
+	// Non-applicable propagation (ADR 0013): in a SUM (+/-) a non-applicable term acts as 0 (so it
+	// drops out); in a PRODUCT/quotient it poisons the result to non-applicable. This mirrors
+	// Publicodes' `somme` vs `produit` semantics.
+	if a.Tag == ir.TagNA || b.Tag == ir.TagNA {
+		switch op {
+		case ir.OpAdd, ir.OpSub:
+			if a.Tag == ir.TagNA && b.Tag == ir.TagNA {
+				return ir.NA(), nil
+			}
+			zero := ir.Num(decimal.FromInt(0))
+			if a.Tag == ir.TagNA {
+				a = zero
+			} else {
+				b = zero
+			}
+		default: // OpMul, OpDivOp
+			return ir.NA(), nil
+		}
+	}
+	if a.Tag == ir.TagDate || a.Tag == ir.TagDuration || b.Tag == ir.TagDate || b.Tag == ir.TagDuration {
+		return temporalArith(op, a, b)
+	}
 	if a.Tag != ir.TagNumber || b.Tag != ir.TagNumber {
 		return ir.Value{}, fmt.Errorf("arithmetic operation on a non-numeric value")
 	}
@@ -126,11 +163,91 @@ func arith(op ir.Opcode, a, b ir.Value) (ir.Value, error) {
 	return ir.Num(r), nil
 }
 
+// temporalArith implements day-based date/duration arithmetic (ADR 0014): date-date=duration,
+// date±duration=date, duration±duration=duration. Everything else (date+date, date*x, scaling,
+// floor/ceiling on a date, …) is a loud error — never a silent nonsense result.
+var errTemporalOverflow = errors.New("date/duration arithmetic overflow")
+
+func temporalArith(op ir.Opcode, a, b ir.Value) (ir.Value, error) {
+	da, err := dayCount(a)
+	if err != nil {
+		return ir.Value{}, err
+	}
+	db, err := dayCount(b)
+	if err != nil {
+		return ir.Value{}, err
+	}
+	ta, tb := a.Tag, b.Tag
+	mk := func(days int64, ok bool, dur bool) (ir.Value, error) {
+		if !ok {
+			return ir.Value{}, errTemporalOverflow
+		}
+		if dur {
+			return ir.Duration(days), nil
+		}
+		return ir.Date(days), nil
+	}
+	switch op {
+	case ir.OpAdd:
+		s, ok := addCheck(da, db)
+		switch {
+		case ta == ir.TagDate && tb == ir.TagDuration, ta == ir.TagDuration && tb == ir.TagDate:
+			return mk(s, ok, false)
+		case ta == ir.TagDuration && tb == ir.TagDuration:
+			return mk(s, ok, true)
+		}
+	case ir.OpSub:
+		d, ok := subCheck(da, db)
+		switch {
+		case ta == ir.TagDate && tb == ir.TagDate:
+			return mk(d, ok, true)
+		case ta == ir.TagDate && tb == ir.TagDuration:
+			return mk(d, ok, false)
+		case ta == ir.TagDuration && tb == ir.TagDuration:
+			return mk(d, ok, true)
+		}
+	}
+	return ir.Value{}, fmt.Errorf("unsupported date/duration arithmetic")
+}
+
+// dayCount extracts the exact whole-day count of a date/duration Value, erroring (never silently 0)
+// on a nil, non-integer, or out-of-int64-range magnitude.
+func dayCount(v ir.Value) (int64, error) {
+	if v.Num == nil {
+		return 0, fmt.Errorf("date/duration value missing its day count")
+	}
+	n, err := v.Num.Int64()
+	if err != nil {
+		return 0, fmt.Errorf("date/duration is not a whole, in-range number of days")
+	}
+	return n, nil
+}
+
+// addCheck/subCheck are overflow-checked int64 add/subtract (ok=false on wrap).
+func addCheck(a, b int64) (int64, bool) {
+	s := a + b
+	if (b > 0 && s < a) || (b < 0 && s > a) {
+		return 0, false
+	}
+	return s, true
+}
+
+func subCheck(a, b int64) (int64, bool) {
+	d := a - b
+	if (b < 0 && d < a) || (b > 0 && d > a) {
+		return 0, false
+	}
+	return d, true
+}
+
 // unaryNum applies a single-arg numeric built-in (floor/ceiling/round). Frozen
 // decimal context (HALF_EVEN) -> determinism preserved (ADR 0002). null propagated (three-valued).
 func unaryNum(op ir.Opcode, a ir.Value) (ir.Value, error) {
 	if a.Tag == ir.TagNull {
 		return ir.Null(), nil
+	}
+	if a.Tag == ir.TagNA {
+		return ir.NA(), nil // non-applicable propagates through floor/ceiling/round
 	}
 	if a.Tag != ir.TagNumber {
 		return ir.Value{}, fmt.Errorf("numeric built-in (floor/ceiling/round) on a non-numeric value")

@@ -91,6 +91,18 @@ const (
 	KindLiteralExpr              // Slice 2
 )
 
+// Meta holds optional documentation/traceability annotations (@title/@doc/@question/@source).
+// It is descriptive only: NOT part of the canonical encoding or hash (two models that differ only
+// by metadata are the same computational model), so it is dropped on .ir.bin serialization.
+type Meta struct {
+	Title    string `json:"title,omitempty"`
+	Doc      string `json:"doc,omitempty"`
+	Question string `json:"question,omitempty"`
+	Source   string `json:"source,omitempty"`
+}
+
+func (m Meta) Empty() bool { return m == Meta{} }
+
 // Decision: a node of the decision graph (DRG).
 type Decision struct {
 	Name    string
@@ -99,6 +111,7 @@ type Decision struct {
 	Expr    *ExprProgram   // if KindLiteralExpr
 	ExprSrc string         // if KindLiteralExpr: source text of the expression (justification)
 	Deps    []string       // dependencies (information requirements)
+	Meta    Meta           // documentation/traceability (in-memory only)
 	Line    int            // 1-based source line of the decision
 }
 
@@ -109,7 +122,9 @@ const (
 	TypeNumber Type = iota
 	TypeString
 	TypeBool
-	TypeContext // Slice 2
+	TypeContext  // Slice 2
+	TypeDate     // calendar date (ADR 0014)
+	TypeDuration // whole-day duration (ADR 0014)
 )
 
 // DomainKind: nature of an input's domain (for completeness verification).
@@ -135,6 +150,8 @@ type CompiledModel struct {
 	Name      string
 	Inputs    map[string]Type
 	Domains   map[string]Domain // domain declared per input (empty = DomNone)
+	InputMeta map[string]Meta   // documentation per input (in-memory only; never serialized)
+	Units     map[string]string // canonical physical unit per input/decision (in-memory; "" = dimensionless)
 	Decisions []Decision
 
 	byName map[string]int

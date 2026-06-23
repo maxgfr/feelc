@@ -160,7 +160,11 @@ func outName(o dmnOutput, i int) string {
 }
 
 func mapType(t string, warns *[]string) string {
-	switch strings.ToLower(strings.TrimSpace(t)) {
+	key := strings.ToLower(strings.TrimSpace(t))
+	if i := strings.LastIndexByte(key, ':'); i >= 0 {
+		key = key[i+1:] // strip a namespace prefix (xsd:date, feel:date, …)
+	}
+	switch key {
 	case "number", "integer", "int", "long", "double", "decimal":
 		return "number"
 	case "string", "":
@@ -170,6 +174,10 @@ func mapType(t string, warns *[]string) string {
 		return "string"
 	case "boolean", "bool":
 		return "boolean"
+	case "date":
+		return "date"
+	case "daystimeduration", "daytimeduration", "duration":
+		return "duration"
 	default:
 		*warns = append(*warns, fmt.Sprintf("unknown DMN typeRef %q -> treated as string", t))
 		return "string"

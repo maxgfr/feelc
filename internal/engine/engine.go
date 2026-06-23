@@ -36,6 +36,9 @@ func Eval(cm *ir.CompiledModel, decision string, rawInputs map[string]any) (any,
 		}
 		inputs[k] = val
 	}
+	if err := ir.CoerceInputs(cm, inputs); err != nil {
+		return nil, err
+	}
 	out, err := vm.Eval(cm, decision, inputs)
 	if err != nil {
 		return nil, err

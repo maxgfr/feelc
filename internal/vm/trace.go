@@ -13,7 +13,9 @@ import (
 // the evaluation, it does not duplicate it (no possible divergence with engine.Eval).
 type DecisionTrace struct {
 	Decision     string      `json:"decision"`
-	Kind         string      `json:"kind"` // "table" | "literal-expr"
+	Title        string      `json:"title,omitempty"`  // @title annotation, if any
+	Source       string      `json:"source,omitempty"` // @source traceability (e.g. law article), if any
+	Kind         string      `json:"kind"`             // "table" | "literal-expr"
 	HitPolicy    string      `json:"hitPolicy,omitempty"`
 	Matched      bool        `json:"matched"`
 	Fallback     bool        `json:"fallback,omitempty"`     // output via `default` (or null)
@@ -47,7 +49,7 @@ func Trace(cm *ir.CompiledModel, decisionName string, inputs map[string]ir.Value
 		return nil, fmt.Errorf("unknown decision: %q", decisionName)
 	}
 	e := &evaluator{cm: cm, inputs: inputs, memo: map[string]ir.Value{}, state: map[string]int{}}
-	tr := &DecisionTrace{Decision: decisionName}
+	tr := &DecisionTrace{Decision: decisionName, Title: dec.Meta.Title, Source: dec.Meta.Source}
 	switch dec.Kind {
 	case ir.KindLiteralExpr:
 		out, err := e.evalExpr(dec.Expr, nil)
