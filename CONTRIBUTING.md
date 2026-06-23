@@ -18,7 +18,9 @@ go test -race ./...                 # everything must be green
 go test -tags smt ./internal/...    # optional SMT backend (see ADR 0007; requires z3 for a proof)
 ```
 
-The `spike/` submodule (Slice 0, throwaway) has its own `go.mod`; it is not part of `./...`.
+The SMT job needs `z3` on `PATH` (`brew install z3` / `apt-get install z3`); it is **not** gated in CI,
+so verify it locally when touching `internal/smt` or `internal/verify`. The `spike/` submodule (throwaway)
+has its own `go.mod`; it is not part of `./...`.
 
 ## Discipline
 
@@ -40,10 +42,28 @@ The `spike/` submodule (Slice 0, throwaway) has its own `go.mod`; it is not part
 
 ## ADR
 
-Architecture decisions live in `docs/adr/` (numbering: 0001 FEEL frontend, 0002
-decimal, 0003 null/error, 0004 deferrals, 0005 structured errors, 0006 IR serialization, 0007
-SMT backend). Any structuring decision adds/updates an ADR (the project's ethics
-require it: a deferral must be documented, not hidden).
+Architecture decisions live in [`docs/adr/`](docs/adr/) — see
+[`docs/adr/README.md`](docs/adr/README.md) for the template, the index, and the full lifecycle. In short:
+any **structuring** decision (a new core capability, a dependency, a language/format/policy choice, or a
+**deferral**) gets an ADR. Copy [`0000-template.md`](docs/adr/0000-template.md), number it highest+1
+(numbers are never reused or renumbered). ADRs are **append-only**: an accepted `## Decision` is never
+rewritten — a non-reversing follow-up is a dated `## Update`, a reversal is a new *superseding* ADR (flip
+the old one's Status to `Superseded by ADR NNNN`). A deferral must be documented, not hidden.
+
+## Docs & site
+
+The published site (<https://maxgfr.github.io/feelc/>) is generated from this repo by
+[`site/build.mjs`](site/build.mjs) (deployed by `.github/workflows/pages.yml`). `docs/*.md` is the single
+source of the reference pages (registered in the `DOCS` array) and `docs/adr/*.md` is auto-discovered and
+published behind the **Decision records** index. Build/preview locally:
+
+```sh
+npm i --no-save marked && node site/build.mjs    # renders site/docs/ + site/examples.json
+# WASM playground (optional): GOOS=js GOARCH=wasm go build -o site/static/feelc.wasm ./cmd/feelc-wasm
+```
+
+Editing a `docs/*.md` page or adding a `docs/adr/NNNN-*.md` is all that is needed — the nav updates
+automatically. See [`docs/architecture.md`](docs/architecture.md) for the package map and repo layout.
 
 ## The authoring skill (`skill/`)
 

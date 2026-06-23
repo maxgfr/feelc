@@ -5,7 +5,7 @@
 
 ## Context
 
-Catala's defining domain is calendar logic; Publicodes has periods. feelc deferred temporal types
+Calendar logic (dates and durations) is a defining need for real rules. feelc deferred temporal types
 (ADR 0004). Real rules (leave, tenure, deadlines) need dates and durations with sound arithmetic.
 Calendar arithmetic mixing years/months (variable length) with days is notoriously unsound, so the
 challenge is to add dates **without** compromising the exact, deterministic core.

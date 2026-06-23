@@ -5,7 +5,7 @@
 
 ## Context
 
-Publicodes and Catala track physical units / money and reject dimensionally-inconsistent arithmetic
+Rules over physical units / money should reject dimensionally-inconsistent arithmetic
 (the classic "€ + €/meal" mistake). feelc computed with bare exact decimals, so a unit error slipped
 through silently. We want units **without** touching the deterministic VM.
 

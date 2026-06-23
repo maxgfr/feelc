@@ -6,8 +6,8 @@
 ## Context
 
 feelc already computes a topologically-sorted decision graph (`Decision.Deps`, `internal/ir/ir.go`)
-and a verification report, but had no way to *see* it. Publicodes' dependency graph and the general
-need to understand "what feeds what" (and where the gaps/conflicts are) call for a first-class graph
+and a verification report, but had no way to *see* it. The need to understand "what feeds what"
+(and where the gaps/conflicts are) calls for a first-class graph
 view — a headline feature of an AI-driven rule engine.
 
 ## Decision

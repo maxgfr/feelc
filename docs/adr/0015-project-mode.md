@@ -1,6 +1,6 @@
 # ADR 0015 — Project mode (multi-module workspace, namespaced merge, server-side persistence)
 
-- **Status**: accepted (2026-06-23)
+- **Status**: accepted (2026-06-23); amended 2026-06-23 (see Update)
 - **Deciders**: maxgfr
 
 ## Context
@@ -82,3 +82,12 @@ single-file UI and the WASM playground are unchanged.
 - Deferred: AI authoring scoped to a project with lexical retrieval (next phase); per-module incremental
   verification cache and decision-table indexing (optimisation phase). `effectiveDate` is parsed but not
   yet used (as-of evaluation, roadmap slice 7).
+
+## Update — 2026-06-23
+
+The per-module incremental verification deferred above is now implemented on the candidate path:
+`POST /v1/project/verify` reuses the served project's already-compiled+verified modules for any module
+whose source is unchanged (`project.CompileReusing`, keyed by source hash), so verifying an N-module
+candidate after a one-module edit re-verifies only that module. A read-only `GET /v1/stats` surfaces the
+candidate-compile cache hit rate for observability. Decision-table indexing and parallel DRG evaluation
+remain deferred (unchanged). This addendum records the change; the original decision above is unaltered.

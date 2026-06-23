@@ -1,6 +1,6 @@
 # ADR 0003 — Semantics of null and errors (trivalence)
 
-- **Status**: accepted (Slice 2, 2026-06-22)
+- **Status**: accepted (2026-06-22)
 - **Deciders**: maxgfr
 
 ## Context

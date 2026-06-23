@@ -5,8 +5,7 @@
 
 ## Context
 
-Tax/benefit rules constantly need **marginal-rate brackets** (Publicodes' `bareme`, common in fiscal
-and social law). Expressing them as a decision table or hand-written `if/then/else` is verbose and
+Tax/benefit rules constantly need **marginal-rate brackets** (common in fiscal and social law). Expressing them as a decision table or hand-written `if/then/else` is verbose and
 error-prone. We want a concise, first-class `bracket` mechanism — without growing the deterministic
 VM.
 
@@ -29,7 +28,7 @@ built as a FEEL AST of `if/then/else` + `+ - *` and run through the existing `lo
 **no new VM opcode** and the result is exact and deterministic. The decision becomes a literal-expression
 in the IR. Conditions reuse the normal cell normalization (`[lo..hi)` and `>= lo`); a `default` row is
 rejected. Rates accept **percent literals** (`30%` ≡ the exact decimal `0.30`), a general whole-cell
-feature added to the parser (Publicodes-style `%`).
+feature added to the parser (whole-cell `%`).
 
 ## Consequences
 

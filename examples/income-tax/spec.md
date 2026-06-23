@@ -1,7 +1,7 @@
 # Example — progressive brackets (`bracket:`)
 
 Marginal-rate income tax: each tranche taxes only the portion of income inside it. The `bracket:`
-mechanism (Publicodes' `bareme`) is **lowered to ordinary arithmetic bytecode** at compile time —
+mechanism is **lowered to ordinary arithmetic bytecode** at compile time —
 there is no special runtime op — so it stays exact and deterministic.
 
 - Rates may be **percent literals** (`11%` == the exact decimal `0.11`).

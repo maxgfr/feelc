@@ -31,10 +31,24 @@ verification), and free expression (reference `?`/other columns → *Op=Prog*, n
 
 - **multi-argument** built-ins: `round(x, n)`, `substring(s, i, n)`, etc. ([ADR 0004 §3](adr/0004-deferrals.md));
 - `for` / `some` / `every`, lists/filters, higher-order functions, `function(...)`;
-- **temporal** types (`date`, `time`, `dateTime`, `duration`);
+- **out-of-subset temporal** forms: `time`, `dateTime`, year-month durations (`date` and day-based
+  `duration` ARE supported — see below);
 - `**` (power), operators not listed;
 - `?` inside a **literal-expression** (reserved for table cells);
 - **named** arguments (kwargs) in a BKM invocation.
+
+## Temporal (date & duration)
+
+Supported since [ADR 0014](adr/0014-temporal-types.md), on a **whole-day** model (a date is an integer
+count of days; a duration is an integer count of days):
+
+- **literals / constructors**: `date("YYYY-MM-DD")`, `duration("P30D")` (ISO-8601, day granularity);
+- **arithmetic**: `date − date = duration`, `date ± duration = date`, `duration ± duration = duration`;
+- **comparisons**: `= != < <= > >=` between two dates or two durations;
+- inputs typed `: date` / `: duration` (see `examples/employment`).
+
+Everything else temporal fails loudly: times of day, date-times, and year-month durations are out of
+scope (above), and mixing a date with a bare number is a type error.
 
 ## Determinism
 

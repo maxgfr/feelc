@@ -5,9 +5,9 @@
 
 ## Context
 
-Publicodes attaches `titre`/`description`/`question` metadata to rules (driving its documentation and
-interactive simulators), and Catala's defining trait is *literate programming* — tying each rule to
-the legal article it implements. feelc had neither: rules were computation-only. This blocks
+Rule engines often attach `title`/`description`/`question` metadata to rules (driving documentation and
+interactive simulators) and tie each rule to the legal article it implements (a literate-programming
+style). feelc had neither: rules were computation-only. This blocks
 auto-generated docs, an interactive question-flow, and audit traceability ("which law does this
 encode?").
 
@@ -39,4 +39,4 @@ adding annotation lines shifts line-sensitive hashes of that source, as expected
 - New optional syntax; fully backward-compatible (existing models parse unchanged).
 - Enables Phase 3 (question-flow uses `@question`), Phase 5 (docs embed `@source`/`@doc`), and richer
   `explain`/graph — the AI-driven, transparent rule-engine story.
-- Catala-style law traceability without adopting full literate programming.
+- Law/source traceability without adopting full literate programming.

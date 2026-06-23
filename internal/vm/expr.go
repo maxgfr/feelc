@@ -118,8 +118,8 @@ func arith(op ir.Opcode, a, b ir.Value) (ir.Value, error) {
 		return ir.Null(), nil // null propagation (three-valued, cf. ADR 0003)
 	}
 	// Non-applicable propagation (ADR 0013): in a SUM (+/-) a non-applicable term acts as 0 (so it
-	// drops out); in a PRODUCT/quotient it poisons the result to non-applicable. This mirrors
-	// Publicodes' `somme` vs `produit` semantics.
+	// drops out); in a PRODUCT/quotient it poisons the result to non-applicable (sum-vs-product
+	// semantics).
 	if a.Tag == ir.TagNA || b.Tag == ir.TagNA {
 		switch op {
 		case ir.OpAdd, ir.OpSub:

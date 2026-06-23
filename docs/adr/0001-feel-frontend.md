@@ -1,6 +1,6 @@
 # ADR 0001 — FEEL front-end: parsing dependency vs. in-house parser
 
-- **Status**: accepted (Slice 0, 2026-06-22)
+- **Status**: accepted (2026-06-22)
 - **Deciders**: maxgfr
 - **Technical context**: feelc needs to parse two things — the **table cells** (unary
   tests: `< 580`, `[580..680)`, `"a","b"`, `not(...)`, `-`) and the **expressions** of the

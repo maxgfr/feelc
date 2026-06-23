@@ -2,7 +2,7 @@
 
 A tiny model showing the documentation/traceability annotations (`@title`, `@doc`, `@question`,
 `@source`). They are **descriptive only** — they never change evaluation or the model hash — and
-answer Catala's "tie a rule to the legal article it encodes" while driving `explain`, the graph
+tie each rule to the legal article it encodes while driving `explain`, the graph
 labels, the simulator form (`@question`) and generated docs.
 
 ## Decision

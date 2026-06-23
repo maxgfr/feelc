@@ -1,10 +1,10 @@
 # feelc
 
-> An **AI-driven rule engine**: a business-rules language (DMN/FEEL) **compiled to Go**, in the
-> spirit of IBM ODM/ILOG — with a distinctive angle: **AI writes and explains the rules, but at
-> execution time everything is 100% deterministic, reproducible and auditable** (no LLM in the core).
-> Author rules by chatting with your own LLM, visualize the decision graph, and let the engine prove
-> completeness and consistency.
+> **An AI-native business-rules engine** (DMN/FEEL) **compiled to Go**: an LLM writes and explains the
+> rules, and the engine *proves* and runs them — **100% deterministic, reproducible and auditable**
+> (no LLM in the core). In the spirit of IBM ODM/ILOG, reimagined for the age of LLMs: author by
+> chatting with your own model, visualize the decision graph, prove completeness & consistency, and ship
+> a single CGO-free binary — or try it in your browser via WebAssembly.
 
 **▶ [Try the playground](https://maxgfr.github.io/feelc/playground/)** — the real engine, compiled to
 WebAssembly, runs entirely in your browser (no backend). Or [read the docs](https://maxgfr.github.io/feelc/).
@@ -21,6 +21,25 @@ the two:
   the **absence of conflicts**, and detects **dead rules / redundancies** — with concrete counterexamples.
 - **Hot-reload.** Rules are *data*: you update them on the fly, without recompiling the binary.
 - **Auditable.** Each decision is replayable (model hash + explanation trace citing the source).
+- **Scales to projects.** A workspace of many `.rules` modules links into one deterministic model;
+  editing a single module re-compiles and re-verifies **only that module** (incremental, O(1) in
+  project size), so AI authoring stays fast across hundreds of modules.
+
+## What makes it AI-native
+
+The LLM lives **only** at the authoring boundary; the engine (compile, verify, VM, explain) is pure,
+deterministic Go that never calls a model. That separation is the point — it makes AI authoring *safe*:
+
+- **Bring your own LLM.** Author by chatting with your own provider/model/key (Anthropic or any
+  OpenAI-compatible endpoint); the key stays in your browser. No key ⇒ AI endpoints return `501` and
+  the engine still works fully.
+- **Verify → repair → converge.** The **ingest** endpoint (`POST /v1/ingest`) drafts a model, runs
+  `verify` / `check`, feeds the deterministic blockers (with counterexample witnesses) back to the LLM,
+  and repeats until clean — the **engine**, never the model, decides when it's done.
+- **Traceability from the compiled model.** `@source` mappings and explanation traces are read from the
+  compiled IR, never from LLM prose, so every decision cites its real origin.
+- **Project-aware editing at scale.** Edit one module with full cross-module context via deterministic
+  lexical retrieval (no embeddings) — see [Project mode](#project-mode).
 
 ## Commands
 
@@ -39,7 +58,12 @@ feelc inputs  --rules m.rules --decision <name>                         # inputs
 feelc docs    --rules m.rules [-o DOC.md]                               # Markdown reference + Mermaid graph
 feelc serve   --rules m.rules [--addr :8080] [--watch] [--strict] [--ui] # HTTP service + hot-reload (+ AI UI)
 feelc serve   --project <dir>  [--addr :8080] [--watch] [--strict] [--ui] [--allow-edit] # multi-module PROJECT
+feelc version                                                          # print the build version
 ```
+
+The CLI flags, exit codes and the full HTTP route table are in the
+[CLI reference](https://maxgfr.github.io/feelc/docs/cli.html) and
+[HTTP API reference](https://maxgfr.github.io/feelc/docs/http-api.html).
 
 ## Project mode
 
@@ -54,7 +78,7 @@ per-module editor with server-side **Save** + create/delete, persisted to the mo
 golden rule: an invalid edit is rejected and the live project is kept. See the
 **[project-mode guide](docs/project-mode.md)** (also on
 the [docs site](https://maxgfr.github.io/feelc/docs/project-mode.html)), [`sample-project/`](sample-project/),
-and ADR 0015. Ships as a Docker service:
+and [ADR 0015](docs/adr/0015-project-mode.md). Ships as a Docker service:
 
 ```sh
 docker build -t feelc .
@@ -63,14 +87,15 @@ docker run --rm -p 8080:8080 -v "$PWD/sample-project:/work" feelc   # open http:
 
 ## Status
 
-Core **operational**: language → compiler → IR → deterministic VM (exact decimal), 7 hit policies,
+Core **operational**: language → compiler → IR → deterministic VM (exact decimal), 6 hit policies,
 **formal verification** (completeness/conflicts/dead rules with counterexamples), **HTTP service +
-hot-reload**, **semantic gate** (`check`), **DMN XML import**. 4 verified reference examples.
-Optional **SMT (Z3) backend** (`-tags smt`, ADR 0007) discharges non-geometric `Op=Prog`
+hot-reload**, **semantic gate** (`check`), **DMN XML import**. Verified reference models live under
+[`examples/`](examples/). Optional **SMT (Z3) backend** (`-tags smt`,
+[ADR 0007](docs/adr/0007-smt-backend.md)) discharges non-geometric `Op=Prog`
 residuals — completeness *and* conflict proofs over `if/then/else`, `floor/ceiling/round`,
 cross-column cells (honest `not-verifiable` when `z3` is absent).
 
-Modelling reach (inspired by Publicodes & Catala): **decision-graph visualization** (`feelc graph`
+Modelling reach: **decision-graph visualization** (`feelc graph`
 + the UI, ADR 0009), **rule metadata & law/source traceability** (`@title/@doc/@question/@source`,
 ADR 0010), an **interactive question-flow / simulator** (ADR-backed `feelc inputs` + the UI form),
 **progressive brackets** (`bracket:`, ADR 0011), **physical units & money** with compile-time
@@ -133,6 +158,12 @@ decision eligibility : Eligibility {
      default      |         |       => false    | "not covered"
 }
 ```
+
+## Contributing
+
+Build & test instructions, the [architecture map](docs/architecture.md), and the append-only
+**decision-record** lifecycle are in [CONTRIBUTING](./CONTRIBUTING.md). Browse the
+[decision records](https://maxgfr.github.io/feelc/docs/adr/) to see *why* feelc is built the way it is.
 
 ## License
 

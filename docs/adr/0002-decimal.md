@@ -1,6 +1,6 @@
 # ADR 0002 — Decimal arithmetic: cockroachdb/apd vs in-house int128
 
-- **Status**: accepted (Slice 0, 2026-06-22)
+- **Status**: accepted (2026-06-22)
 - **Deciders**: maxgfr
 
 ## Context

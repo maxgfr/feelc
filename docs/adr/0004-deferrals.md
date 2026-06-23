@@ -1,6 +1,6 @@
 # ADR 0004 — Acknowledged deferrals: parameterized BKM and SMT extension
 
-- **Status**: accepted (2026-06-22)
+- **Status**: accepted (2026-06-22); temporal deferral since lifted by [ADR 0014](0014-temporal-types.md)
 - **Deciders**: maxgfr
 
 In line with the project's ethics ("never silently conform/pretend"), we explicitly document

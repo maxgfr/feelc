@@ -9,7 +9,7 @@ authoring skill reads for its red→green loop (fixing the source from
 
 `Error()` remains **backward-compatible**:
 
-- without a known file: `ligne <N>: <message>`
+- without a known file: `line <N>: <message>`
 - with a file        : `<file>:<line>[:<col>]: <message>`
 - global error (without position): `<message>`
 
@@ -26,7 +26,7 @@ Emitted on **stdout** by `feelc run|verify|check --json` when compilation fails:
   "line": 12,
   "col": 7,
   "code": "DSL002",
-  "message": "cellule FEEL invalide \"1 +\": ...",
+  "message": "invalid FEEL cell \"1 +\": ...",
   "suggestion": "..."
 }
 ```
@@ -37,7 +37,7 @@ Emitted on **stdout** by `feelc run|verify|check --json` when compilation fails:
 | `line`       | int    | always (0 if position unknown)            |
 | `col`        | int    | omitted if 0 (unknown); 1-based           |
 | `code`       | string | omitted if empty; **stable** (see below)  |
-| `message`    | string | always; FR text identical to the text     |
+| `message`    | string | always; identical to the text             |
 | `suggestion` | string | omitted if empty                          |
 
 `col` is computed **at the DSL split** (offset of the cell segment within the source line).

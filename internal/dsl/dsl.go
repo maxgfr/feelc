@@ -537,7 +537,7 @@ func parseCell(src string, no, col int, isOutput bool) (model.Cell, error) {
 	if s == "" {
 		return model.Cell{}, diag.New(diag.CodeEmptyCell, no, "empty cell").WithCol(col)
 	}
-	// Percent literal: `30%` is the exact decimal 0.30 (Publicodes-style; useful for bracket rates).
+	// Percent literal: `30%` is the exact decimal 0.30 (useful for bracket rates).
 	if frac, ok := percentLiteral(s); ok {
 		cell.Node = &feel.NumberNode{Value: frac}
 		return cell, nil

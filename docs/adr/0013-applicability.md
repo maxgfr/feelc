@@ -5,8 +5,8 @@
 
 ## Context
 
-Publicodes models eligibility/entitlement with `applicable si` / `non applicable`: a rule that does
-not apply yields a distinct *non-applicable* state that propagates specially (in a sum, non-applicable
+Eligibility/entitlement rules need a distinct *non-applicable* state: a rule that does
+not apply yields a value that propagates specially (in a sum, non-applicable
 terms count as 0; in a product they poison the result). feelc had only null (ADR 0003), which
 *propagates* through arithmetic (poisoning sums) — wrong for "this benefit simply doesn't apply".
 

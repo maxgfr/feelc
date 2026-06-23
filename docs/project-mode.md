@@ -122,9 +122,10 @@ deterministic engine compiles, verifies and (with `--allow-edit`) persists it un
 | `PUT /v1/modules/{name}/source`     | edit + persist a module (golden rule)                         |
 | `POST /v1/modules`                  | create a module `{name, source}`                              |
 | `DELETE /v1/modules/{name}`         | delete a module (rejected if another module binds to it)      |
+| `GET /v1/stats`                     | compile-cache hit rate + project size (observability; global) |
 
 The single-model endpoints (`/v1/decisions/{key}`, `/v1/model`, `/v1/verify`, …) work unchanged on the
-merged model. The mutating `PUT/POST/DELETE /v1/modules` endpoints are enabled only with `--allow-edit`
+merged model; the [HTTP API reference](http-api.md) is the complete route table. The mutating `PUT/POST/DELETE /v1/modules` endpoints are enabled only with `--allow-edit`
 (otherwise they 404), have browser CORS restricted to loopback origins, and every request body is size
 capped — but there is no authentication, so the editing surface is a local / trusted-host tool.
 

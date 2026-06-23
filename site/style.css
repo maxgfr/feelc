@@ -135,3 +135,8 @@ footer.site { text-align: center; color: var(--muted); font-size: 13px; padding:
 .docs .content th, .docs .content td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; font-size: 14px; }
 .docs .content th { background: var(--panel); }
 .docs .content blockquote { border-left: 3px solid var(--accent); margin: 16px 0; padding: 4px 14px; color: var(--muted); }
+.docs .content ul, .docs .content ol { padding-left: 22px; margin: 12px 0; }
+.docs .content li { margin: 4px 0; }
+.docs .content ul.adr-list { list-style: none; padding-left: 0; }
+.docs .content ul.adr-list li { display: flex; align-items: baseline; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.docs .content ul.adr-list .status { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
