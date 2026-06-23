@@ -39,8 +39,9 @@ type ProjectReport struct {
 }
 
 // Health aggregates the per-module verification (computed at load time, stored on each Module) into a
-// project-wide report. It reuses verify.Report — no re-verification — which is also where a later slice
-// will cache results by Module.Hash for incremental verification.
+// project-wide report. It reuses each module's verify.Report — no re-verification. Incremental reloads and
+// candidate verification (CompileReusing) reuse unchanged modules' reports by source hash, so editing one
+// module re-verifies only that module, not all N.
 func (p *Project) Health() *ProjectReport {
 	rep := &ProjectReport{Totals: ModuleHealth{Module: "(total)"}}
 	anyWarning := false

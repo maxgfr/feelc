@@ -308,6 +308,8 @@ func (p *Project) toManifest() Manifest {
 }
 
 // writeFileAtomic writes data to path via a temp file + rename in the same directory (no torn writes).
+// It fsyncs the file before the rename and the directory after, so a committed edit survives a crash /
+// power loss (durability for the rule portfolio, not just atomicity).
 func writeFileAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	f, err := os.CreateTemp(dir, ".feelc-*.tmp")
@@ -320,6 +322,11 @@ func writeFileAtomic(path string, data []byte) error {
 		_ = os.Remove(tmp)
 		return err
 	}
+	if err := f.Sync(); err != nil { // flush the contents to stable storage before the rename
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
 	if err := f.Close(); err != nil {
 		_ = os.Remove(tmp)
 		return err
@@ -328,7 +335,24 @@ func writeFileAtomic(path string, data []byte) error {
 		_ = os.Remove(tmp)
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	syncDir(dir) // persist the new directory entry so the rename itself is durable
+	return nil
+}
+
+// syncDir best-effort fsyncs a directory so a rename within it survives a crash. Failures are ignored:
+// some platforms/filesystems do not support opening or syncing a directory, and the rename is already
+// atomic — this only upgrades atomicity to durability where the OS allows it.
+func syncDir(dir string) {
+	d, err := os.Open(dir)
+	if err != nil {
+		return
+	}
+	_ = d.Sync()
+	_ = d.Close()
 }
 
 // relevantPath reports whether a changed path is a module or manifest file (ignore temp/rename churn).

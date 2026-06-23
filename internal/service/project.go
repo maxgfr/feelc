@@ -92,7 +92,10 @@ func (s *Server) handleProjectVerify(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "`modules` required")
 		return
 	}
-	p, err := project.Compile(req.Name, req.Modules)
+	// Reuse the served project's already-compiled+verified modules for any candidate module whose source
+	// is unchanged, so verifying an N-module candidate after a one-module edit recompiles only that module
+	// (the AI/editor live-verify loop stays O(changed), not O(N)). nil base (single-file mode) ⇒ no reuse.
+	p, err := project.CompileReusing(req.Name, req.Modules, s.proj.Load())
 	if err != nil {
 		writeCompileErr(w, err) // structured 422 for a diag.Error, else 422 with the link error message
 		return

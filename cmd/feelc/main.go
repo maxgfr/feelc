@@ -1,10 +1,11 @@
-// Command feelc: the feelc rules engine binary.
-// Slice 1: `run` subcommand (evaluate a decision against inputs). The other
-// subcommands (compile/verify/check/explain/fmt/serve...) arrive in later slices.
+// Command feelc: the feelc rules engine binary. Subcommands: run, compile, verify, explain, check,
+// fmt, import, export, tck, graph, inputs, docs, serve, version (run `feelc help` for the synopsis,
+// or see docs/cli.md).
 package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -12,9 +13,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
@@ -205,6 +208,7 @@ Usage:
   feelc inputs --rules <file.rules|.ir.bin> --decision <name> [--json]
   feelc docs   --rules <file.rules|.ir.bin> [-o <DOC.md>]
   feelc serve  --rules <file.rules> [--addr :8080] [--watch] [--strict] [--ui]
+  feelc serve  --project <dir> [--addr :8080] [--watch] [--strict] [--ui] [--allow-edit]
   feelc version
 
 Environment:
@@ -453,6 +457,12 @@ func inputTypeName(t ir.Type) string {
 		return "string"
 	case ir.TypeBool:
 		return "boolean"
+	case ir.TypeDate:
+		return "date"
+	case ir.TypeDuration:
+		return "duration"
+	case ir.TypeContext:
+		return "context"
 	}
 	return "value"
 }
@@ -657,6 +667,8 @@ func cmdServe(args []string) error {
 	strict := fs.Bool("strict", false, "refuse (re)loading if verification has blockers")
 	ui := fs.Bool("ui", false, "serve the embedded AI authoring UI at /")
 	allowEdit := fs.Bool("allow-edit", false, "enable the project module-editing endpoints (PUT/POST/DELETE /v1/modules write to disk); trusted/loopback hosts only")
+	authToken := fs.String("auth-token", "", "require this bearer token on the API (or set FEELC_AUTH_TOKEN); empty = open (default)")
+	rateLimit := fs.Int("rate-limit", 0, "max requests/second per client IP (0 = unlimited)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -709,6 +721,13 @@ func cmdServe(args []string) error {
 	}
 	srv = service.New(reg, audit.New(os.Stderr), reloadFn)
 	srv.EnableUI = *ui
+	// Opt-in hardening for exposed deployments (default off = the local/loopback behavior).
+	tok := *authToken
+	if tok == "" {
+		tok = os.Getenv("FEELC_AUTH_TOKEN")
+	}
+	srv.SetAuthToken(tok)
+	srv.SetRateLimit(*rateLimit)
 
 	// Initial load: must succeed when a file/project is given. With --ui and neither, start empty and
 	// let the user author a model in the browser (the model-backed endpoints stay 503 until then).
@@ -774,6 +793,12 @@ func cmdServe(args []string) error {
 			fmt.Fprintln(os.Stderr, "  edit: off (read-only; pass --allow-edit to enable module writes)")
 		}
 	}
+	if srv.AuthEnabled() {
+		fmt.Fprintln(os.Stderr, "  auth: bearer token required on the API")
+	}
+	if srv.RateLimited() {
+		fmt.Fprintf(os.Stderr, "  rate-limit: %d req/s per client IP\n", *rateLimit)
+	}
 	// Explicit http.Server with timeouts: the bare ListenAndServe has no read/idle deadlines, leaving the
 	// (unauthenticated) endpoints open to slowloris and connection exhaustion.
 	server := &http.Server{
@@ -785,7 +810,26 @@ func cmdServe(args []string) error {
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}
-	return server.ListenAndServe()
+
+	// Graceful shutdown: on SIGINT/SIGTERM drain in-flight requests (and stop the watchers via the
+	// deferred stop()) instead of dropping connections — important for a long-lived rule service.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	errCh := make(chan error, 1)
+	go func() { errCh <- server.ListenAndServe() }()
+	select {
+	case err := <-errCh:
+		return err // the listener failed to start (e.g. address in use)
+	case <-ctx.Done():
+		stop() // restore default handling so a second signal force-quits
+		fmt.Fprintln(os.Stderr, "shutting down (draining in-flight requests)…")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			return fmt.Errorf("graceful shutdown: %w", err)
+		}
+		return nil
+	}
 }
 
 // uiURL renders a clickable URL for a net/http listen address (":8080" -> localhost).

@@ -211,6 +211,20 @@ func Compile(name string, mods []SourceModule) (*Project, error) {
 	return compileSourceModules(name, mods, nil)
 }
 
+// CompileReusing is Compile that REUSES base's already-compiled+verified modules for any candidate
+// module whose source bytes are unchanged versus base. This makes candidate verification incremental:
+// editing one module in an N-module project recompiles+re-verifies only that module, while the other
+// N-1 are taken from base (the served project) — so POST /v1/project/verify stays O(changed), not O(N),
+// as an AI edits one module among many. base may be nil, in which case it behaves exactly like Compile.
+// Reuse is keyed by source-content hash, consistent with the Workspace incremental-reload cache.
+func CompileReusing(name string, mods []SourceModule, base *Project) (*Project, error) {
+	var reuse moduleCache
+	if base != nil {
+		reuse = cacheOf(base.Modules)
+	}
+	return compileSourceModules(name, mods, reuse)
+}
+
 // compileSourceModules is Compile with an optional reuse cache (so a candidate validation during editing
 // only recompiles the changed module, reusing the rest — the edit loop is then O(1) in project size).
 func compileSourceModules(name string, mods []SourceModule, reuse moduleCache) (*Project, error) {
