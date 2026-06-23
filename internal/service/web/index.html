@@ -25,6 +25,15 @@
           <button id="send-btn" type="submit">Send</button>
         </div>
       </form>
+
+      <details class="ingest">
+        <summary>Ingest a specification → rules</summary>
+        <textarea id="ingest-source" rows="4" placeholder="Paste a business policy, contract clause, requirements or rules — any domain. The AI drafts rules with @source links, then the engine verifies and repairs them deterministically."></textarea>
+        <div class="row">
+          <label>repair rounds <input type="number" id="ingest-rounds" min="1" max="5" value="3" /></label>
+          <button id="ingest-btn" type="button">Ingest</button>
+        </div>
+      </details>
     </section>
 
     <!-- Right: editor + verify + run -->
@@ -34,6 +43,7 @@
         <div class="actions">
           <button id="verify-btn" class="primary">Verify</button>
           <button id="graph-btn">Graph</button>
+          <button id="trace-btn" title="Which @source citation each decision carries, and which source paragraphs a rule covers">Traceability</button>
           <button id="tests-btn" title="Ask the LLM to draft test cases, then check them deterministically">AI tests</button>
         </div>
       </div>
@@ -41,6 +51,7 @@
 
       <div class="report" id="report"></div>
       <div class="graph" id="graph"></div>
+      <div class="trace" id="trace"></div>
 
       <div class="run">
         <h3>Simulator</h3>

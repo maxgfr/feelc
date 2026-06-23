@@ -76,6 +76,22 @@ textarea {
 .graph svg { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; }
 .graph text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; pointer-events: none; }
 
+.ingest { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+.ingest summary { color: var(--muted); font-size: 12px; cursor: pointer; margin-bottom: 8px; }
+.ingest .row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.ingest label { color: var(--muted); font-size: 12px; }
+.ingest #ingest-rounds { width: 56px; margin-left: 6px; background: var(--panel2); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-family: var(--mono); }
+.ingest #ingest-btn { margin-left: auto; }
+
+.trace { margin-top: 10px; max-height: 28vh; overflow-y: auto; }
+.trace:empty { display: none; }
+.trace .headline { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.trace .span { display: flex; gap: 8px; align-items: baseline; padding: 5px 8px; border-radius: 6px; margin-bottom: 5px; border-left: 3px solid var(--border); background: var(--panel); }
+.trace .span.covered { border-left-color: var(--ok); }
+.trace .span.uncovered { border-left-color: var(--warn); }
+.trace .span .mark { font-family: var(--mono); color: var(--muted); }
+.trace .span .by { color: var(--muted); font-family: var(--mono); font-size: 12px; margin-left: auto; }
+
 .run { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
 .run h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .run-row { display: flex; gap: 8px; margin-bottom: 8px; }

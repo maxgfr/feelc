@@ -117,6 +117,45 @@ decision d : string {
 	}
 }
 
+// ExplainFull returns the justification of the goal AND every upstream decision it consumed,
+// in dependency-first order. For credit, eligibility consumes dti, so the path is [dti, eligibility].
+func TestExplainFull(t *testing.T) {
+	cm := loadCredit(t)
+	ft, err := explain.ExplainFull(cm, "eligibility", map[string]any{
+		"credit_score": 500, "annual_income": 60000, "monthly_debt": 1500, "age": 40,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ft.Goal != "eligibility" {
+		t.Errorf("Goal = %q, want eligibility", ft.Goal)
+	}
+	if len(ft.Path) != 2 || ft.Path[0].Decision != "dti" || ft.Path[1].Decision != "eligibility" {
+		t.Fatalf("path = %v, want [dti, eligibility]", pathNames(ft))
+	}
+	if ft.Path[0].Kind != "literal-expr" {
+		t.Errorf("dti kind = %q, want literal-expr", ft.Path[0].Kind)
+	}
+	if ft.Result == nil || ft.Result.Decision != "eligibility" {
+		t.Fatalf("result = %+v, want eligibility", ft.Result)
+	}
+	out, ok := ft.Result.Output.(map[string]any)
+	if !ok || out["eligible"] != false || out["reason"] != "insufficient score" {
+		t.Errorf("result output = %+v, want eligible=false reason=insufficient score", ft.Result.Output)
+	}
+	if _, ok := ft.Inputs["credit_score"]; !ok {
+		t.Errorf("inputs not captured: %+v", ft.Inputs)
+	}
+}
+
+func pathNames(ft *explain.FullTrace) []string {
+	out := make([]string, len(ft.Path))
+	for i, p := range ft.Path {
+		out[i] = p.Decision
+	}
+	return out
+}
+
 // A literal-expression decision (dti) is marked 'not geometric' without lying, with its source.
 func TestExplainLiteralExprIsHonest(t *testing.T) {
 	cm := loadCredit(t)

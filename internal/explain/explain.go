@@ -14,8 +14,11 @@ import (
 // Trace is the justification trace (alias of the type produced by the VM).
 type Trace = vm.DecisionTrace
 
-// Explain evaluates a decision of a compiled model and returns its justification.
-func Explain(cm *ir.CompiledModel, decision string, rawInputs map[string]any) (*Trace, error) {
+// FullTrace is the justification of a decision AND its whole upstream DRG path (alias of the VM type).
+type FullTrace = vm.FullTrace
+
+// coerce converts raw (JSON-ish) inputs into typed Values, applying date/duration coercion.
+func coerce(cm *ir.CompiledModel, rawInputs map[string]any) (map[string]ir.Value, error) {
 	inputs := make(map[string]ir.Value, len(rawInputs))
 	for k, v := range rawInputs {
 		val, err := ir.FromAny(v)
@@ -27,5 +30,24 @@ func Explain(cm *ir.CompiledModel, decision string, rawInputs map[string]any) (*
 	if err := ir.CoerceInputs(cm, inputs); err != nil {
 		return nil, err
 	}
+	return inputs, nil
+}
+
+// Explain evaluates a decision of a compiled model and returns its justification.
+func Explain(cm *ir.CompiledModel, decision string, rawInputs map[string]any) (*Trace, error) {
+	inputs, err := coerce(cm, rawInputs)
+	if err != nil {
+		return nil, err
+	}
 	return vm.Trace(cm, decision, inputs)
+}
+
+// ExplainFull evaluates a decision and returns the justification of the goal AND every upstream
+// decision it transitively consumed, in dependency-first order (goal last).
+func ExplainFull(cm *ir.CompiledModel, decision string, rawInputs map[string]any) (*FullTrace, error) {
+	inputs, err := coerce(cm, rawInputs)
+	if err != nil {
+		return nil, err
+	}
+	return vm.TraceFull(cm, decision, inputs)
 }

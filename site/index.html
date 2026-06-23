@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>feelc — AI-driven, deterministic business-rule engine</title>
+  <meta name="description" content="A business-rules language (DMN/FEEL) compiled to a deterministic engine. AI writes the rules; the engine executes, verifies and explains them — 100% reproducible, runnable right in your browser." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="brand">feelc<span> · rule engine</span></div>
+    <div class="links">
+      <a href="playground/">Playground</a>
+      <a href="docs/">Docs</a>
+      <a href="https://github.com/maxgfr/feelc" target="_blank" rel="noopener">GitHub</a>
+      <a class="cta" href="playground/">Try it →</a>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <h1>Business rules that an AI writes and a machine proves.</h1>
+    <p class="tagline">
+      <strong>feelc</strong> is a generic business-rule engine: a readable DMN/FEEL <code>.rules</code> language,
+      compiled to a small deterministic VM. An LLM can author the rules — but at execution time everything is
+      <strong>100% deterministic, reproducible and auditable</strong>. No backend below: the playground runs the
+      <em>real</em> engine in your browser via WebAssembly.
+    </p>
+    <div class="actions">
+      <a class="primary" href="playground/">Open the playground</a>
+      <a href="docs/">Read the docs</a>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="feature"><h3>Deterministic by construction</h3><p>Exact decimals, no floats, no LLM on the execution path. The same inputs always give the same output — bit-for-bit, on every platform.</p></div>
+    <div class="feature"><h3>Formally verified</h3><p>The engine proves completeness (no uncovered case), absence of conflicts, and flags dead rules — with concrete counter-examples.</p></div>
+    <div class="feature"><h3>AI-authored</h3><p>Describe rules in natural language and let an LLM draft the model; the engine compiles, verifies and repairs it. AI proposes, the VM disposes.</p></div>
+    <div class="feature"><h3>Explainable &amp; traceable</h3><p>Every decision is replayable with a justification trace and <code>@source</code> citations back to the policy it encodes.</p></div>
+    <div class="feature"><h3>Visual decision graph</h3><p>See the decision-requirements graph (inputs → decisions) rendered live, with verification findings overlaid.</p></div>
+    <div class="feature"><h3>Runs anywhere</h3><p>One static WebAssembly module — no server, works offline. The same engine ships as a CLI and an HTTP service.</p></div>
+  </section>
+
+  <section class="codeblock">
+    <p style="color:var(--muted);text-align:center">A rule looks like this — paste it into the playground:</p>
+    <pre><code>model "promo" {}
+
+input cart_total : number &gt;= 0
+input is_member  : boolean
+
+# Keep the BEST applicable discount (collect max).
+decision discount_pct : number {
+  needs: cart_total, is_member
+  hit: collect max
+  &gt;= 50  | -    =&gt; 5
+  &gt;= 100 | -    =&gt; 10
+  -      | true =&gt; 8
+}</code></pre>
+  </section>
+
+  <footer class="site">
+    feelc · Apache-2.0 · <a href="https://github.com/maxgfr/feelc" target="_blank" rel="noopener">github.com/maxgfr/feelc</a>
+  </footer>
+</body>
+</html>

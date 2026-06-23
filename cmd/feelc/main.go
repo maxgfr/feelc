@@ -32,6 +32,7 @@ import (
 	"github.com/maxgfr/feelc/internal/registry"
 	"github.com/maxgfr/feelc/internal/service"
 	"github.com/maxgfr/feelc/internal/tck"
+	"github.com/maxgfr/feelc/internal/trace"
 	"github.com/maxgfr/feelc/internal/verify"
 )
 
@@ -460,6 +461,8 @@ func cmdDocs(args []string) error {
 	fs := flag.NewFlagSet("docs", flag.ContinueOnError)
 	rulesPath := fs.String("rules", "", "path to the .rules|.ir.bin file")
 	out := fs.String("o", "", "output file (stdout if absent)")
+	traceFlag := fs.Bool("trace", false, "append a source<->rule traceability section")
+	specPath := fs.String("spec", "", "raw specification text for heuristic source-span coverage (implies --trace)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -499,11 +502,59 @@ func cmdDocs(args []string) error {
 	b.WriteString(graph.Build(cm, rep).Mermaid())
 	b.WriteString("```\n")
 
+	if *traceFlag || *specPath != "" {
+		if err := writeTraceability(&b, cm, *specPath); err != nil {
+			return err
+		}
+	}
+
 	if *out == "" {
 		fmt.Print(b.String())
 		return nil
 	}
 	return os.WriteFile(*out, []byte(b.String()), 0o644)
+}
+
+// writeTraceability appends the source<->rule traceability section to the docs: which decisions
+// cite which @source, the untraced decisions, and (with a spec) heuristic source-span coverage.
+func writeTraceability(b *strings.Builder, cm *ir.CompiledModel, specPath string) error {
+	var rep *trace.Report
+	if specPath != "" {
+		spec, err := os.ReadFile(specPath)
+		if err != nil {
+			return err
+		}
+		rep = trace.BuildWithSource(cm, spec)
+	} else {
+		rep = trace.Build(cm)
+	}
+	b.WriteString("\n## Source traceability\n\n")
+	fmt.Fprintf(b, "%d/%d decisions cite a source.\n\n", rep.Coverage.DecisionsSourced, rep.Coverage.Decisions)
+	b.WriteString("| Decision | Source |\n|---|---|\n")
+	for _, d := range rep.Decisions {
+		src := d.Source
+		if src == "" {
+			src = "_(none)_"
+		}
+		fmt.Fprintf(b, "| `%s` | %s |\n", d.Decision, src)
+	}
+	if len(rep.Untraced) > 0 {
+		fmt.Fprintf(b, "\n**Untraced decisions (no `@source`):** %s\n", strings.Join(rep.Untraced, ", "))
+	}
+	if len(rep.Spans) > 0 {
+		fmt.Fprintf(b, "\n### Source coverage (heuristic — advisory)\n\n%d/%d source spans referenced by a rule.\n\n",
+			rep.Coverage.SpansCovered, rep.Coverage.SpansTotal)
+		b.WriteString("| Line | Covered | By | Span |\n|---|---|---|---|\n")
+		for _, sp := range rep.Spans {
+			mark := "—"
+			if sp.Covered {
+				mark = "✓"
+			}
+			span := strings.ReplaceAll(sp.Span, "|", "\\|")
+			fmt.Fprintf(b, "| %d | %s | %s | %s |\n", sp.Line, mark, strings.Join(sp.By, ", "), span)
+		}
+	}
+	return nil
 }
 
 func sortStrings(xs []string) {

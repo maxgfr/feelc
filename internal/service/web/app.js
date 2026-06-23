@@ -98,6 +98,85 @@ async function sendChat(e) {
   }
 }
 
+// ---- ingest (spec -> draft -> verify -> bounded repair) ----
+// The LLM drafts @source-annotated rules from an arbitrary spec; the engine verifies/repairs them.
+// Everything shown comes from the deterministic engine — the LLM only authors the .rules text.
+async function ingest() {
+  const source = $("ingest-source").value.trim();
+  if (!source) return;
+  const btn = $("ingest-btn");
+  btn.disabled = true; btn.textContent = "…";
+  clearReport();
+  banner("ok", "Drafting rules from the specification, then verifying & repairing…");
+  try {
+    const { ok, status, data } = await api("/v1/ingest", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source, maxRounds: Number($("ingest-rounds").value) || 3, llm: loadCfg() }),
+    });
+    if (status === 501) {
+      clearReport();
+      banner("err", "No LLM configured. Open ⚙ LLM settings to add a provider, model and API key.");
+      $("settings").showModal();
+      return;
+    }
+    if (!ok) { clearReport(); banner("err", `ingest failed (${status}): ${data?.error || "unknown error"}`); return; }
+    if (data.rules) { $("source").value = data.rules; detectDecision(); }
+    clearReport();
+    (data.rounds || []).forEach((r) => {
+      banner(r.blockers > 0 ? "err" : "ok", `round ${r.n}: ${r.blockers} blocker(s)` + (r.compileError ? " — compile error" : ""));
+    });
+    banner(data.converged ? "ok" : "err",
+      data.converged ? "✓ converged: complete and consistent" : `stopped with ${data.blockers} blocker(s) after ${(data.rounds || []).length} round(s)`);
+    ((data.verify && data.verify.findings) || []).forEach(renderFinding);
+    await showTrace();
+    await showGraph();
+  } catch (err) {
+    clearReport(); banner("err", "Network error: " + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "Ingest";
+  }
+}
+
+// ---- traceability + coverage (LLM-free) ----
+async function showTrace() {
+  const src = $("source").value;
+  const t = $("trace");
+  t.innerHTML = "";
+  if (!src.trim()) return;
+  const { ok, status, data } = await api("/v1/trace", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rules: src, spec: $("ingest-source").value }),
+  });
+  if (!ok) {
+    const e = data?.error;
+    t.textContent = e && e.message ? `compile error: ${e.message}` : `traceability failed (${status})`;
+    return;
+  }
+  renderTrace(t, data);
+}
+function renderTrace(container, rep) {
+  const cov = rep.coverage || {};
+  const head = document.createElement("div");
+  head.className = "headline";
+  let txt = `${cov.decisionsSourced || 0}/${cov.decisions || 0} decisions cite a source`;
+  if (cov.spansTotal) txt += ` · ${cov.spansCovered || 0}/${cov.spansTotal} source spans referenced (heuristic)`;
+  head.textContent = txt;
+  container.appendChild(head);
+  if ((rep.untraced || []).length) {
+    const u = document.createElement("div");
+    u.className = "finding warning";
+    u.innerHTML = `<span class="k">untraced</span>${escapeHtml(rep.untraced.join(", "))} — no @source`;
+    container.appendChild(u);
+  }
+  (rep.spans || []).forEach((sp) => {
+    const d = document.createElement("div");
+    d.className = "span " + (sp.covered ? "covered" : "uncovered");
+    const by = sp.by && sp.by.length ? " → " + escapeHtml(sp.by.join(", ")) : "";
+    d.innerHTML = `<span class="mark">${sp.covered ? "✓" : "—"}</span><span class="txt">${escapeHtml(sp.span)}</span><span class="by">${by}</span>`;
+    container.appendChild(d);
+  });
+}
+
 // ---- verify ----
 function clearReport() { $("report").innerHTML = ""; }
 function banner(cls, text) {
@@ -396,6 +475,8 @@ window.addEventListener("DOMContentLoaded", () => {
   $("chat-form").addEventListener("submit", sendChat);
   $("verify-btn").addEventListener("click", verify);
   $("graph-btn").addEventListener("click", showGraph);
+  $("trace-btn").addEventListener("click", showTrace);
+  $("ingest-btn").addEventListener("click", ingest);
   $("run-btn").addEventListener("click", run);
   $("form-btn").addEventListener("click", buildForm);
   $("explain-btn").addEventListener("click", explainLast);

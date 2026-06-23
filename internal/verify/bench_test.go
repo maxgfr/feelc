@@ -56,6 +56,12 @@ func TestVerifySubsumptionPerfGuard(t *testing.T) {
 	if testing.Short() {
 		t.Skip("perf guard skipped in -short")
 	}
+	if raceEnabled {
+		// The race detector adds large, variable overhead (a 50×5 verify runs many times slower
+		// on a shared CI runner), so a wall-clock budget would flake. The guard still runs in a
+		// normal `go test` / `make test`.
+		t.Skip("perf guard skipped under -race (wall-clock timing is unreliable with the race detector)")
+	}
 	cm := buildSubsumeModel(50, 5)
 
 	// The table must actually be verified (grid under budget), otherwise the guard is empty.

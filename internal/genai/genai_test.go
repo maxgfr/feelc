@@ -136,3 +136,13 @@ func TestSystemPromptSync(t *testing.T) {
 		}
 	}
 }
+
+// TestIngestPromptSync guards the ingestion prompt: it must demand @source traceability and stay
+// within the canonical DSL subset (it drives the deterministic verify→repair loop).
+func TestIngestPromptSync(t *testing.T) {
+	for _, tok := range []string{"@source", "```rules", "hit:", "default", "round(x)", "not("} {
+		if !strings.Contains(IngestPrompt, tok) {
+			t.Errorf("ingest prompt missing expected token %q (drift from the canonical subset?)", tok)
+		}
+	}
+}

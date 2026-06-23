@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"encoding/json"
 	"fmt"
 
 	apd "github.com/cockroachdb/apd/v3"
@@ -44,11 +45,18 @@ type RuleRef struct {
 
 // Trace evaluates a decision while CAPTURING its justification.
 func Trace(cm *ir.CompiledModel, decisionName string, inputs map[string]ir.Value) (*DecisionTrace, error) {
-	dec, ok := cm.Decision(decisionName)
+	e := &evaluator{cm: cm, inputs: inputs, memo: map[string]ir.Value{}, state: map[string]int{}}
+	return e.trace(decisionName)
+}
+
+// trace replays ONE decision on the shared evaluator e, capturing its justification. Keeping it a
+// method (vs. a free function) lets TraceFull drive a single evaluator across a whole DRG path so
+// memoization matches engine.Eval exactly (no divergence).
+func (e *evaluator) trace(decisionName string) (*DecisionTrace, error) {
+	dec, ok := e.cm.Decision(decisionName)
 	if !ok {
 		return nil, fmt.Errorf("unknown decision: %q", decisionName)
 	}
-	e := &evaluator{cm: cm, inputs: inputs, memo: map[string]ir.Value{}, state: map[string]int{}}
 	tr := &DecisionTrace{Decision: decisionName, Title: dec.Meta.Title, Source: dec.Meta.Source}
 	switch dec.Kind {
 	case ir.KindLiteralExpr:
@@ -69,6 +77,81 @@ func Trace(cm *ir.CompiledModel, decisionName string, inputs map[string]ir.Value
 		return tr, nil
 	default:
 		return nil, fmt.Errorf("decision %q: untraceable type", decisionName)
+	}
+}
+
+// SourceCitation links a decision on the trace path to its @source annotation (traceability seed).
+type SourceCitation struct {
+	Decision string `json:"decision"`
+	Source   string `json:"source"`
+	Title    string `json:"title,omitempty"`
+}
+
+// FullTrace is the justification of a goal decision AND every upstream decision it transitively
+// consumed: the path through the DRG in dependency-first order (goal last), each entry a
+// self-contained DecisionTrace. Deterministic — it REPLAYS Eval on a single shared evaluator, so
+// memoization matches the engine exactly and the same input always yields the same trace.
+type FullTrace struct {
+	Goal    string           `json:"goal"`
+	Inputs  map[string]any   `json:"inputs"`
+	Path    []*DecisionTrace `json:"path"`              // upstream decisions then the goal
+	Result  *DecisionTrace   `json:"result"`            // == Path[len-1]; convenience alias
+	Sources []SourceCitation `json:"sources,omitempty"` // distinct @source citations on the path
+}
+
+// TraceFull traces a goal decision AND the whole upstream DRG path it depends on. It walks the
+// decisions returned by RequiredDecisions(goal) (dependency-first) on one shared evaluator.
+func TraceFull(cm *ir.CompiledModel, goal string, inputs map[string]ir.Value) (*FullTrace, error) {
+	order, err := cm.RequiredDecisions(goal)
+	if err != nil {
+		return nil, err
+	}
+	e := &evaluator{cm: cm, inputs: inputs, memo: map[string]ir.Value{}, state: map[string]int{}}
+	ft := &FullTrace{Goal: goal, Inputs: jsonInputs(inputs)}
+	for _, name := range order {
+		tr, err := e.trace(name)
+		if err != nil {
+			return nil, err
+		}
+		ft.Path = append(ft.Path, tr)
+		if tr.Source != "" {
+			ft.Sources = append(ft.Sources, SourceCitation{Decision: tr.Decision, Source: tr.Source, Title: tr.Title})
+		}
+	}
+	if len(ft.Path) > 0 {
+		ft.Result = ft.Path[len(ft.Path)-1]
+	}
+	return ft, nil
+}
+
+func jsonInputs(inputs map[string]ir.Value) map[string]any {
+	out := make(map[string]any, len(inputs))
+	for k, v := range inputs {
+		out[k] = cleanNumbers(v.ToAny())
+	}
+	return out
+}
+
+// cleanNumbers renders decimals as clean json.Number (e.g. "10", not "1E+1"), matching how the rest
+// of the API presents numbers — so the echoed inputs read naturally in the trace/audit.
+func cleanNumbers(v any) any {
+	switch x := v.(type) {
+	case *apd.Decimal:
+		r := new(apd.Decimal)
+		r.Reduce(x)
+		return json.Number(r.Text('f'))
+	case []any:
+		for i := range x {
+			x[i] = cleanNumbers(x[i])
+		}
+		return x
+	case map[string]any:
+		for k := range x {
+			x[k] = cleanNumbers(x[k])
+		}
+		return x
+	default:
+		return v
 	}
 }
 

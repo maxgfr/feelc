@@ -108,6 +108,45 @@ decision d : string {
 	}
 }
 
+// feelc docs --trace appends a source-traceability section: decisions citing no @source are
+// listed, and with --spec the source paragraphs get heuristic coverage.
+func TestCmdDocsTrace(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "m.rules")
+	src := `model "m" {}
+input n : number in [0..100]
+@source "policy section 1"
+decision band : string {
+  needs: n
+  hit: first
+  < 50 => "low"
+  -    => "high"
+}
+decision twice : number = n * 2`
+	if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	specPath := filepath.Join(dir, "spec.md")
+	spec := "Section 1: classify n into low or high.\n\nUnrelated paragraph about refunds within 30 days."
+	if err := os.WriteFile(specPath, []byte(spec), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() {
+		if err := cmdDocs([]string{"--rules", p, "--trace", "--spec", specPath}); err != nil {
+			t.Fatalf("docs --trace: %v", err)
+		}
+	})
+	if !strings.Contains(out, "Source traceability") {
+		t.Errorf("missing traceability section:\n%s", out)
+	}
+	if !strings.Contains(out, "twice") {
+		t.Errorf("untraced decision `twice` not reported:\n%s", out)
+	}
+	if !strings.Contains(out, "policy section 1") {
+		t.Errorf("source citation not reported:\n%s", out)
+	}
+}
+
 // captureStdout redirects os.Stdout during the execution of fn and returns what was written to it.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()

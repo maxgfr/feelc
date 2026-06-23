@@ -22,3 +22,11 @@ go.work.sum
 # Spike (throwaway)
 /spike/**/go.sum
 /spike/feeleval
+
+# Node (site build dependency, installed at build time)
+/node_modules/
+
+# Generated GitHub Pages artifacts (rebuilt by .github/workflows/pages.yml)
+/site/static/
+/site/docs/
+/site/examples.json

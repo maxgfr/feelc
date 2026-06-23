@@ -36,6 +36,12 @@ var ExplainPrompt string
 //go:embed prompt/tests.md
 var TestsPrompt string
 
+// IngestPrompt turns an arbitrary business specification into a `.rules` draft with @source
+// traceability and drives the bounded auto-repair loop (it consumes the verifier's findings).
+//
+//go:embed prompt/ingest.md
+var IngestPrompt string
+
 // Message is one conversation turn (role "user" or "assistant").
 type Message struct {
 	Role    string `json:"role"`

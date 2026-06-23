@@ -6,6 +6,9 @@
 > Author rules by chatting with your own LLM, visualize the decision graph, and let the engine prove
 > completeness and consistency.
 
+**▶ [Try the playground](https://maxgfr.github.io/feelc/playground/)** — the real engine, compiled to
+WebAssembly, runs entirely in your browser (no backend). Or [read the docs](https://maxgfr.github.io/feelc/).
+
 ## Why
 
 Classic rule engines pit *business readability* against *reliable execution*. `feelc` reconciles

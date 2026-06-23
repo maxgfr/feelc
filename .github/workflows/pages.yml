@@ -1,0 +1,66 @@
+name: pages
+
+# Builds the documentation + in-browser WASM playground and deploys it to GitHub Pages.
+# The playground runs the REAL feelc engine compiled to WebAssembly — fully client-side, no backend.
+#
+# One-time setup: repo Settings → Pages → Build and deployment → Source = "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; cancel in-progress runs of the same group.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          check-latest: true
+
+      - name: Build the engine to WebAssembly (default build, no -tags smt)
+        run: |
+          mkdir -p site/static
+          GOOS=js GOARCH=wasm go build -trimpath -o site/static/feelc.wasm ./cmd/feelc-wasm
+          # wasm_exec.js moved from $GOROOT/misc/wasm (Go ≤1.23) to $GOROOT/lib/wasm (Go ≥1.24).
+          # Try the new location first, fall back to the old one so the build works on either.
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" site/static/wasm_exec.js 2>/dev/null \
+            || cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" site/static/wasm_exec.js
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Render docs + examples
+        run: |
+          npm i --no-save marked
+          node site/build.mjs
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

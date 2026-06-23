@@ -11,11 +11,8 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
-
-	apd "github.com/cockroachdb/apd/v3"
 
 	"github.com/maxgfr/feelc/internal/audit"
 	"github.com/maxgfr/feelc/internal/check"
@@ -24,8 +21,8 @@ import (
 	"github.com/maxgfr/feelc/internal/explain"
 	"github.com/maxgfr/feelc/internal/genai"
 	"github.com/maxgfr/feelc/internal/graph"
-	"github.com/maxgfr/feelc/internal/ir"
 	"github.com/maxgfr/feelc/internal/loader"
+	"github.com/maxgfr/feelc/internal/modelinfo"
 	"github.com/maxgfr/feelc/internal/registry"
 )
 
@@ -54,9 +51,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/verify", s.handleVerifyCandidate) // verify a CANDIDATE source (without swap)
 	mux.HandleFunc("POST /v1/check", s.handleCheckCandidate)   // check claims against a CANDIDATE source
 	mux.HandleFunc("POST /v1/chat", s.handleChat)              // AI authoring: NL conversation -> .rules draft
+	mux.HandleFunc("POST /v1/ingest", s.handleIngest)          // AI ingestion: spec -> draft -> verify -> repair loop
 	mux.HandleFunc("POST /v1/assist", s.handleAssist)          // one-shot AI tasks: explain | tests
 	mux.HandleFunc("POST /v1/run", s.handleRun)                // evaluate a CANDIDATE source (without swap)
 	mux.HandleFunc("POST /v1/graph", s.handleGraph)            // DRG of a CANDIDATE source (mermaid/dot/json)
+	mux.HandleFunc("POST /v1/trace", s.handleTrace)            // source<->rule traceability + coverage of a CANDIDATE
 	mux.HandleFunc("POST /v1/required", s.handleRequired)      // inputs a decision transitively needs (question-flow)
 	mux.HandleFunc("POST /v1/admin/reload", s.handleReload)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
@@ -115,6 +114,7 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		Decision string         `json:"decision"`
 		Input    map[string]any `json:"input"`
 		Explain  bool           `json:"explain"`
+		Full     bool           `json:"full"` // full = trace the whole upstream DRG path (ExplainFull)
 	}
 	if err := dec.Decode(&doc); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -134,8 +134,13 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	resp := map[string]any{"decision": doc.Decision, "output": jsonify(out)}
-	if doc.Explain {
+	resp := map[string]any{"decision": doc.Decision, "output": modelinfo.JSONify(out)}
+	switch {
+	case doc.Full:
+		if ft, err := explain.ExplainFull(cm, doc.Decision, doc.Input); err == nil {
+			resp["trace"] = ft
+		}
+	case doc.Explain:
 		if tr, err := explain.Explain(cm, doc.Decision, doc.Input); err == nil {
 			resp["trace"] = tr
 		}
@@ -237,11 +242,11 @@ func (s *Server) handleRequired(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	byName := map[string]inputInfo{}
-	for _, ii := range inputInfos(cm) {
+	byName := map[string]modelinfo.InputInfo{}
+	for _, ii := range modelinfo.Inputs(cm) {
 		byName[ii.Name] = ii
 	}
-	out := make([]inputInfo, 0, len(req))
+	out := make([]modelinfo.InputInfo, 0, len(req))
 	for _, n := range req {
 		out = append(out, byName[n])
 	}
@@ -326,11 +331,11 @@ func (s *Server) decide(w http.ResponseWriter, decision string, inputs map[strin
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	rec.Output = jsonify(out) // clean audit trace (decimals as numbers, not "2E+1")
+	rec.Output = modelinfo.JSONify(out) // clean audit trace (decimals as numbers, not "2E+1")
 	s.audit.Log(rec)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"decision":     decision,
-		"output":       jsonify(out),
+		"output":       modelinfo.JSONify(out),
 		"modelVersion": entry.Version,
 		"hash":         entry.Hash,
 		"durationNs":   dur,
@@ -343,31 +348,9 @@ func (s *Server) handleModel(w http.ResponseWriter, _ *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, "no model loaded")
 		return
 	}
-	type decInfo struct {
-		Name      string   `json:"name"`
-		Kind      string   `json:"kind"`
-		HitPolicy string   `json:"hitPolicy,omitempty"`
-		Deps      []string `json:"deps,omitempty"`
-		Unit      string   `json:"unit,omitempty"`
-		Title     string   `json:"title,omitempty"`
-		Doc       string   `json:"doc,omitempty"`
-		Source    string   `json:"source,omitempty"`
-	}
-	decisions := make([]decInfo, len(entry.Model.Decisions))
-	for i := range entry.Model.Decisions {
-		d := &entry.Model.Decisions[i]
-		info := decInfo{Name: d.Name, Deps: d.Deps, Unit: entry.Model.Units[d.Name], Title: d.Meta.Title, Doc: d.Meta.Doc, Source: d.Meta.Source}
-		if d.Kind == ir.KindTable && d.Table != nil {
-			info.Kind = "table"
-			info.HitPolicy = hitPolicyName(d.Table.HitPolicy)
-		} else {
-			info.Kind = "literal-expr"
-		}
-		decisions[i] = info
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"name": entry.Model.Name, "version": entry.Version, "hash": entry.Hash,
-		"inputs": inputInfos(entry.Model), "decisions": decisions,
+		"inputs": modelinfo.Inputs(entry.Model), "decisions": modelinfo.Decisions(entry.Model),
 	})
 }
 
@@ -436,123 +419,6 @@ func writeCompileErr(w http.ResponseWriter, err error) {
 		return
 	}
 	writeErr(w, http.StatusUnprocessableEntity, err.Error())
-}
-
-// inputInfo describes a model input for the UI (typed widgets, simulator, docs).
-type inputInfo struct {
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Domain   string `json:"domain,omitempty"`
-	Unit     string `json:"unit,omitempty"`
-	Title    string `json:"title,omitempty"`
-	Question string `json:"question,omitempty"`
-	Doc      string `json:"doc,omitempty"`
-	Source   string `json:"source,omitempty"`
-}
-
-func inputInfos(cm *ir.CompiledModel) []inputInfo {
-	names := make([]string, 0, len(cm.Inputs))
-	for n := range cm.Inputs {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	out := make([]inputInfo, 0, len(names))
-	for _, n := range names {
-		m := cm.InputMeta[n]
-		out = append(out, inputInfo{
-			Name: n, Type: typeStr(cm.Inputs[n]), Domain: domainStr(cm.Domains[n]), Unit: cm.Units[n],
-			Title: m.Title, Question: m.Question, Doc: m.Doc, Source: m.Source,
-		})
-	}
-	return out
-}
-
-func typeStr(t ir.Type) string {
-	switch t {
-	case ir.TypeNumber:
-		return "number"
-	case ir.TypeString:
-		return "string"
-	case ir.TypeBool:
-		return "boolean"
-	case ir.TypeContext:
-		return "context"
-	}
-	return ""
-}
-
-// domainStr renders a Domain back to its readable DSL form (for the UI form widgets + docs).
-func domainStr(d ir.Domain) string {
-	switch d.Kind {
-	case ir.DomNumeric:
-		if d.LoInf && d.HiInf {
-			return ""
-		}
-		lo, hi := "-inf", "+inf"
-		if !d.LoInf {
-			lo = numText(d.Lo)
-		}
-		if !d.HiInf {
-			hi = numText(d.Hi)
-		}
-		lb, rb := "[", "]"
-		if d.LoOpen {
-			lb = "("
-		}
-		if d.HiOpen {
-			rb = ")"
-		}
-		return "in " + lb + lo + ".." + hi + rb
-	case ir.DomEnum:
-		parts := make([]string, len(d.Enum))
-		for i, v := range d.Enum {
-			parts[i] = valText(v)
-		}
-		return "in {" + strings.Join(parts, ", ") + "}"
-	}
-	return ""
-}
-
-func numText(v ir.Value) string {
-	if v.Tag == ir.TagNumber && v.Num != nil {
-		r := new(apd.Decimal)
-		r.Reduce(v.Num)
-		return r.Text('f')
-	}
-	return ""
-}
-
-func valText(v ir.Value) string {
-	switch v.Tag {
-	case ir.TagNumber:
-		return numText(v)
-	case ir.TagString:
-		return "\"" + v.Str + "\""
-	case ir.TagBool:
-		if v.Bool {
-			return "true"
-		}
-		return "false"
-	}
-	return ""
-}
-
-func hitPolicyName(h ir.HitPolicy) string {
-	switch h {
-	case ir.HitUnique:
-		return "unique"
-	case ir.HitAny:
-		return "any"
-	case ir.HitFirst:
-		return "first"
-	case ir.HitPriority:
-		return "priority"
-	case ir.HitCollect:
-		return "collect"
-	case ir.HitRuleOrder:
-		return "rule order"
-	}
-	return ""
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, _ *http.Request) {
@@ -642,25 +508,4 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 
 func writeErr(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]any{"error": msg})
-}
-
-// jsonify converts decimals (and recursively lists/contexts) to json.Number for clean
-// numeric serialization.
-func jsonify(v any) any {
-	switch x := v.(type) {
-	case *apd.Decimal:
-		return json.Number(x.Text('f'))
-	case []any:
-		for i := range x {
-			x[i] = jsonify(x[i])
-		}
-		return x
-	case map[string]any:
-		for k := range x {
-			x[k] = jsonify(x[k])
-		}
-		return x
-	default:
-		return v
-	}
 }
