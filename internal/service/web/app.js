@@ -74,10 +74,14 @@ async function sendChat(e) {
   const btn = $("send-btn");
   btn.disabled = true; btn.textContent = "…";
   try {
-    const { ok, status, data } = await api("/v1/chat", {
+    // In project mode, project.js redirects to /v1/project/chat (lexical retrieval) for the selected
+    // module; otherwise this is the plain single-model /v1/chat.
+    let spec = (typeof projectChatRequest === "function") ? projectChatRequest(messages, cfg) : null;
+    if (!spec) spec = { path: "/v1/chat", body: JSON.stringify({ messages, llm: cfg }) };
+    const { ok, status, data } = await api(spec.path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, llm: cfg }),
+      body: spec.body,
     });
     if (status === 501) {
       pushError("No LLM configured. Open ⚙ LLM settings to add a provider, model and API key.");

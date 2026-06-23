@@ -22,9 +22,11 @@ type Workspace struct {
 	dir         string
 	strict      bool
 	hasManifest bool
+	isDir       bool
 
-	mu  sync.Mutex
-	cur *Project
+	mu    sync.Mutex
+	cur   *Project
+	cache moduleCache // incremental-reload cache (dir projects): reuse unchanged modules by source hash
 }
 
 // OpenWorkspace loads a project directory for mutation/hot-reload.
@@ -36,8 +38,13 @@ func OpenWorkspace(dir string, strict bool) (*Workspace, error) {
 	if strict && p.Blockers() > 0 {
 		return nil, fmt.Errorf("%d verification blocker(s) (strict mode) — project not opened", p.Blockers())
 	}
+	info, _ := os.Stat(dir)
 	_, statErr := os.Stat(filepath.Join(dir, ManifestName))
-	return &Workspace{dir: dir, strict: strict, hasManifest: statErr == nil, cur: p}, nil
+	w := &Workspace{dir: dir, strict: strict, hasManifest: statErr == nil, isDir: info != nil && info.IsDir(), cur: p}
+	if w.isDir {
+		w.cache = cacheOf(p.Modules)
+	}
+	return w, nil
 }
 
 // Current returns the current linked project (lock-free for the caller's snapshot).
@@ -47,20 +54,27 @@ func (w *Workspace) Current() *Project {
 	return w.cur
 }
 
-// Reload re-reads the whole project from disk and swaps it in if valid. Used by the watcher and the
-// admin reload endpoint. On error the current project is kept.
+// Reload re-reads the project from disk and swaps it in if valid (incremental for dir projects). Used by
+// the watcher and the admin reload endpoint. On error the current project is kept. Taking the lock around
+// the whole load serializes reloads against mutations, so a watcher reload cannot publish a stale view.
 func (w *Workspace) Reload() (*Project, error) {
-	p, err := Load(w.dir)
-	if err != nil {
-		return nil, err
-	}
-	if w.strict && p.Blockers() > 0 {
-		return nil, fmt.Errorf("%d verification blocker(s) (strict mode) — reload refused", p.Blockers())
-	}
 	w.mu.Lock()
-	w.cur = p
-	w.mu.Unlock()
-	return p, nil
+	defer w.mu.Unlock()
+	return w.reloadLocked()
+}
+
+// load reads the project from disk, reusing unchanged modules for a directory project (caller holds w.mu,
+// which guards w.cache).
+func (w *Workspace) load() (*Project, error) {
+	if w.isDir {
+		p, cache, err := loadCached(w.dir, w.cache)
+		if err != nil {
+			return nil, err
+		}
+		w.cache = cache
+		return p, nil
+	}
+	return Load(w.dir) // single-file project: nothing to reuse
 }
 
 // PutModule replaces an existing module's source, validating that the whole project still links before
@@ -212,8 +226,9 @@ func (w *Workspace) Watch(onReload func(*Project, error)) (func() error, error) 
 }
 
 // validateCandidate compiles+links an in-memory candidate and enforces strict mode, WITHOUT persisting.
+// It reuses the workspace's compile cache, so validating an edit only recompiles the changed module.
 func (w *Workspace) validateCandidate(srcs []SourceModule) error {
-	cand, err := Compile(w.cur.Manifest.Name, srcs)
+	cand, err := compileSourceModules(w.cur.Manifest.Name, srcs, w.cache)
 	if err != nil {
 		return err
 	}
@@ -223,10 +238,10 @@ func (w *Workspace) validateCandidate(srcs []SourceModule) error {
 	return nil
 }
 
-// reloadLocked reloads from disk and swaps cur (caller holds w.mu). It re-applies strict mode (the same
-// guard as the public Reload) so no swap path can bypass it.
+// reloadLocked reloads from disk (incrementally for dir projects) and swaps cur (caller holds w.mu). It
+// re-applies strict mode so no swap path can bypass it.
 func (w *Workspace) reloadLocked() (*Project, error) {
-	p, err := Load(w.dir)
+	p, err := w.load()
 	if err != nil {
 		return nil, err
 	}

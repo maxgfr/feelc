@@ -76,6 +76,17 @@ func TestProjectEndpointsFeatureDetect(t *testing.T) {
 	}
 }
 
+// TestProjectChatRequiresProjectMode confirms /v1/project/chat 404s in single-file mode.
+func TestProjectChatRequiresProjectMode(t *testing.T) {
+	srv := service.New(registry.New(), nil, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/project/chat",
+		strings.NewReader(`{"messages":[{"role":"user","content":"hi"}],"module":"x"}`)))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("POST /v1/project/chat without a project: got %d, want 404", rec.Code)
+	}
+}
+
 // TestModuleEditingDisabledWithoutWorkspace confirms the safe-by-default posture: a project served
 // WITHOUT a workspace (no --allow-edit) reports editable:false and 404s the write endpoints.
 func TestModuleEditingDisabledWithoutWorkspace(t *testing.T) {

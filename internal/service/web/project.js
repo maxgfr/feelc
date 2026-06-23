@@ -225,4 +225,14 @@ async function showProjectGraph() {
   renderGraph(g, data.graph);
 }
 
+// projectChatRequest redirects the chat to the project-aware endpoint (lexical retrieval for the selected
+// module) when a module is selected; returns null otherwise so app.js falls back to /v1/chat.
+function projectChatRequest(messages, cfg) {
+  if (!PROJECT || !CURRENT_MODULE) return null;
+  return {
+    path: "/v1/project/chat",
+    body: JSON.stringify({ messages, module: CURRENT_MODULE, llm: cfg }),
+  };
+}
+
 window.addEventListener("DOMContentLoaded", initProject);

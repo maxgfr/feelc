@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/maxgfr/feelc/internal/loader"
 	"github.com/maxgfr/feelc/internal/trace"
 )
 
@@ -23,7 +22,7 @@ func (s *Server) handleTrace(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
-	cm, _, _, err := loader.Compile([]byte(doc.Rules))
+	cm, _, _, err := s.cache.Compile([]byte(doc.Rules))
 	if err != nil {
 		writeCompileErr(w, err)
 		return

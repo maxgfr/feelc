@@ -1,10 +1,14 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"time"
 
+	"github.com/maxgfr/feelc/internal/genai"
 	"github.com/maxgfr/feelc/internal/graph"
 	"github.com/maxgfr/feelc/internal/project"
 	"github.com/maxgfr/feelc/internal/verify"
@@ -100,6 +104,70 @@ func (s *Server) handleProjectVerify(w http.ResponseWriter, r *http.Request) {
 		"report":   rep,
 		"blockers": rep.Totals.Blockers,
 	})
+}
+
+// handleProjectChat is the project-aware authoring boundary: it builds a lexically-retrieved context for
+// the target module (its source + cross-module signatures, no embeddings) and asks the user's LLM for an
+// updated module. Like /v1/chat, the engine never sees the LLM — the returned draft is then compiled,
+// verified and (optionally) persisted via the deterministic endpoints. 404 outside project mode; 501 when
+// no LLM is configured.
+func (s *Server) handleProjectChat(w http.ResponseWriter, r *http.Request) {
+	p := s.proj.Load()
+	if p == nil {
+		writeErr(w, http.StatusNotFound, "not running in project mode")
+		return
+	}
+	defer r.Body.Close()
+	var req struct {
+		Messages []genai.Message `json:"messages"`
+		Module   string          `json:"module"`
+		LLM      genai.Config    `json:"llm"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	if len(req.Messages) == 0 {
+		writeErr(w, http.StatusBadRequest, "`messages` required")
+		return
+	}
+	prov, err := genai.Resolve(req.LLM)
+	if errors.Is(err, genai.ErrNotConfigured) {
+		writeErr(w, http.StatusNotImplemented, err.Error())
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	contextBlock := p.RetrieveContext(lastUserContent(req.Messages), req.Module, 0)
+	system := genai.SystemPrompt + "\n\n---\n" + genai.ProjectEditPrompt + "\n\n---\n" + contextBlock
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	defer cancel()
+	reply, err := prov.Chat(ctx, system, req.Messages)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "LLM call failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message": reply,
+		"rules":   extractRules(reply),
+		"module":  req.Module,
+		"context": contextBlock,
+	})
+}
+
+// lastUserContent returns the content of the most recent user turn (the retrieval query).
+func lastUserContent(msgs []genai.Message) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "user" {
+			return msgs[i].Content
+		}
+	}
+	if len(msgs) > 0 {
+		return msgs[len(msgs)-1].Content
+	}
+	return ""
 }
 
 // handleProjectGraph renders the cross-module decision requirements graph of the merged model. With

@@ -116,6 +116,32 @@ func TestWorkspaceDeleteRejectedWhenUsed(t *testing.T) {
 	}
 }
 
+// TestIncrementalReloadReusesUnchangedModules proves the incremental reload: editing module b must not
+// recompile module a (its compiled model is reused from the cache by pointer).
+func TestIncrementalReloadReusesUnchangedModules(t *testing.T) {
+	dir := writeTempProject(t) // modules a, b
+	ws, err := OpenWorkspace(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	aBefore, _ := ws.Current().Module("a")
+	aModel := aBefore.Model
+
+	// Edit only module b.
+	if _, err := ws.PutModule("b", "model \"b\" {}\ninput age : number in [0..120]\ndecision senior : boolean = age >= 70\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	aAfter, _ := ws.Current().Module("a")
+	if aAfter.Model != aModel {
+		t.Error("module a was recompiled on a reload that only changed module b (incremental reuse failed)")
+	}
+	bAfter, _ := ws.Current().Module("b")
+	if bAfter.Model == nil || bAfter.Model == aModel {
+		t.Error("module b should have a fresh compiled model after its edit")
+	}
+}
+
 // TestWorkspaceWatch confirms an on-disk edit hot-reloads the project through the watcher.
 func TestWorkspaceWatch(t *testing.T) {
 	dir := writeTempProject(t)

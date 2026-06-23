@@ -99,6 +99,15 @@ first, and only written + swapped if it links — an invalid edit is rejected an
 > capped, and the service has no authentication — so `--allow-edit` (like `--ui`) is for a **trusted /
 > loopback host only**. Bind to `127.0.0.1` (or sit behind an authenticating proxy) before exposing it.
 
+## AI authoring at project scale
+
+With `--ui` the chat panel becomes **project-aware**: when a module is selected, a message is sent to
+`POST /v1/project/chat`, which builds a **lexically-retrieved** context (no embeddings) — the target
+module's source, the cross-module decisions it may bind to, and the top-K other modules ranked by token
+overlap with your request — and hands it to your configured LLM. This keeps the prompt within the model's
+context window even for projects with hundreds of rules. As always, the LLM only drafts `.rules` text; the
+deterministic engine compiles, verifies and (with `--allow-edit`) persists it under the golden rule.
+
 ## HTTP API (project endpoints)
 
 | Method + path                       | Purpose                                                        |
@@ -107,6 +116,7 @@ first, and only written + swapped if it links — an invalid edit is rejected an
 | `GET /v1/project/health`            | aggregated verification report                                |
 | `GET /v1/project/graph`             | cross-module decision-requirements graph                      |
 | `POST /v1/project/verify`           | verify a candidate project from the body (no swap)            |
+| `POST /v1/project/chat`             | project-aware AI authoring: edit a module with retrieved context |
 | `GET /v1/modules`                   | per-module summary                                            |
 | `GET /v1/modules/{name}/source`     | a module's `.rules` source                                    |
 | `PUT /v1/modules/{name}/source`     | edit + persist a module (golden rule)                         |

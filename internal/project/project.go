@@ -10,6 +10,7 @@
 package project
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -18,8 +19,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/maxgfr/feelc/internal/ir"
 	"github.com/maxgfr/feelc/internal/loader"
@@ -117,24 +120,81 @@ func Load(path string) (*Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	refs := man.Modules
-	if len(refs) == 0 {
-		if refs, err = discover(dir); err != nil {
-			return nil, err
-		}
-	}
-	mods, err := compileModules(dir, refs)
+	man, refs, err := resolveRefs(dir)
 	if err != nil {
 		return nil, err
 	}
-	if man.Name == "" {
-		man.Name = filepath.Base(dir)
+	mods, err := compileModules(dir, refs, nil)
+	if err != nil {
+		return nil, err
 	}
 	p := &Project{Manifest: man, Dir: dir, Modules: mods}
 	if err := p.link(); err != nil {
 		return nil, err
 	}
 	return p, nil
+}
+
+// resolveRefs reads the manifest (or auto-discovers modules) and fills the project name.
+func resolveRefs(dir string) (Manifest, []ModuleRef, error) {
+	man, err := readManifest(dir)
+	if err != nil {
+		return Manifest{}, nil, err
+	}
+	refs := man.Modules
+	if len(refs) == 0 {
+		if refs, err = discover(dir); err != nil {
+			return Manifest{}, nil, err
+		}
+	}
+	if man.Name == "" {
+		man.Name = filepath.Base(dir)
+	}
+	return man, refs, nil
+}
+
+// moduleCache memoizes compiled module artifacts by SOURCE-content hash, so an incremental reload only
+// recompiles the files whose bytes changed (edit one of hundreds → recompile one). Reused across reloads
+// by the Workspace.
+type moduleCache map[string]cachedModule
+
+type cachedModule struct {
+	source []byte
+	model  *ir.CompiledModel
+	hash   string
+	report *verify.Report
+}
+
+func hashSource(src []byte) string {
+	sum := sha256.Sum256(src)
+	return hex.EncodeToString(sum[:])
+}
+
+// cacheOf builds the reload cache from a freshly compiled module set.
+func cacheOf(mods []*Module) moduleCache {
+	c := make(moduleCache, len(mods))
+	for _, m := range mods {
+		c[hashSource(m.Source)] = cachedModule{source: m.Source, model: m.Model, hash: m.Hash, report: m.Report}
+	}
+	return c
+}
+
+// loadCached is Load for a directory project that REUSES unchanged modules from prev (incremental
+// reload). It returns the project plus the fresh cache for the next reload.
+func loadCached(dir string, prev moduleCache) (*Project, moduleCache, error) {
+	man, refs, err := resolveRefs(dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	mods, err := compileModules(dir, refs, prev)
+	if err != nil {
+		return nil, nil, err
+	}
+	p := &Project{Manifest: man, Dir: dir, Modules: mods}
+	if err := p.link(); err != nil {
+		return nil, nil, err
+	}
+	return p, cacheOf(mods), nil
 }
 
 // SourceModule is an in-memory module (name + source + optional cross-module bindings), used to build a
@@ -148,11 +208,17 @@ type SourceModule struct {
 // Compile builds and links a project from in-memory module sources (no filesystem). It compiles +
 // verifies each module, then links exactly like Load, so candidate verification matches served behaviour.
 func Compile(name string, mods []SourceModule) (*Project, error) {
+	return compileSourceModules(name, mods, nil)
+}
+
+// compileSourceModules is Compile with an optional reuse cache (so a candidate validation during editing
+// only recompiles the changed module, reusing the rest — the edit loop is then O(1) in project size).
+func compileSourceModules(name string, mods []SourceModule, reuse moduleCache) (*Project, error) {
 	if len(mods) > maxModules {
 		return nil, fmt.Errorf("too many modules (%d > %d)", len(mods), maxModules)
 	}
-	compiled := make([]*Module, 0, len(mods))
 	seen := make(map[string]bool, len(mods))
+	units := make([]compileUnit, 0, len(mods))
 	for _, sm := range mods {
 		if err := validateModuleName(sm.Name); err != nil {
 			return nil, err
@@ -161,16 +227,12 @@ func Compile(name string, mods []SourceModule) (*Project, error) {
 			return nil, fmt.Errorf("duplicate module name %q", sm.Name)
 		}
 		seen[sm.Name] = true
-		cm, hash, rep, err := loader.CompileFile(sm.Name+".rules", []byte(sm.Source))
-		if err != nil {
-			return nil, err
-		}
-		compiled = append(compiled, &Module{
-			Name: sm.Name, Path: sm.Name + ".rules", Source: []byte(sm.Source),
-			Model: cm, Hash: hash, Report: rep, Uses: sm.Uses,
-		})
+		units = append(units, compileUnit{name: sm.Name, path: sm.Name + ".rules", src: []byte(sm.Source), uses: sm.Uses})
 	}
-	sort.Slice(compiled, func(i, j int) bool { return compiled[i].Name < compiled[j].Name })
+	compiled, err := compileUnits(units, reuse)
+	if err != nil {
+		return nil, err
+	}
 	if name == "" {
 		name = "project"
 	}
@@ -286,14 +348,23 @@ func discover(dir string) ([]ModuleRef, error) {
 	return refs, nil
 }
 
-// compileModules reads + compiles each referenced module, rejecting duplicates and returning a
-// name-sorted slice (so the merge order — and thus the project hash — is independent of manifest order).
-func compileModules(dir string, refs []ModuleRef) ([]*Module, error) {
+// compileModules reads + compiles each referenced module and returns a name-sorted slice (so the merge
+// order — and thus the project hash — is independent of manifest order). Validation/dedup/reads run
+// sequentially (deterministic errors); the per-module compile+verify (independent, the expensive part)
+// runs in PARALLEL across cores. When reuse is non-nil, a module whose source bytes are unchanged is
+// taken from the cache instead of recompiling (incremental reload).
+func compileModules(dir string, refs []ModuleRef, reuse moduleCache) ([]*Module, error) {
 	if len(refs) > maxModules {
 		return nil, fmt.Errorf("too many modules (%d > %d)", len(refs), maxModules)
 	}
+	type job struct {
+		ref     ModuleRef
+		full    string
+		src     []byte
+		srcHash string
+	}
 	seen := make(map[string]bool, len(refs))
-	mods := make([]*Module, 0, len(refs))
+	jobs := make([]job, 0, len(refs))
 	for _, r := range refs {
 		if err := validateModuleName(r.Name); err != nil {
 			return nil, err
@@ -310,11 +381,62 @@ func compileModules(dir string, refs []ModuleRef) ([]*Module, error) {
 		if err != nil {
 			return nil, fmt.Errorf("module %q: %w", r.Name, err)
 		}
-		cm, hash, rep, err := loader.CompileFile(full, src)
-		if err != nil {
-			return nil, err // already stamped with file:line:col by CompileFile
+		jobs = append(jobs, job{ref: r, full: full, src: src, srcHash: hashSource(src)})
+	}
+
+	units := make([]compileUnit, len(jobs))
+	for i, j := range jobs {
+		units[i] = compileUnit{name: j.ref.Name, path: j.ref.Path, src: j.src, uses: j.ref.Uses}
+	}
+	return compileUnits(units, reuse)
+}
+
+// compileUnit is one module's input to the shared parallel compiler.
+type compileUnit struct {
+	name string
+	path string
+	src  []byte
+	uses map[string]string
+}
+
+// compileUnits compiles+verifies modules in PARALLEL across cores (the expensive, independent step),
+// reusing cached artifacts whose source bytes are unchanged. Returns a name-sorted slice (deterministic
+// regardless of completion order) and the first error in input order.
+func compileUnits(units []compileUnit, reuse moduleCache) ([]*Module, error) {
+	mods := make([]*Module, len(units))
+	errs := make([]error, len(units))
+	conc := runtime.GOMAXPROCS(0)
+	if conc < 1 {
+		conc = 1
+	}
+	sem := make(chan struct{}, conc)
+	var wg sync.WaitGroup
+	for i := range units {
+		u := units[i]
+		if reuse != nil {
+			if c, ok := reuse[hashSource(u.src)]; ok {
+				mods[i] = &Module{Name: u.name, Path: u.path, Source: c.source, Model: c.model, Hash: c.hash, Report: c.report, Uses: u.uses}
+				continue
+			}
 		}
-		mods = append(mods, &Module{Name: r.Name, Path: r.Path, Source: src, Model: cm, Hash: hash, Report: rep, Uses: r.Uses})
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, u compileUnit) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			cm, hash, rep, err := loader.CompileFile(u.path, u.src)
+			if err != nil {
+				errs[i] = err // already stamped with file:line:col by CompileFile
+				return
+			}
+			mods[i] = &Module{Name: u.name, Path: u.path, Source: u.src, Model: cm, Hash: hash, Report: rep, Uses: u.uses}
+		}(i, u)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return nil, err
+		}
 	}
 	sort.Slice(mods, func(i, j int) bool { return mods[i].Name < mods[j].Name })
 	return mods, nil

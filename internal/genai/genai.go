@@ -42,6 +42,12 @@ var TestsPrompt string
 //go:embed prompt/ingest.md
 var IngestPrompt string
 
+// ProjectEditPrompt instructs the model to edit ONE module inside a multi-module project; the service
+// appends the lexically-retrieved project context (target source + cross-module signatures) after it.
+//
+//go:embed prompt/project_edit.md
+var ProjectEditPrompt string
+
 // Message is one conversation turn (role "user" or "assistant").
 type Message struct {
 	Role    string `json:"role"`

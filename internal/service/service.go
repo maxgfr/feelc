@@ -47,6 +47,10 @@ type Server struct {
 	// together (no split-brain between a watcher reload and an HTTP mutation).
 	publishMu sync.Mutex
 
+	// cache memoizes candidate compilation by source hash (the editor recompiles the same buffer across
+	// /v1/verify, /v1/run, /v1/graph, … — one compile, then cheap lookups).
+	cache *loader.Cache
+
 	// EnableUI serves the embedded authoring UI at `/` (set by `feelc serve --ui`).
 	EnableUI bool
 }
@@ -56,7 +60,7 @@ type Server struct {
 const maxRequestBody = 8 << 20
 
 func New(reg *registry.Registry, log *audit.Logger, reload func() error) *Server {
-	return &Server{reg: reg, audit: log, reload: reload}
+	return &Server{reg: reg, audit: log, reload: reload, cache: loader.NewCache(256)}
 }
 
 // SetProject publishes the current project for the project endpoints (nil clears it). Called by the
@@ -108,6 +112,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/project/health", s.handleProjectHealth)       // aggregated project verification report
 	mux.HandleFunc("POST /v1/project/verify", s.handleProjectVerify)      // verify a CANDIDATE multi-module project (no swap)
 	mux.HandleFunc("GET /v1/project/graph", s.handleProjectGraph)         // cross-module DRG of the merged model
+	mux.HandleFunc("POST /v1/project/chat", s.handleProjectChat)          // project-aware AI authoring (lexical retrieval)
 	mux.HandleFunc("GET /v1/modules", s.handleModules)                    // per-module summary (name, hash, blocker count)
 	mux.HandleFunc("GET /v1/modules/{name}/source", s.handleModuleSource) // a module's .rules source
 	mux.HandleFunc("PUT /v1/modules/{name}/source", s.handlePutModule)    // edit + persist a module (golden rule)
@@ -195,7 +200,7 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "`decision` field required")
 		return
 	}
-	cm, _, _, err := loader.Compile([]byte(doc.Rules))
+	cm, _, _, err := s.cache.Compile([]byte(doc.Rules))
 	if err != nil {
 		writeCompileErr(w, err)
 		return
@@ -228,7 +233,7 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "reading body: "+err.Error())
 		return
 	}
-	cm, _, rep, err := loader.Compile(src)
+	cm, _, rep, err := s.cache.Compile(src)
 	if err != nil {
 		writeCompileErr(w, err)
 		return
@@ -303,7 +308,7 @@ func (s *Server) handleRequired(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "`decision` field required")
 		return
 	}
-	cm, _, _, err := loader.Compile([]byte(doc.Rules))
+	cm, _, _, err := s.cache.Compile([]byte(doc.Rules))
 	if err != nil {
 		writeCompileErr(w, err)
 		return
@@ -456,7 +461,7 @@ func (s *Server) handleVerifyCandidate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "reading body: "+err.Error())
 		return
 	}
-	_, hash, rep, err := loader.Compile(src)
+	_, hash, rep, err := s.cache.Compile(src)
 	if err != nil {
 		writeCompileErr(w, err)
 		return
@@ -478,7 +483,7 @@ func (s *Server) handleCheckCandidate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
-	cm, _, _, err := loader.Compile([]byte(doc.Rules))
+	cm, _, _, err := s.cache.Compile([]byte(doc.Rules))
 	if err != nil {
 		writeCompileErr(w, err)
 		return

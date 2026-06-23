@@ -69,6 +69,16 @@ single-file UI and the WASM playground are unchanged.
   re-verification (a later optimisation slice). Cross-module same-named inputs surface as an advisory.
 - Determinism/auditability are unchanged: the merged model is an ordinary `ir.CompiledModel`, reproducibly
   hashed and served by the same deterministic VM.
+- **Performance.** Three optimisations keep the engine fast at project scale, all behaviour-preserving:
+  (1) a bounded candidate-compile cache (`loader.Cache`, keyed by source hash) so the editor's repeated
+  `/v1/verify`→`/v1/graph`→`/v1/run` on the same buffer compiles once; (2) per-module compile+verify runs
+  in parallel across cores; (3) an incremental reload/validate cache in the `Workspace` reuses unchanged
+  modules by source hash, so editing one of hundreds recompiles only that one. Benchmarks
+  (`internal/project/bench_test.go`, `internal/loader/cache_test.go`) cover load and the edit loop.
+  Decision-table indexing and parallel DRG evaluation were assessed and **deferred**: the VM is already
+  microsecond-fast per decision at typical sizes, and both touch the deterministic core (a table index
+  must be a sound over-approximation; concurrent eval risks the determinism guarantee) for a benefit that
+  only appears at extreme single-table / very-wide-graph scale — not worth the risk now.
 - Deferred: AI authoring scoped to a project with lexical retrieval (next phase); per-module incremental
   verification cache and decision-table indexing (optimisation phase). `effectiveDate` is parsed but not
   yet used (as-of evaluation, roadmap slice 7).
