@@ -26,4 +26,29 @@ jobs:
       - run: go version && go env GOARCH
       - run: go vet ./...
       - run: go test ./internal/i18nguard/ # the repo must stay English-only
-      - run: go test -race ./...
+      - run: go test -race ./...           # runs the fuzz SEED corpora too (FuzzCompile / FuzzDecodeIR)
+
+  # Active fuzzing of the highest-risk surfaces: the full front-end and untrusted .ir.bin decoding.
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          check-latest: true
+      - run: go test -run='^$' -fuzz='^FuzzCompile$' -fuzztime=60s ./internal/loader/
+      - run: go test -run='^$' -fuzz='^FuzzDecodeIR$' -fuzztime=60s ./internal/loader/
+
+  # The optional SMT (Z3) verification backend (ADR 0007) is build-tagged; build and test it with z3 present.
+  smt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          check-latest: true
+      - run: sudo apt-get update && sudo apt-get install -y z3
+      - run: go build -tags smt ./...
+      - run: go test -tags smt ./internal/verify/ ./internal/smt/
