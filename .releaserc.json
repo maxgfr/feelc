@@ -6,7 +6,7 @@
     [
       "@semantic-release/exec",
       {
-        "publishCmd": "if ! git rev-parse -q --verify refs/tags/v${nextRelease.version} >/dev/null; then git tag v${nextRelease.version} && git push origin v${nextRelease.version}; fi && goreleaser release --clean"
+        "publishCmd": "if ! git rev-parse -q --verify refs/tags/v${nextRelease.version} >/dev/null; then git tag v${nextRelease.version} && git push origin v${nextRelease.version}; fi && goreleaser release --clean && npm version ${nextRelease.version} --no-git-tag-version -w feelc && npm publish -w feelc --access public --provenance"
       }
     ]
   ]

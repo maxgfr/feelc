@@ -26,14 +26,17 @@ go.work.sum
 # Node (site build dependency, installed at build time)
 /node_modules/
 
-# Node workspaces (@feelc/engine package + examples)
+# Node workspaces (feelc package + examples)
 node_modules/
 **/dist/
 *.tsbuildinfo
-# WASM build artifacts for @feelc/engine (rebuilt by `make wasm` / the package build)
+# WASM build artifacts for feelc (rebuilt by `make wasm` / the package build)
 /packages/engine/wasm/
 # npm pack output
 *.tgz
+
+# release pipeline marker (written by semantic-release on CI to gate the npm publish step)
+/.released-version
 
 # Generated GitHub Pages artifacts (rebuilt by .github/workflows/pages.yml)
 /site/static/

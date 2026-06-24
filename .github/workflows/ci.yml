@@ -39,6 +39,9 @@ jobs:
           check-latest: true
       - run: go test -run='^$' -fuzz='^FuzzCompile$' -fuzztime=60s ./internal/loader/
       - run: go test -run='^$' -fuzz='^FuzzDecodeIR$' -fuzztime=60s ./internal/loader/
+      - run: go test -run='^$' -fuzz='^FuzzExprLower$' -fuzztime=60s ./internal/loader/
+      - run: go test -run='^$' -fuzz='^FuzzEval$' -fuzztime=60s ./internal/engine/
+      - run: go test -run='^$' -fuzz='^FuzzImportDMN$' -fuzztime=60s ./internal/dmnxml/
 
   # The optional SMT (Z3) verification backend (ADR 0007) is build-tagged; build and test it with z3 present.
   smt:

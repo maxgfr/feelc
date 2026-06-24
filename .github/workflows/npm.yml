@@ -1,12 +1,14 @@
 name: npm
 
-# Builds, tests and (on a v* tag) publishes the @feelc/engine package — the Go engine compiled to
-# WebAssembly, wrapped as a portable TypeScript package.
+# CI on PRs, and the FULL release on push to main. On main, semantic-release computes the next version
+# from Conventional Commits, then (via the exec plugin) tags it, goreleaser publishes the cross-platform
+# binaries, and `feelc` is published to npm via OIDC trusted publishing — no token, with provenance.
+# OIDC trusted publishing is configured against THIS workflow file (npm.yml), which is why the publish
+# lives here. See RELEASING.md.
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -15,68 +17,58 @@ permissions:
   contents: read
 
 jobs:
-  build-test:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
           go-version: "1.23"
           check-latest: true
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      # Native CLI — the parity test compares @feelc/engine (WASM) against it.
+      # Native CLI — the parity test compares feelc (WASM) against it.
       - name: Build the native feelc CLI
         run: make build
-
       - run: npm ci
-
-      - name: Build @feelc/engine (compiles the engine to WASM + bundles TS)
-        run: npm run build -w @feelc/engine
-
+      - name: Build feelc (compiles the engine to WASM + bundles TS)
+        run: npm run build -w feelc
       - name: Unit tests (WASM behaviour)
-        run: npm run test -w @feelc/engine
-
+        run: npm run test -w feelc
       - name: Parity + cross-tool tests (WASM vs CLI)
         run: npm run test -w @feelc-examples/node-smoke
-
       - name: Bundler smoke (Vite resolves the WASM asset)
         run: npm run build -w @feelc-examples/browser-vite
 
-  publish:
-    # OIDC "trusted publishing" — NO NPM_TOKEN secret. This job stays inert until the trusted
-    # publisher for @feelc/engine is configured on npmjs.com (done once, after the first manual
-    # `npm publish`). Until then it will fail auth on a tag, which is expected.
-    needs: build-test
-    if: startsWith(github.ref, 'refs/tags/v')
+  release:
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      id-token: write # required for OIDC + npm provenance
+      contents: write # tags + GitHub release (goreleaser)
+      id-token: write # npm OIDC trusted publishing (provenance)
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0 # semantic-release needs full history + tags
       - uses: actions/setup-go@v5
         with:
           go-version: "1.23"
           check-latest: true
-
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          install-only: true
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: "https://registry.npmjs.org"
-
-      # Trusted publishing requires a recent npm.
-      - run: npm install -g npm@latest
-
+      - run: npm install -g npm@latest # OIDC trusted publishing needs a recent npm
       - run: npm ci
-
-      - name: Build @feelc/engine
-        run: npm run build -w @feelc/engine
-
-      - name: Publish to npm (OIDC, with provenance)
-        run: npm publish -w @feelc/engine --access public
+      # semantic-release (exec plugin): tag + push -> goreleaser binaries -> bump the npm version to the
+      # release version -> npm publish via OIDC. The npm bump happens AFTER goreleaser so the tree is
+      # clean when goreleaser builds from the tag.
+      - name: Release (version, tag, binaries, npm publish via OIDC)
+        run: npx --yes -p semantic-release -p @semantic-release/exec semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
