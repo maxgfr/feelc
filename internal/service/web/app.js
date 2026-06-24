@@ -14,13 +14,34 @@ function saveCfg(cfg) { localStorage.setItem(LS_KEY, JSON.stringify(cfg)); }
 function refreshStatus() {
   const c = loadCfg();
   const el = $("llm-status");
-  if (c.apiKey) {
-    el.textContent = `LLM: ${c.provider || "anthropic"} · ${c.model || "default"}`;
-    el.classList.add("ok");
-  } else {
-    el.textContent = "LLM: not configured";
-    el.classList.remove("ok");
+  const ready = !!c.apiKey;
+  el.textContent = ready ? `LLM: ${c.provider || "anthropic"} · ${c.model || "default"}` : "LLM: not connected — click to connect";
+  el.classList.toggle("ok", ready);
+  document.body.classList.toggle("llm-ready", ready);
+  // Empty-state invitation: only while the conversation hasn't started.
+  const thread = $("thread");
+  const card = thread.querySelector(".connect-card");
+  if (!ready && !messages.length) {
+    if (!card) thread.appendChild(connectCard());
+  } else if (card) {
+    card.remove();
   }
+}
+
+// connectCard is the inviting empty-state shown until an LLM is connected: bring-your-own-model + a pointer
+// to the portable skill (the same red→green loop outside the browser).
+function connectCard() {
+  const card = document.createElement("div");
+  card.className = "connect-card";
+  card.innerHTML =
+    `<div class="cc-title">Connect your AI to start authoring</div>` +
+    `<div class="cc-sub">Bring your own model — Anthropic (Claude), OpenAI, or any compatible endpoint. ` +
+    `Your key stays in your browser; the engine never calls an LLM at runtime.</div>` +
+    `<button type="button" class="primary cc-btn">Connect your AI</button>` +
+    `<div class="cc-skill">Prefer your editor or a coding agent? The same draft→verify→repair loop is a portable ` +
+    `<a href="https://github.com/maxgfr/feelc/tree/main/skill" target="_blank" rel="noopener">feelc skill</a>.</div>`;
+  card.querySelector(".cc-btn").addEventListener("click", openSettings);
+  return card;
 }
 
 // ---- HTTP helper ----
@@ -49,6 +70,8 @@ function renderMessage(content) {
 }
 function pushMsg(role, content) {
   messages.push({ role, content });
+  const card = $("thread").querySelector(".connect-card");
+  if (card) card.remove();
   const div = document.createElement("div");
   div.className = `msg ${role}`;
   div.innerHTML = role === "assistant" ? renderMessage(content) : escapeHtml(content);
@@ -126,11 +149,7 @@ async function ingest() {
     if (!ok) { clearReport(); banner("err", `ingest failed (${status}): ${data?.error || "unknown error"}`); return; }
     if (data.rules) { $("source").value = data.rules; detectDecision(); }
     clearReport();
-    (data.rounds || []).forEach((r) => {
-      banner(r.blockers > 0 ? "err" : "ok", `round ${r.n}: ${r.blockers} blocker(s)` + (r.compileError ? " — compile error" : ""));
-    });
-    banner(data.converged ? "ok" : "err",
-      data.converged ? "✓ converged: complete and consistent" : `stopped with ${data.blockers} blocker(s) after ${(data.rounds || []).length} round(s)`);
+    $("report").appendChild(renderIngestSteps(data.rounds, data.converged, data.blockers));
     ((data.verify && data.verify.findings) || []).forEach(renderFinding);
     await showTrace();
     await showGraph();
@@ -139,6 +158,28 @@ async function ingest() {
   } finally {
     btn.disabled = false; btn.textContent = "Ingest";
   }
+}
+
+// renderIngestSteps visualizes the deterministic red→green loop: the LLM drafts, then each round the
+// engine verifies and the blocker count drives the next repair — until it converges (or stops). The engine,
+// not the LLM, decides when it's done.
+function renderIngestSteps(rounds, converged, blockers) {
+  const wrap = document.createElement("div");
+  wrap.className = "steps";
+  const add = (cls, label, sub) => {
+    const s = document.createElement("div");
+    s.className = "step " + cls;
+    s.innerHTML = `<span class="s-label">${escapeHtml(label)}</span>` + (sub ? `<span class="s-sub">${escapeHtml(sub)}</span>` : "");
+    wrap.appendChild(s);
+  };
+  add("done", "Draft", "LLM");
+  (rounds || []).forEach((r) => {
+    if (r.compileError) add("bad", "Round " + r.n, "compile error");
+    else add(r.blockers > 0 ? "bad" : "ok", "Round " + r.n, r.blockers + (r.blockers === 1 ? " blocker" : " blockers"));
+  });
+  add(converged ? "ok" : "bad", converged ? "✓ Converged" : "Stopped",
+    converged ? "proved complete & consistent" : (blockers || 0) + " blocker(s) left");
+  return wrap;
 }
 
 // ---- traceability + coverage (LLM-free) ----
@@ -581,6 +622,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("explain-btn").addEventListener("click", explainLast);
   $("tests-btn").addEventListener("click", genTests);
   $("settings-btn").addEventListener("click", openSettings);
+  $("llm-status").addEventListener("click", openSettings);
   $("settings").addEventListener("close", onSettingsClose);
   $("source").addEventListener("input", detectDecision);
   // Submit chat on Cmd/Ctrl+Enter.
