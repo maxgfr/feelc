@@ -1,5 +1,11 @@
 # feelc
 
+[![CI](https://github.com/maxgfr/feelc/actions/workflows/ci.yml/badge.svg)](https://github.com/maxgfr/feelc/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/maxgfr/feelc?sort=semver)](https://github.com/maxgfr/feelc/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
+[![Go](https://img.shields.io/badge/go-1.23%2B-00ADD8.svg)](https://go.dev/)
+[![Playground](https://img.shields.io/badge/try-WASM%20playground-4ea1ff.svg)](https://maxgfr.github.io/feelc/playground/)
+
 > **An AI-native business-rules engine** (DMN/FEEL) **compiled to Go**: an LLM writes and explains the
 > rules, and the engine *proves* and runs them — **100% deterministic, reproducible and auditable**
 > (no LLM in the core). In the spirit of IBM ODM/ILOG, reimagined for the age of LLMs: author by
@@ -8,6 +14,34 @@
 
 **▶ [Try the playground](https://maxgfr.github.io/feelc/playground/)** — the real engine, compiled to
 WebAssembly, runs entirely in your browser (no backend). Or [read the docs](https://maxgfr.github.io/feelc/).
+
+## Quick start
+
+One CGO-free static binary, no runtime dependencies:
+
+```sh
+git clone https://github.com/maxgfr/feelc && cd feelc
+go build -o feelc ./cmd/feelc          # Go 1.23+ (or: docker build -t feelc .)
+
+cat > tax.rules <<'RULES'
+input income : number >= 0
+decision band : string {
+  needs: income
+  hit: first
+  >= 50000 => "high"
+  >= 20000 => "medium"
+  default  => "low"
+}
+RULES
+
+./feelc verify --rules tax.rules                                  # proves it's complete & conflict-free
+./feelc run    --rules tax.rules --decision band --input '{"income":30000}'   # → "medium"
+./feelc serve  --ui                                              # or author it by chatting with your LLM
+```
+
+`verify` is the point: before you ever run a rule, the engine **proves** every input is covered and no
+two rules conflict — with a concrete counterexample when they don't. Then `serve --ui` lets an LLM draft
+the next rule while the engine keeps proving it.
 
 ## Why
 
@@ -40,6 +74,30 @@ deterministic Go that never calls a model. That separation is the point — it m
   compiled IR, never from LLM prose, so every decision cites its real origin.
 - **Project-aware editing at scale.** Edit one module with full cross-module context via deterministic
   lexical retrieval (no embeddings) — see [Project mode](#project-mode).
+
+## How it compares
+
+Most rule engines make you **hand-write** rules and then **trust** them. feelc's bet is the opposite: the
+**AI writes** the rules (plain text you review like code) and the **engine proves** them before they ship.
+
+| | **feelc** | Drools | Camunda DMN | GoRules / ZEN | json-rules-engine |
+|---|---|---|---|---|---|
+| **AI authoring** | native — drafts *and* repairs against the engine | — | — | — | — |
+| **Rule format** | plain-text `.rules`, **git-diffable** | DRL text | DMN 1.x **XML** | JSON model | JSON conditions |
+| **Formal verification** | completeness · conflicts · dead rules **(+ SMT proofs)** | — | — | — | — |
+| **Types & numbers** | typed · **exact decimal** (money-safe) | typed (JVM) | FEEL · double | weakly typed | untyped JS |
+| **Deploy** | **one static binary** / ~16 MB Docker, no LLM at runtime | JVM | JVM / BPM platform | Go/Rust lib | npm lib |
+| **Try in browser** | **WASM playground** | — | modeler demo | playground | — |
+
+Rough by nature — each tool has strengths feelc doesn't (Drools' Rete/CEP, Camunda's BPM suite, GoRules'
+polished visual editor). What's **unique to feelc** is the combination: text rules an AI drafts, a
+deterministic engine that *proves* them, and a decision graph you can actually read — in a single binary.
+
+![feelc decision-requirements graph — modules colour-coded, cross-module dependency dashed, verification findings overlaid](docs/img/decision-graph.png)
+
+*The built-in decision graph (`feelc serve --ui` or `feelc graph`): inputs and decisions across modules,
+colour-coded per module, with the cross-module dependency dashed and verification findings overlaid. Pan,
+zoom and click any node to inspect its type, hit policy, source line and findings.*
 
 ## Commands
 
@@ -110,6 +168,12 @@ the external [ultradoc](https://github.com/maxgfr/ultradoc) skill.
 Per the thesis — **AI authors, the engine executes** — there are two interchangeable authoring paths.
 The LLM only drafts `.rules`; every result you see comes from the deterministic engine
 (see [ADR 0008](docs/adr/0008-ai-authoring-layer.md)).
+
+![The red→green ingest loop: the LLM drafts, the engine verifies each round, blockers drive the next repair until it converges](docs/img/ingest-loop.png)
+
+*The **engine**, not the LLM, decides when authoring is done: it drafts, verifies, and feeds the
+deterministic blockers (with counterexamples) back for repair until the model is provably complete and
+consistent (`POST /v1/ingest`, or the skill's red→green loop).*
 
 **1. In-browser chat UI (bring-your-own LLM).** `feelc serve --ui` serves a zero-dependency embedded
 UI: chat to describe your rules, the assistant drafts the model, and one click runs `verify` / `run`

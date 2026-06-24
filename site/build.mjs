@@ -32,6 +32,7 @@ const DOCS = [
   { href: "cli.html", file: "cli.md", title: "CLI reference" },
   { href: "http-api.html", file: "http-api.md", title: "HTTP API" },
   { href: "project-mode.html", file: "project-mode.md", title: "Project mode" },
+  { href: "ai-authoring.html", file: "ai-authoring.md", title: "AI authoring" },
   { href: "ir-format.html", file: "ir-format.md", title: "IR format" },
   { href: "error-schema.html", file: "error-schema.md", title: "Error schema" },
   { href: "architecture.html", file: "architecture.md", title: "Architecture" },

@@ -18,6 +18,7 @@ The docs come in three layers:
 | [CLI reference](cli.md) | Every `feelc` subcommand, its flags, and exit codes. |
 | [HTTP API](http-api.md) | The complete `feelc serve` route table (single-model + project + AI + health). |
 | [Project mode](project-mode.md) | Multi-module workspaces: namespaced merge, `uses` bindings, the web editor. |
+| [AI authoring](ai-authoring.md) | Bring-your-own-LLM authoring: the chat UI, the portable skill, and the red→green ingest loop. |
 | [IR format](ir-format.md) | The canonical compiled-model wire format (`.ir.bin`) and its hash. |
 | [Error schema](error-schema.md) | The structured `diag.Error` shape returned by the compiler/API. |
 | [Architecture](architecture.md) | Package map and the compile pipeline (for contributors). |
