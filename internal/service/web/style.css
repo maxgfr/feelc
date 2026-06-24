@@ -72,9 +72,28 @@ textarea {
 .banner.ok { background: #15281f; color: var(--ok); }
 .banner.err { background: #2c1c1c; color: var(--err); }
 
-.graph { margin-top: 10px; overflow: auto; }
-.graph svg { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; }
+.graph { margin-top: 10px; }
+.graph:empty { display: none; }
+.graph-wrap { position: relative; }
+.graph svg.drg { display: block; width: 100%; height: 58vh; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; cursor: grab; touch-action: none; }
+.graph svg.drg.grabbing { cursor: grabbing; }
 .graph text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; pointer-events: none; }
+.gnode { cursor: pointer; }
+.gnode:hover rect { filter: brightness(1.15); }
+.graph-controls { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; gap: 4px; }
+.graph-controls button { width: 28px; height: 28px; padding: 0; font-size: 15px; line-height: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--fg); opacity: .85; }
+.graph-controls button:hover { opacity: 1; }
+.graph-inspect { position: absolute; top: 8px; left: 8px; z-index: 2; max-width: 260px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px 12px; font-size: 12px; line-height: 1.55; box-shadow: 0 6px 22px rgba(0,0,0,.4); }
+.graph-inspect[hidden] { display: none; }
+.graph-inspect b { font-size: 13px; }
+.graph-inspect code { font-family: var(--mono); background: var(--panel2); border-radius: 4px; padding: 0 4px; }
+.graph-inspect .gi-kind { color: var(--muted); text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
+.graph-inspect .gi-find { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--border); color: #ffd2c4; font-family: var(--mono); font-size: 11px; }
+.graph-inspect .gi-close { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; line-height: 1; background: transparent; border: none; color: var(--muted); font-size: 16px; }
+.graph-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 11px; color: var(--muted); }
+.graph-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.graph-legend .lg-pill { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+.graph-legend .lg-line { width: 16px; height: 0; border-top: 2px dashed #c08cf0; display: inline-block; }
 
 .ingest { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
 .ingest summary { color: var(--muted); font-size: 12px; cursor: pointer; margin-bottom: 8px; }

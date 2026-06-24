@@ -25,19 +25,24 @@ const (
 
 // Node is a graph vertex.
 type Node struct {
-	ID        string   `json:"id"`   // identifier-safe, stable, unique
-	Name      string   `json:"name"` // original feelc name
-	Kind      NodeKind `json:"kind"`
-	Type      string   `json:"type,omitempty"`      // inputs: number/string/boolean
-	HitPolicy string   `json:"hitPolicy,omitempty"` // decision tables
-	Severity  string   `json:"severity,omitempty"`  // worst finding severity (error>warning>info)
-	Findings  []string `json:"findings,omitempty"`  // finding messages attached to this node
+	ID           string   `json:"id"`   // identifier-safe, stable, unique
+	Name         string   `json:"name"` // original feelc name (qualified module__name in project mode)
+	Kind         NodeKind `json:"kind"`
+	Type         string   `json:"type,omitempty"`         // inputs: number/string/boolean
+	HitPolicy    string   `json:"hitPolicy,omitempty"`    // decision tables
+	DecisionKind string   `json:"decisionKind,omitempty"` // decisions: "table" | "expression"
+	Module       string   `json:"module,omitempty"`       // project mode: the owning module (prefix before "__")
+	Local        string   `json:"local,omitempty"`        // project mode: the unqualified name within its module
+	Line         int      `json:"line,omitempty"`         // 1-based source line of a decision (0 if unknown)
+	Severity     string   `json:"severity,omitempty"`     // worst finding severity (error>warning>info)
+	Findings     []string `json:"findings,omitempty"`     // finding messages attached to this node
 }
 
 // Edge is a dependency: From feeds Into (From -> Into).
 type Edge struct {
-	From string `json:"from"`
-	Into string `json:"into"`
+	From        string `json:"from"`
+	Into        string `json:"into"`
+	CrossModule bool   `json:"crossModule,omitempty"` // project mode: From and Into live in different modules
 }
 
 // Graph is the renderable DRG.
@@ -91,15 +96,18 @@ func Build(cm *ir.CompiledModel, rep *verify.Report) *Graph {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		g.Nodes = append(g.Nodes, Node{ID: mkID(n), Name: n, Kind: KindInput, Type: typeName(cm.Inputs[n])})
+		mod, local := splitModule(n)
+		g.Nodes = append(g.Nodes, Node{ID: mkID(n), Name: n, Kind: KindInput, Type: typeName(cm.Inputs[n]), Module: mod, Local: local})
 	}
 
 	// Decision nodes (declared/topological order).
 	for i := range cm.Decisions {
 		d := &cm.Decisions[i]
-		node := Node{ID: mkID(d.Name), Name: d.Name, Kind: KindDecision}
+		mod, local := splitModule(d.Name)
+		node := Node{ID: mkID(d.Name), Name: d.Name, Kind: KindDecision, Module: mod, Local: local, Line: d.Line, DecisionKind: "expression"}
 		if d.Kind == ir.KindTable && d.Table != nil {
 			node.HitPolicy = hitName(d.Table.HitPolicy)
+			node.DecisionKind = "table"
 		}
 		if a := byDec[d.Name]; a != nil {
 			node.Severity = a.sev
@@ -112,18 +120,30 @@ func Build(cm *ir.CompiledModel, rep *verify.Report) *Graph {
 	for i := range cm.Decisions {
 		d := &cm.Decisions[i]
 		into := idOf[d.Name]
+		dMod, _ := splitModule(d.Name)
 		for _, dep := range d.Deps {
 			from, ok := idOf[dep]
 			if !ok {
 				// A dependency neither declared as input nor decision: surface it as an input node
 				// rather than dropping the edge (honest: never hide a requirement).
 				from = mkID(dep)
-				g.Nodes = append(g.Nodes, Node{ID: from, Name: dep, Kind: KindInput})
+				mod, local := splitModule(dep)
+				g.Nodes = append(g.Nodes, Node{ID: from, Name: dep, Kind: KindInput, Module: mod, Local: local})
 			}
-			g.Edges = append(g.Edges, Edge{From: from, Into: into})
+			depMod, _ := splitModule(dep)
+			g.Edges = append(g.Edges, Edge{From: from, Into: into, CrossModule: dMod != "" && depMod != "" && dMod != depMod})
 		}
 	}
 	return g
+}
+
+// splitModule splits a possibly-qualified name "module__local" into (module, local). A name without the
+// "__" namespace separator (single-file mode, or an unqualified input) returns ("", name).
+func splitModule(name string) (module, local string) {
+	if i := strings.Index(name, "__"); i >= 0 {
+		return name[:i], name[i+2:]
+	}
+	return "", name
 }
 
 // JSON renders the graph as indented JSON.
@@ -162,12 +182,18 @@ func (g *Graph) DOT() string {
 	return b.String()
 }
 
-// Mermaid renders the graph as a Mermaid flowchart (left-to-right).
+// Mermaid renders the graph as a Mermaid flowchart (left-to-right). In project mode (>1 module) nodes are
+// grouped into per-module subgraphs and cross-module dependencies are drawn as dashed edges, so the module
+// boundaries and the wiring between them read at a glance.
 func (g *Graph) Mermaid() string {
 	var b strings.Builder
 	b.WriteString("flowchart LR\n")
-	for _, n := range g.Nodes {
+
+	nodeDef := func(n Node, indent string) {
 		label := n.Name
+		if n.Module != "" {
+			label = n.Local // inside a module subgraph the prefix is redundant
+		}
 		switch {
 		case n.Kind == KindInput && n.Type != "":
 			label += "<br/>" + n.Type
@@ -176,13 +202,42 @@ func (g *Graph) Mermaid() string {
 		}
 		label = "\"" + strings.ReplaceAll(label, "\"", "'") + "\""
 		if n.Kind == KindInput {
-			b.WriteString("  " + n.ID + "([" + label + "])\n") // stadium = input
+			b.WriteString(indent + n.ID + "([" + label + "])\n") // stadium = input
 		} else {
-			b.WriteString("  " + n.ID + "[" + label + "]\n") // rectangle = decision
+			b.WriteString(indent + n.ID + "[" + label + "]\n") // rectangle = decision
 		}
 	}
+
+	if mods := orderedModules(g.Nodes); len(mods) > 1 {
+		for _, mod := range mods {
+			if mod == "" {
+				continue // ungrouped nodes emitted after the subgraphs
+			}
+			b.WriteString("  subgraph " + sanitize(mod) + "[\"" + strings.ReplaceAll(mod, "\"", "'") + "\"]\n")
+			for _, n := range g.Nodes {
+				if n.Module == mod {
+					nodeDef(n, "    ")
+				}
+			}
+			b.WriteString("  end\n")
+		}
+		for _, n := range g.Nodes {
+			if n.Module == "" {
+				nodeDef(n, "  ")
+			}
+		}
+	} else {
+		for _, n := range g.Nodes {
+			nodeDef(n, "  ")
+		}
+	}
+
 	for _, e := range g.Edges {
-		b.WriteString("  " + e.From + " --> " + e.Into + "\n")
+		arrow := " --> "
+		if e.CrossModule {
+			arrow = " -.-> " // cross-module dependency: dashed
+		}
+		b.WriteString("  " + e.From + arrow + e.Into + "\n")
 	}
 	// Severity classes + assignments.
 	b.WriteString("  classDef error fill:#e06b6b,stroke:#a33,color:#1a1a1a;\n")
@@ -194,6 +249,19 @@ func (g *Graph) Mermaid() string {
 		}
 	}
 	return b.String()
+}
+
+// orderedModules returns the distinct module names in first-appearance order (empty string = ungrouped).
+func orderedModules(nodes []Node) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, n := range nodes {
+		if !seen[n.Module] {
+			seen[n.Module] = true
+			out = append(out, n.Module)
+		}
+	}
+	return out
 }
 
 // dotEscape escapes a value for a DOT double-quoted string (backslash and quote).

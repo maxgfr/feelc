@@ -246,60 +246,155 @@ async function showGraph() {
   }
   renderGraph(g, data.graph);
 }
-// renderGraph lays the DRG out as a left-to-right layered SVG (zero dependency, offline). Rank 0 =
-// inputs; a decision's rank is 1 + the max rank of its dependencies (a fixpoint over the edges).
+// Per-module accent palette (project mode): each module gets a stable colour for node borders + legend.
+const MOD_PALETTE = ["#6ea8fe", "#7fd1ae", "#e0a458", "#c08cf0", "#e88aa8", "#5ec8c8", "#b5c46b"];
+
+// renderGraph lays the DRG out as a left-to-right layered SVG (zero dependency, offline) and makes it
+// interactive: wheel-zoom + drag-pan + fit, a legend, click-a-node-to-inspect, module-coloured borders and
+// dashed cross-module edges. Rank 0 = inputs; a decision's rank is 1 + the max rank of its dependencies.
 function renderGraph(container, graph) {
   const nodes = graph.nodes || [], edges = graph.edges || [];
+  container.innerHTML = "";
+  if (!nodes.length) { container.textContent = "nothing to graph yet"; return; }
+
+  // Layered ranks (fixpoint over the edges).
   const rank = {};
   nodes.forEach((n) => { rank[n.id] = 0; });
   for (let pass = 0; pass <= nodes.length; pass++) {
     let changed = false;
-    edges.forEach((e) => {
-      const r = (rank[e.from] || 0) + 1;
-      if (r > (rank[e.into] || 0)) { rank[e.into] = r; changed = true; }
-    });
+    edges.forEach((e) => { const r = (rank[e.from] || 0) + 1; if (r > (rank[e.into] || 0)) { rank[e.into] = r; changed = true; } });
     if (!changed) break;
   }
+
+  // Modules → stable colours.
+  const modules = [...new Set(nodes.map((n) => n.module).filter(Boolean))];
+  const modColor = {};
+  modules.forEach((m, i) => { modColor[m] = MOD_PALETTE[i % MOD_PALETTE.length]; });
+
+  // Columns by rank; within a column, group by module then name for tidy adjacency.
   const cols = {};
   nodes.forEach((n) => { const r = rank[n.id] || 0; (cols[r] = cols[r] || []).push(n); });
-  const colW = 210, rowH = 64, nodeW = 160, nodeH = 38, padX = 16, padY = 16;
+  const colW = 220, rowH = 72, nodeW = 170, nodeH = 46, padX = 30, padY = 30;
   const pos = {};
   let maxRows = 0;
   const rankKeys = Object.keys(cols).map(Number).sort((a, b) => a - b);
   rankKeys.forEach((r) => {
+    cols[r].sort((a, b) => (a.module || "").localeCompare(b.module || "") || a.name.localeCompare(b.name));
     cols[r].forEach((n, i) => { pos[n.id] = { x: padX + r * colW, y: padY + i * rowH }; });
     maxRows = Math.max(maxRows, cols[r].length);
   });
   const W = padX * 2 + (rankKeys.length - 1) * colW + nodeW;
   const H = padY * 2 + Math.max(1, maxRows) * rowH;
-  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", height: String(Math.min(H, 460)) });
+
+  const wrap = document.createElement("div");
+  wrap.className = "graph-wrap";
+
+  // Zoom/pan controls.
+  const controls = document.createElement("div");
+  controls.className = "graph-controls";
+  const mkBtn = (label, title, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.title = title; b.onclick = fn; controls.appendChild(b); };
+
+  // SVG with a marker per edge style.
+  const svg = svgEl("svg", { class: "drg", width: "100%", viewBox: `0 0 ${W} ${H}` });
   const defs = svgEl("defs", {});
-  const marker = svgEl("marker", { id: "arrow", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
-  marker.appendChild(svgEl("path", { d: "M0,0 L10,5 L0,10 z", fill: "#6b7785" }));
-  defs.appendChild(marker);
+  const mkMarker = (id, color) => { const m = svgEl("marker", { id, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }); m.appendChild(svgEl("path", { d: "M0,0 L10,5 L0,10 z", fill: color })); return m; };
+  defs.appendChild(mkMarker("arrow", "#6b7785"));
+  defs.appendChild(mkMarker("arrowx", "#c08cf0"));
   svg.appendChild(defs);
+
+  // Edges (dashed + purple when cross-module).
   edges.forEach((e) => {
     const a = pos[e.from], b = pos[e.into];
     if (!a || !b) return;
     const x1 = a.x + nodeW, y1 = a.y + nodeH / 2, x2 = b.x, y2 = b.y + nodeH / 2, mx = (x1 + x2) / 2;
-    svg.appendChild(svgEl("path", { d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`, fill: "none", stroke: "#6b7785", "stroke-width": "1.5", "marker-end": "url(#arrow)" }));
+    svg.appendChild(svgEl("path", {
+      d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`, fill: "none",
+      stroke: e.crossModule ? "#c08cf0" : "#6b7785", "stroke-width": e.crossModule ? "1.8" : "1.5",
+      "stroke-dasharray": e.crossModule ? "5,4" : "0", "marker-end": e.crossModule ? "url(#arrowx)" : "url(#arrow)",
+    }));
   });
+
+  // Inspect panel (populated on node click).
+  const inspect = document.createElement("div");
+  inspect.className = "graph-inspect";
+  inspect.hidden = true;
+  const selectNode = (n) => {
+    const rows = [`<b>${escapeHtml(n.local || n.name)}</b>`, `<span class="gi-kind">${n.kind}${n.decisionKind ? " · " + n.decisionKind : ""}</span>`];
+    if (n.module) rows.push(`module: <code>${escapeHtml(n.module)}</code>`);
+    if (n.type) rows.push(`type: ${escapeHtml(n.type)}`);
+    if (n.hitPolicy) rows.push(`hit policy: ${escapeHtml(n.hitPolicy)}`);
+    if (n.line) rows.push(`source line ${n.line}`);
+    if (n.findings && n.findings.length) rows.push(`<div class="gi-find">${n.findings.map((f) => "• " + escapeHtml(f)).join("<br/>")}</div>`);
+    inspect.innerHTML = `<button class="gi-close" type="button" title="close">×</button>` + rows.join("<br/>");
+    inspect.querySelector(".gi-close").onclick = () => { inspect.hidden = true; };
+    inspect.hidden = false;
+  };
+
+  // Nodes.
   const sevFill = { error: "#e06b6b", warning: "#d9a441", info: "#7fb3ff" };
   nodes.forEach((n) => {
     const p = pos[n.id];
     if (!p) return;
+    const node = svgEl("g", { class: "gnode", transform: `translate(${p.x},${p.y})` });
     const fill = sevFill[n.severity] || (n.kind === "input" ? "#243240" : "#1f6feb");
-    const rect = svgEl("rect", { x: p.x, y: p.y, width: nodeW, height: nodeH, rx: n.kind === "input" ? 18 : 6, fill, stroke: "#2a3340" });
+    const stroke = n.module ? modColor[n.module] : "#2a3340";
+    const rect = svgEl("rect", { x: 0, y: 0, width: nodeW, height: nodeH, rx: n.kind === "input" ? 22 : 8, fill, stroke, "stroke-width": n.module ? "2" : "1" });
     if (n.findings && n.findings.length) { const t = svgEl("title", {}); t.textContent = n.findings.join("\n"); rect.appendChild(t); }
-    svg.appendChild(rect);
-    let label = n.name;
-    if (n.kind === "input" && n.type) label += " : " + n.type;
-    else if (n.hitPolicy) label += " [" + n.hitPolicy + "]";
-    const txt = svgEl("text", { x: p.x + nodeW / 2, y: p.y + nodeH / 2 + 4, "text-anchor": "middle", fill: "#fff", "font-size": "12" });
-    txt.textContent = label.length > 22 ? label.slice(0, 21) + "…" : label;
-    svg.appendChild(txt);
+    node.appendChild(rect);
+    if (n.module) {
+      // a dark chip keeps the module tag legible on any node fill (severity colours, light blues, …)
+      node.appendChild(svgEl("rect", { x: 6, y: 4, width: n.module.length * 6 + 8, height: 13, rx: 3, fill: "rgba(0,0,0,0.34)" }));
+      const mt = svgEl("text", { x: 10, y: 13.5, "font-size": "9", fill: modColor[n.module], "font-weight": "700" });
+      mt.textContent = n.module; node.appendChild(mt);
+    }
+    const name = n.local || n.name;
+    const lbl = svgEl("text", { x: nodeW / 2, y: n.module ? nodeH / 2 + 9 : nodeH / 2 + 4, "text-anchor": "middle", fill: "#fff", "font-size": "12", "font-weight": "500" });
+    lbl.textContent = name.length > 20 ? name.slice(0, 19) + "…" : name;
+    node.appendChild(lbl);
+    const sub = n.kind === "input" ? (n.type || "") : (n.hitPolicy || (n.decisionKind === "expression" ? "expr" : ""));
+    if (sub) { const st = svgEl("text", { x: nodeW / 2, y: nodeH - 6, "text-anchor": "middle", fill: "#c5d0dc", "font-size": "9" }); st.textContent = sub; node.appendChild(st); }
+    node.addEventListener("click", (ev) => { ev.stopPropagation(); selectNode(n); });
+    svg.appendChild(node);
   });
-  container.appendChild(svg);
+  svg.addEventListener("click", () => { inspect.hidden = true; });
+
+  // Legend.
+  const legend = document.createElement("div");
+  legend.className = "graph-legend";
+  let lg = `<span><i class="lg-pill" style="border-radius:9px;background:#243240"></i>input</span>`
+    + `<span><i class="lg-pill" style="background:#1f6feb"></i>decision</span>`
+    + `<span><i class="lg-pill" style="background:#e06b6b"></i>error</span>`
+    + `<span><i class="lg-pill" style="background:#d9a441"></i>warning</span>`;
+  if (edges.some((e) => e.crossModule)) lg += `<span><i class="lg-line"></i>cross-module</span>`;
+  modules.forEach((m) => { lg += `<span><i class="lg-pill" style="background:${modColor[m]}"></i>${escapeHtml(m)}</span>`; });
+  legend.innerHTML = lg;
+
+  // viewBox zoom/pan (no library): wheel zooms toward the cursor, drag pans, ⤢ fits.
+  let vb = { x: 0, y: 0, w: W, h: H };
+  const apply = () => svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  const ptr = (ev) => { const r = svg.getBoundingClientRect(); return { x: vb.x + (ev.clientX - r.left) / r.width * vb.w, y: vb.y + (ev.clientY - r.top) / r.height * vb.h }; };
+  const zoomAt = (f, ux, uy) => {
+    const nw = Math.min(W * 6, Math.max(W * 0.15, vb.w * f));
+    f = nw / vb.w;
+    vb = { x: ux - (ux - vb.x) * f, y: uy - (uy - vb.y) * f, w: nw, h: vb.h * f };
+    apply();
+  };
+  mkBtn("+", "zoom in", () => zoomAt(0.8, vb.x + vb.w / 2, vb.y + vb.h / 2));
+  mkBtn("−", "zoom out", () => zoomAt(1.25, vb.x + vb.w / 2, vb.y + vb.h / 2));
+  mkBtn("⤢", "fit", () => { vb = { x: 0, y: 0, w: W, h: H }; apply(); });
+  svg.addEventListener("wheel", (ev) => { ev.preventDefault(); const p = ptr(ev); zoomAt(ev.deltaY < 0 ? 0.85 : 1.18, p.x, p.y); }, { passive: false });
+  let drag = null;
+  svg.addEventListener("mousedown", (ev) => { drag = { x: ev.clientX, y: ev.clientY }; svg.classList.add("grabbing"); });
+  svg.addEventListener("mousemove", (ev) => { if (!drag) return; const r = svg.getBoundingClientRect(); vb.x -= (ev.clientX - drag.x) / r.width * vb.w; vb.y -= (ev.clientY - drag.y) / r.height * vb.h; drag = { x: ev.clientX, y: ev.clientY }; apply(); });
+  const endDrag = () => { drag = null; svg.classList.remove("grabbing"); };
+  svg.addEventListener("mouseup", endDrag);
+  svg.addEventListener("mouseleave", endDrag);
+
+  wrap.appendChild(controls);
+  wrap.appendChild(svg);
+  wrap.appendChild(inspect);
+  container.appendChild(wrap);
+  container.appendChild(legend);
 }
 
 // ---- simulator (question-flow) ----

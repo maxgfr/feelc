@@ -86,6 +86,25 @@ decision d : string {
 	}
 }
 
+// TestMermaidModules: in project mode the Mermaid output groups nodes into per-module subgraphs, labels
+// them by their local (unqualified) name, and draws cross-module dependencies as dashed edges.
+func TestMermaidModules(t *testing.T) {
+	g := &graph.Graph{
+		Model: "lending",
+		Nodes: []graph.Node{
+			{ID: "n_kyc__passed", Name: "kyc__passed", Local: "passed", Module: "kyc", Kind: graph.KindDecision, DecisionKind: "expression"},
+			{ID: "n_loan__approved", Name: "loan__approved", Local: "approved", Module: "loan", Kind: graph.KindDecision, HitPolicy: "first"},
+		},
+		Edges: []graph.Edge{{From: "n_kyc__passed", Into: "n_loan__approved", CrossModule: true}},
+	}
+	mm := g.Mermaid()
+	for _, want := range []string{`subgraph n_kyc["kyc"]`, `subgraph n_loan["loan"]`, `n_kyc__passed -.-> n_loan__approved`, `["passed"]`} {
+		if !strings.Contains(mm, want) {
+			t.Errorf("mermaid missing %q in:\n%s", want, mm)
+		}
+	}
+}
+
 // build with a nil report must not panic (graph without verification).
 func TestNilReport(t *testing.T) {
 	cm, _, _, err := loader.Compile([]byte("model \"t\" {}\ninput n : number\ndecision d : number = n + 1"))
