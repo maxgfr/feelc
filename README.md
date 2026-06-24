@@ -85,7 +85,7 @@ Most rule engines make you **hand-write** rules and then **trust** them. feelc's
 | **AI authoring** | native — drafts *and* repairs against the engine | — | — | — | — |
 | **Rule format** | plain-text `.rules`, **git-diffable** | DRL text | DMN 1.x **XML** | JSON model | JSON conditions |
 | **Formal verification** | completeness · conflicts · dead rules **(+ SMT proofs)** | — | — | — | — |
-| **Types & numbers** | typed · **exact decimal** (money-safe) | typed (JVM) | FEEL · double | weakly typed | untyped JS |
+| **Types & numbers** | typed · **exact decimal** (money-safe) | typed (JVM) | FEEL · decimal | dynamic | untyped JS |
 | **Deploy** | **one static binary** / ~16 MB Docker, no LLM at runtime | JVM | JVM / BPM platform | Go/Rust lib | npm lib |
 | **Try in browser** | **WASM playground** | — | modeler demo | playground | — |
 
