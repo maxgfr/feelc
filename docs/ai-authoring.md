@@ -91,3 +91,18 @@ hundreds of modules. As always, the LLM only drafts the module text; the engine 
   IR, not from LLM prose.
 
 That is the whole point: **AI for the writing, the engine for the truth.**
+
+## Measuring authoring quality (`internal/eval`)
+
+Because the engine is the oracle, authoring quality is **measurable**, not subjective. `internal/eval`
+holds a frozen, solution-agnostic corpus of `prompt → reference cases` tasks and a **deterministic
+`Score`**: a produced model is graded on whether it COMPILES, VERIFIES with zero blockers, and
+REPRODUCES every reference case (`Result.OK()`). The LLM is the only nondeterminism in the loop; `Score`
+itself is pure, so an authoring pipeline's first-try success rate and repair-rounds-to-green become real
+numbers. The live driver plugs an LLM (via `POST /v1/ingest` / the MCP tools) in front of `Score`; the
+scorer and corpus are regression-tested against reference solutions (`internal/eval/eval_test.go`).
+
+## Agent integration (MCP)
+
+Beyond the in-browser UI and HTTP API, `feelc mcp` exposes verify/run/explain/check/… as
+[Model Context Protocol](mcp.md) tools, so any agent can drive the same red→green loop directly.

@@ -29,6 +29,24 @@ func FuzzCompile(f *testing.F) {
 	})
 }
 
+// FuzzExprLower targets the literal-expression lowering path — including the post-ADR-0020..0025
+// builtins (round/modulo/power), string predicates and the bounded-quantifier macro: an arbitrary
+// expression body must compile to a clean error or a program, never panic.
+func FuzzExprLower(f *testing.F) {
+	for _, e := range []string{
+		"x + 1", "power(x, 3)", "round(x, 2)", "modulo(x, 2)", "abs(x - y)",
+		"starts_with(s, \"a\")", "contains(s, \"-\")",
+		"every of {x, y} satisfies ? < 10", "some of {x} satisfies ? > 0",
+		"if x > 0 then power(x, 2) else 0",
+	} {
+		f.Add(e)
+	}
+	const head = "model \"m\" {}\ninput x : number\ninput y : number\ninput s : string\ndecision d : number = "
+	f.Fuzz(func(_ *testing.T, expr string) {
+		_, _, _, _ = Compile([]byte(head + expr + "\n")) // must not panic; an error is fine
+	})
+}
+
 // FuzzDecodeIR asserts that decoding an UNTRUSTED .ir.bin blob never panics (the codec-hardening claim of
 // ADR 0006). The seed is a real encoding; go-fuzz then mutates the bytes. A blob that decodes cleanly must
 // also re-encode without panicking.

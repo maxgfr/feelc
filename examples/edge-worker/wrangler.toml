@@ -3,4 +3,4 @@ main = "src/worker.ts"
 compatibility_date = "2024-09-23"
 
 # Cloudflare bundles `.wasm` imports as WebAssembly modules natively, so no extra rules are needed
-# for `import wasm from "@feelc/engine/wasm/feelc.wasm"`.
+# for `import wasm from "feelc/wasm/feelc.wasm"`.

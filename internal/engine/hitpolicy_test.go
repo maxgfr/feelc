@@ -132,6 +132,56 @@ decision r : number {
 	}
 }
 
+// TestHitOutputOrder: OUTPUT ORDER returns ALL matching rules' outputs, sorted by the declared
+// output-value priority (descending) — like RULE ORDER but ordered by output priority, not rule order.
+func TestHitOutputOrder(t *testing.T) {
+	src := `model "m" {}
+input score : number
+decision verdicts : string {
+  needs: score
+  hit: output order
+  priority: "reject", "review", "approve"
+     >= 0   => "approve"
+     >= 700 => "review"
+     < 600  => "reject"
+}`
+	asStrings := func(out any) []string {
+		xs, ok := out.([]any)
+		if !ok {
+			t.Fatalf("expected list, got %T (%v)", out, out)
+		}
+		ss := make([]string, len(xs))
+		for i, x := range xs {
+			ss[i], _ = x.(string)
+		}
+		return ss
+	}
+	// score=800 matches approve(>=0) AND review(>=700); priority desc -> review before approve.
+	out, err := runStr(t, src, "verdicts", map[string]any{"score": 800})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := asStrings(out); len(got) != 2 || got[0] != "review" || got[1] != "approve" {
+		t.Errorf("output order(800) = %v, expected [review approve]", got)
+	}
+	// score=500 matches approve(>=0) AND reject(<600); priority desc -> reject before approve.
+	out2, err := runStr(t, src, "verdicts", map[string]any{"score": 500})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := asStrings(out2); len(got) != 2 || got[0] != "reject" || got[1] != "approve" {
+		t.Errorf("output order(500) = %v, expected [reject approve]", got)
+	}
+	// score=650 matches approve only -> single-element list.
+	out3, err := runStr(t, src, "verdicts", map[string]any{"score": 650})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := asStrings(out3); len(got) != 1 || got[0] != "approve" {
+		t.Errorf("output order(650) = %v, expected [approve]", got)
+	}
+}
+
 func TestHitPriority(t *testing.T) {
 	src := `model "m" {}
 input score : number

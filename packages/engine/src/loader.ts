@@ -17,6 +17,7 @@ export interface FeelcWasm {
   load(json: string): string;
   export(json: string): string;
   evalCompiled(json: string): string;
+  evalCompiledBatch(json: string): string;
   infoCompiled(json: string): string;
   requiredCompiled(json: string): string;
   dispose(json: string): string;

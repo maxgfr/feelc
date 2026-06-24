@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { createEngine, FeelcError, type FeelcEngine } from "@feelc/engine";
+import { createEngine, FeelcError, type FeelcEngine } from "feelc";
 
 const MODEL = `model "promo" {}
 
@@ -48,6 +48,27 @@ describe("compile once, evaluate many", () => {
     ]);
     model.dispose();
     expect(() => model.evaluate("discount_pct", {})).toThrow(FeelcError);
+  });
+});
+
+describe("evaluateBatch (one boundary crossing for N rows)", () => {
+  it("matches per-row evaluate() across a batch and isolates a bad row", () => {
+    const model = feelc.compile(MODEL);
+    const rows = [
+      { cart_total: 120, is_member: true },
+      { cart_total: 60, is_member: false },
+      { cart_total: 10, is_member: false },
+    ];
+    const batch = model.evaluateBatch("discount_pct", rows);
+    expect(batch.results.map((r) => ("output" in r ? r.output : r))).toEqual([10, 5, null]);
+    // identical to calling evaluate() per row
+    for (const row of rows) {
+      const single = model.evaluate("discount_pct", row).output;
+      const idx = rows.indexOf(row);
+      const r = batch.results[idx];
+      expect("output" in r ? r.output : undefined).toEqual(single);
+    }
+    model.dispose();
   });
 });
 

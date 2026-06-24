@@ -60,13 +60,18 @@ has **one** scalar output; a decision `: MyContext` has one output per context f
 Supported: literals, variables (input or upstream decision), `+ - * /`, comparisons
 `< <= > >= = !=`, `and`, `or`, `not(x)`, parentheses, the conditional `if c then a else b`, the
 **single-arg** built-ins `floor(x)` / `ceiling(x)` / `round(x)` / `abs(x)` / `trunc(x)` (HALF_EVEN), the
-**two-arg** built-ins `round(x, n)` (n decimal places) and `modulo(x, y)` (floored, DMN; modulo-by-zero
-errors), and **BKM** invocation (`name(a, b)`, inlined at compile time). Example:
+**two-arg** built-ins `round(x, n)` (n decimal places), `modulo(x, y)` (floored, DMN; modulo-by-zero
+errors) and `power(x, n)` (integer-exponent exponentiation, exact; non-integer/negative `n` errors),
+the **string predicates** `starts_with(s, t)` / `ends_with(s, t)` / `contains(s, t)` → boolean (code/
+policy routing; not a string library), **bounded quantifiers** `every of {a, b, c} satisfies ?` /
+`some of {a, b, c} satisfies ?` over a fixed scalar tuple (`?` = element), and **BKM** invocation
+(`name(a, b)`, inlined at compile time). Example:
 `if annual_income > 0 then round(monthly_debt / (annual_income / 12), 2) else 0`.
 
-**NOT supported** (fails compilation): **multi-argument** built-ins beyond `round(x, n)` / `modulo(x, y)`
-(`substring(s, i, n)`, other string/list functions…); `for` / `some` / `every`, lists/filters/
-higher-order functions; `**` (power), unary minus; times of day, date-times, year-month durations,
+**NOT supported** (fails compilation): **multi-argument** built-ins beyond `round(x, n)` / `modulo(x, y)` / `power(x, n)`
+(`substring(s, i, n)`, other string/list functions…); native unbounded `for` / `some x in <list>` /
+`every x in <list>`, lists/filters/higher-order functions (the **bounded** `every/some of {…} satisfies ?`
+form IS supported); the `**` / `^` operators (use `power(x, n)`), unary minus; times of day, date-times, year-month durations,
 timezones; `?` inside a literal-expression (reserved for cells). ⚠️ `sum`/`min`/`max`/`count` are
 **COLLECT hit-policy aggregations** (see below), not functions.
 
@@ -120,6 +125,7 @@ expression. Inlined at compile time; self/mutual recursion is rejected.
 | `collect` | list of all matching outputs |
 | `collect sum` / `min` / `max` / `count` | numeric aggregation of matching outputs |
 | `rule order` | list of outputs, in rule order |
+| `output order` | list of outputs, ordered by output-value priority (`priority:` line) |
 
 ## `null` values and errors (deterministic, frozen)
 

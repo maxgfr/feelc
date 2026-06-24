@@ -137,14 +137,20 @@ func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]mode
 		}
 	}
 	table := &ir.DecisionTable{Inputs: d.Needs, Outputs: outNames, HitPolicy: hp, Agg: agg}
-	if hp == ir.HitPriority {
+	if hp == ir.HitPriority || hp == ir.HitOutputOrder {
+		// Both PRIORITY and OUTPUT ORDER rank outputs by the declared `priority:` list (DMN
+		// outputValues). PRIORITY returns the single highest; OUTPUT ORDER returns them all, sorted.
+		policy := "PRIORITY"
+		if hp == ir.HitOutputOrder {
+			policy = "OUTPUT ORDER"
+		}
 		if len(outNames) != 1 {
 			return ir.Decision{}, diag.Newf(diag.CodePriority, d.Line,
-				"decision %q: PRIORITY requires a single scalar output", d.Name)
+				"decision %q: %s requires a single scalar output", d.Name, policy)
 		}
 		if len(d.Priority) == 0 {
 			return ir.Decision{}, diag.Newf(diag.CodePriority, d.Line,
-				"decision %q: PRIORITY requires a `priority:` line listing the outputs in decreasing priority order", d.Name)
+				"decision %q: %s requires a `priority:` line listing the outputs in decreasing priority order", d.Name, policy)
 		}
 		for _, c := range d.Priority {
 			v, err := literalValue(c.Node)
@@ -517,6 +523,8 @@ func parseHitPolicy(s string, no int) (ir.HitPolicy, ir.Aggregation, error) {
 		return ir.HitPriority, ir.AggNone, nil
 	case "rule order":
 		return ir.HitRuleOrder, ir.AggNone, nil
+	case "output order":
+		return ir.HitOutputOrder, ir.AggNone, nil
 	case "collect":
 		return ir.HitCollect, ir.AggNone, nil
 	case "collect sum":
@@ -529,7 +537,7 @@ func parseHitPolicy(s string, no int) (ir.HitPolicy, ir.Aggregation, error) {
 		return ir.HitCollect, ir.AggCount, nil
 	default:
 		return 0, 0, diag.Newf(diag.CodeHitPolicy, no, "unsupported hit policy: %q", s).
-			WithSuggestion("policies: first, unique, any, priority, rule order, collect[ sum|min|max|count]")
+			WithSuggestion("policies: first, unique, any, priority, rule order, output order, collect[ sum|min|max|count]")
 	}
 }
 

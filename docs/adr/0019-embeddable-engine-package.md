@@ -1,4 +1,4 @@
-# ADR 0019 — Distribute the engine as the `@feelc/engine` npm package
+# ADR 0019 — Distribute the engine as the `feelc` npm package
 
 - **Status**: Accepted (2026-06-24)
 - **Deciders**: maxgfr
@@ -20,7 +20,7 @@ and defeat the determinism claim.
 
 ## Decision
 
-Publish **`@feelc/engine`**, a typed, ESM-only npm package that wraps the existing `cmd/feelc-wasm`
+Publish **`feelc`**, a typed, ESM-only npm package that wraps the existing `cmd/feelc-wasm`
 build — no second engine.
 
 - **In-repo, single source of truth.** Developed as an npm workspace (`packages/engine`); `make wasm`
@@ -50,3 +50,16 @@ build — no second engine.
 - **Bundle size** ~6 MB (~1.5 MB gzipped), loaded lazily on `createEngine()`. A TinyGo "slim" build is
   **deferred** (TinyGo compatibility with `apd` and the FEEL parser is unverified).
 - **ESM-only** (no CJS): keeps `import.meta.url` — used to locate the `.wasm` — clean across all targets.
+
+## Update (2026-06-24)
+
+The package was renamed from `@feelc/engine` to the unscoped **`feelc`**: the `@feelc` npm scope/org did
+not exist, so publishing `@feelc/engine` returned `404 — Scope not found`, and an unscoped name needs no
+org. The decision (ship the WASM engine as a typed, ESM-only npm package) is unchanged — only the name
+and its references were updated (`import … from "feelc"`, the `feelc/wasm/feelc.wasm` subpath, the
+`-w feelc` workspace). While there, the `bin` path was normalized to `bin/feelc-compile.mjs` and
+`repository.url` to `git+https://…git` so it publishes without warnings.
+
+Publishing also moved: a single release pipeline (`.github/workflows/release.yml`) now owns both the
+goreleaser binaries and the gated npm OIDC publish (a tag pushed by `GITHUB_TOKEN` cannot trigger a
+separate `npm.yml`); `npm.yml` is now CI-only. See [RELEASING.md](../../RELEASING.md).

@@ -3,12 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Parity + cross-tool smoke test: @feelc/engine (WASM) vs the native feelc CLI.",
+  "description": "Parity + cross-tool smoke test: feelc (WASM) vs the native feelc CLI.",
   "scripts": {
     "test": "vitest run"
   },
   "dependencies": {
-    "@feelc/engine": "*"
+    "feelc": "*"
   },
   "devDependencies": {
     "vitest": "^2.1.8"

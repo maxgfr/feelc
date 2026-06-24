@@ -22,15 +22,19 @@ const (
 	OpAnd
 	OpOr
 	OpNot
-	OpJmpFalse // conditional jump (if): pops a boolean, jumps to Arg if false
-	OpJmp      // unconditional jump to Arg
-	OpFloor    // round toward -∞ (built-in floor, single-arg)
-	OpCeil     // round toward +∞ (built-in ceiling, single-arg)
-	OpRound    // round to the nearest integer, HALF_EVEN (built-in round, single-arg)
-	OpAbs      // absolute value (built-in abs, single-arg)
-	OpTrunc    // truncate toward zero (built-in trunc, single-arg)
-	OpRoundN   // round to N decimal places, HALF_EVEN (built-in round, two-arg: x, n)
-	OpMod      // floored modulo, DMN semantics x - y*floor(x/y) (built-in modulo, two-arg: x, y)
+	OpJmpFalse   // conditional jump (if): pops a boolean, jumps to Arg if false
+	OpJmp        // unconditional jump to Arg
+	OpFloor      // round toward -∞ (built-in floor, single-arg)
+	OpCeil       // round toward +∞ (built-in ceiling, single-arg)
+	OpRound      // round to the nearest integer, HALF_EVEN (built-in round, single-arg)
+	OpAbs        // absolute value (built-in abs, single-arg)
+	OpTrunc      // truncate toward zero (built-in trunc, single-arg)
+	OpRoundN     // round to N decimal places, HALF_EVEN (built-in round, two-arg: x, n)
+	OpMod        // floored modulo, DMN semantics x - y*floor(x/y) (built-in modulo, two-arg: x, y)
+	OpPow        // integer exponentiation x^n, exact via repeated multiplication (built-in power, two-arg: x, n)
+	OpStartsWith // string prefix predicate (built-in starts_with(s, prefix) -> bool)
+	OpEndsWith   // string suffix predicate (built-in ends_with(s, suffix) -> bool)
+	OpContains   // string substring predicate (built-in contains(s, sub) -> bool)
 )
 
 // Instr: an instruction (opcode + dense integer argument).

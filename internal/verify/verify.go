@@ -111,8 +111,9 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 	t := d.Table
 
 	// Priority hygiene — checked independently of geometric provability (so it also covers Op=Prog
-	// tables): every output value a HitPriority rule can produce should appear in the `priority:` list.
-	if t.HitPolicy == ir.HitPriority {
+	// tables): every output value a HitPriority / HitOutputOrder rule can produce should appear in
+	// the `priority:` list (both policies rank outputs by that list).
+	if t.HitPolicy == ir.HitPriority || t.HitPolicy == ir.HitOutputOrder {
 		checkPriorityCoverage(d.Name, t, rep)
 	}
 

@@ -83,7 +83,7 @@ func TestHitPolicyUnsupportedStructured(t *testing.T) {
 		"input a : number\n" +
 		"decision d : string {\n" +
 		"  needs: a\n" +
-		"  hit: output order\n" +
+		"  hit: collect avg\n" +
 		"  - => \"x\"\n" +
 		"}\n"
 	err := compileSrc(t, src)

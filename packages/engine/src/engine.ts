@@ -1,5 +1,6 @@
 import { loadEngine, type FeelcWasm } from "./loader.js";
 import type {
+  BatchResult,
   CheckClaim,
   CheckResult,
   CreateEngineOptions,
@@ -85,6 +86,23 @@ export class CompiledModel {
       handle: this.handle,
       decision,
       input,
+      explain: opts.explain,
+      full: opts.full,
+    });
+  }
+
+  /**
+   * Evaluate a decision against MANY input rows in ONE WASM call. Amortizes the JS↔WASM boundary +
+   * JSON marshalling (the dominant per-call cost) across all rows; each row's result is identical to
+   * {@link evaluate}. A row that fails yields a `{ error }` entry instead of throwing, so one bad row
+   * never sinks the batch.
+   */
+  evaluateBatch(decision: string, inputs: Inputs[], opts: EvalOptions = {}): BatchResult {
+    this.#assertLive();
+    return call(this.w.evalCompiledBatch, {
+      handle: this.handle,
+      decision,
+      inputs,
       explain: opts.explain,
       full: opts.full,
     });

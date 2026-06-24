@@ -13,8 +13,8 @@
     "examples/*"
   ],
   "scripts": {
-    "build": "npm run build -w @feelc/engine",
-    "test": "npm run test -w @feelc/engine",
+    "build": "npm run build -w feelc",
+    "test": "npm run test -w feelc",
     "build:wasm": "make wasm"
   },
   "engines": {

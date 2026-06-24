@@ -139,6 +139,8 @@ func HitPolicyName(h ir.HitPolicy) string {
 		return "collect"
 	case ir.HitRuleOrder:
 		return "rule order"
+	case ir.HitOutputOrder:
+		return "output order"
 	}
 	return ""
 }

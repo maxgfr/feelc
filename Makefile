@@ -6,7 +6,7 @@ BIN := feelc
 
 all: vet test build
 
-# wasm builds the engine to WebAssembly for the @feelc/engine npm package (and the playground).
+# wasm builds the engine to WebAssembly for the feelc npm package (and the playground).
 # Output lands in packages/engine/wasm/ alongside Go's wasm_exec.js runtime glue. wasm_exec.js moved
 # from $GOROOT/misc/wasm (Go ≤1.23) to $GOROOT/lib/wasm (Go ≥1.24): try the new path, fall back.
 WASM_DIR := packages/engine/wasm

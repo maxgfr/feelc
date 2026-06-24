@@ -1,4 +1,4 @@
-// Conformance suite for @feelc/engine (WASM, self-contained — no native CLI needed):
+// Conformance suite for feelc (WASM, self-contained — no native CLI needed):
 //   1. a frozen regression corpus (corpus/cases.json) — every decision in corpus/*.rules with an
 //      input and the expected output captured from the native CLI (the oracle). Regenerate with
 //      `node packages/engine/scripts/capture-cases.mjs` if the engine's semantics intentionally change.
@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createEngine, FeelcError, type FeelcEngine } from "@feelc/engine";
+import { createEngine, FeelcError, type FeelcEngine } from "feelc";
 
 const corpusDir = fileURLToPath(new URL("./corpus/", import.meta.url));
 
@@ -143,9 +143,6 @@ describe("rejects out-of-scope constructs (compile-time guardian)", () => {
 // recommended additions (see docs/comparison.md). Each is currently rejected; when one is
 // implemented, its test will FAIL — that is the signal to move it to the supported suite + add an ADR.
 const CANDIDATE_GAPS: { name: string; source: string }[] = [
-  { name: "starts_with as a test", source: `model "x" {}\ninput code : string\ndecision d : boolean = starts_with(code, "EU")` },
-  { name: "contains as a test", source: `model "x" {}\ninput s : string\ndecision d : boolean = contains(s, "x")` },
-  { name: "bounded quantifier (every of {a,b})", source: `model "x" {}\ninput a : number\ninput b : number\ndecision d : boolean = every of {a, b} satisfies ? < 26` },
   { name: "downstream read of an upstream context field", source: `model "x" {}\ninput n : number\ntype R = context { v: number }\ndecision up : R {\n  needs: n\n  hit: first\n  >= 0 => 1\n  default => 0\n}\ndecision down : number = up.v` },
 ];
 
@@ -155,4 +152,37 @@ describe("candidate additions — currently rejected (tripwires; see docs/compar
       expect(() => feelc.run(g.source, "d", {})).toThrow(FeelcError);
     });
   }
+});
+
+// --- NEWLY SUPPORTED (ADR 0021 OUTPUT ORDER, 0022 power, 0023 string predicates, 0025 bounded
+// quantifiers). These were tripwires; now they must compile AND produce the right value through WASM.
+describe("newly supported philosophy-compatible features (ADR 0021-0025)", () => {
+  it("bounded quantifiers every/some of {a,b,c} satisfies ?", () => {
+    const src = `model "x" {}\ninput a : number\ninput b : number\ndecision allPos : boolean = every of {a, b} satisfies ? > 0\ndecision anyNeg : boolean = some of {a, b} satisfies ? < 0`;
+    expect(feelc.run(src, "allPos", { a: 1, b: 2 }).output).toBe(true);
+    expect(feelc.run(src, "allPos", { a: 1, b: -2 }).output).toBe(false);
+    expect(feelc.run(src, "anyNeg", { a: 1, b: -2 }).output).toBe(true);
+    expect(feelc.run(src, "anyNeg", { a: 1, b: 2 }).output).toBe(false);
+  });
+
+
+  it("string predicates starts_with / ends_with / contains -> boolean", () => {
+    const src = `model "x" {}\ninput code : string\ndecision sw : boolean = starts_with(code, "EU")\ndecision ew : boolean = ends_with(code, "X")\ndecision ct : boolean = contains(code, "-")`;
+    expect(feelc.run(src, "sw", { code: "EU-1" }).output).toBe(true);
+    expect(feelc.run(src, "sw", { code: "US-1" }).output).toBe(false);
+    expect(feelc.run(src, "ew", { code: "AX" }).output).toBe(true);
+    expect(feelc.run(src, "ct", { code: "AB" }).output).toBe(false);
+  });
+
+  it("power(x, n) exact integer exponentiation", () => {
+    const src = `model "x" {}\ninput b : number\ndecision p : number = power(b, 3)`;
+    expect(feelc.run(src, "p", { b: 2 }).output).toBe(8);
+    expect(feelc.run(src, "p", { b: 10 }).output).toBe(1000);
+  });
+
+  it("OUTPUT ORDER hit policy returns matches ordered by output priority", () => {
+    const src = `model "x" {}\ninput score : number\ndecision v : string {\n  needs: score\n  hit: output order\n  priority: "reject", "review", "approve"\n  >= 0 => "approve"\n  >= 700 => "review"\n  < 600 => "reject"\n}`;
+    expect(feelc.run(src, "v", { score: 800 }).output).toEqual(["review", "approve"]);
+    expect(feelc.run(src, "v", { score: 500 }).output).toEqual(["reject", "approve"]);
+  });
 });

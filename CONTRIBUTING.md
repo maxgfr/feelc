@@ -36,8 +36,10 @@ has its own `go.mod`; it is not part of `./...`.
 ## Commits & release
 
 - **Conventional Commits** (`feat:`, `fix:`, `ci:`, `docs:`, `test:`…): consumed by
-  semantic-release. A `feat:`/`fix:` pushed to `main` triggers a release (goreleaser publishes the
-  multi-OS/arch binaries). Non-release commits (`ci:`, `docs:`, `test:`…) do not publish.
+  semantic-release. A `feat:`/`fix:` pushed to `main` triggers a release — goreleaser publishes the
+  multi-OS/arch binaries to the GitHub Release, and (once npm OIDC is bootstrapped) `feelc` is
+  published to npm. Non-release commits (`ci:`, `docs:`, `test:`…) do not publish. The full pipeline and
+  the one-time npm bootstrap are documented in [RELEASING.md](RELEASING.md).
 - End messages with: `Co-Authored-By: ...` if relevant.
 
 ## ADR

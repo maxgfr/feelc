@@ -51,6 +51,7 @@ const (
 	HitPriority
 	HitCollect
 	HitRuleOrder
+	HitOutputOrder // collect ALL matches, ordered by output-value priority (descending), as a list
 )
 
 // Rule: a table row. Conds aligned on the input columns, Outputs on the outputs.

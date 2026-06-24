@@ -34,12 +34,15 @@ const DOCS = [
   { href: "embedding.html", file: "embedding.md", title: "Embed in your app" },
   { href: "project-mode.html", file: "project-mode.md", title: "Project mode" },
   { href: "ai-authoring.html", file: "ai-authoring.md", title: "AI authoring" },
+  { href: "mcp.html", file: "mcp.md", title: "MCP server" },
   { href: "ir-format.html", file: "ir-format.md", title: "IR format" },
   { href: "error-schema.html", file: "error-schema.md", title: "Error schema" },
   { href: "architecture.html", file: "architecture.md", title: "Architecture" },
   { href: "comparison.html", file: "comparison.md", title: "Comparison & gaps" },
   { href: "conformance.html", file: "conformance.md", title: "Conformance" },
   { href: "benchmarks.html", file: "benchmarks.md", title: "Benchmarks" },
+  { href: "competitive-report.html", file: "competitive-report.md", title: "Competitive benchmark" },
+  { href: "environments.html", file: "environments.md", title: "Environment matrix" },
   { href: "decisions.html", file: "decisions.md", title: "Decisions" },
 ];
 

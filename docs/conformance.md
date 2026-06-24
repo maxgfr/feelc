@@ -4,10 +4,11 @@ How feelc fares against the **official DMN Technology Compatibility Kit (TCK)** 
 rule engines, measured by re-running their own test suites / scenarios through feelc.
 
 **The headline: the engine is never *wrong* on a feature it supports.** It computes the correct answer
-or honestly refuses an out-of-scope construct. The only non-refusal failures below are DMN-*import*
-fidelity gaps (OUTPUT ORDER, PRIORITY), not evaluation errors. feelc's omissions are *deliberate*
-exclusions (unbounded lists/iteration, loop-until-fixpoint, string/regex) — consistent with being a
-total, deterministic, verifiable evaluator.
+or honestly refuses an out-of-scope construct. The former DMN-*import* fidelity gaps (OUTPUT ORDER,
+PRIORITY) are now **closed** ([ADR 0021](adr/0021-output-order-hit-policy.md) — 7/7 hit policies), so
+every remaining non-pass is a deliberate refusal. feelc's omissions are *deliberate* exclusions
+(unbounded lists/iteration, loop-until-fixpoint, string/regex) — consistent with being a total,
+deterministic, verifiable evaluator.
 
 ## Official DMN TCK (OMG conformance suite)
 
@@ -21,11 +22,16 @@ equality). Conformance % = passed / (passed + failed); out-of-subset cases are h
 | Compliance level 3 (full FEEL) | 0 | 3 | 3366 | 0% (deliberate subset) |
 | Non-compliant (should be rejected) | — | — | — | rejects the recursion / string-function models |
 
-- **Level 2 (feelc's core):** 84.1% — and of the 10 non-passing cases, **none is a wrong value for a
-  supported feature.** 7 are honest *refusals* of out-of-scope constructs (string concatenation, `**`
-  power, full Kleene null logic, a `.872` leading-dot literal, a spaced FEEL name); the other 3 are
-  **hit-policy import limitations** — DMN `OUTPUT ORDER` is unsupported (2 cases), and `PRIORITY` is
-  currently imported as `FIRST` (1 case — a `dmnxml` fidelity gap, not an evaluation bug).
+- **Level 2 (feelc's core):** 84.1% at the last full upstream-TCK run — and of the 10 non-passing
+  cases, **none is a wrong value for a supported feature.** 7 are honest *refusals* of out-of-scope
+  constructs (string concatenation, `**` power [use `power(x, n)`], full Kleene null logic, a `.872`
+  leading-dot literal, a spaced FEEL name).
+  - The other 3 were **hit-policy import limitations** — now **closed** ([ADR 0021](adr/0021-output-order-hit-policy.md)):
+    DMN `OUTPUT ORDER` is a first-class hit policy (`hit: output order`) and DMN `PRIORITY` / `OUTPUT
+    ORDER` import faithfully (reading `<outputValues>` into a `priority:` line) instead of degrading to
+    `FIRST`. feelc now supports **7/7 DMN hit policies**. (The headline Level-2 % above predates this and
+    will rise on the next full upstream-TCK run; the fixes are locked by `internal/dmnxml/import_test.go`
+    and `internal/engine/hitpolicy_test.go`.)
 - **Level 3 (full FEEL):** feelc is a *deliberate subset* — `for`/`some`/`every`, lists, string
   functions, time-of-day, etc. are out of scope, so the runner honestly **skips** them (3366 skipped)
   rather than faking conformance. It still never returns a wrong value.
@@ -77,5 +83,5 @@ only affect *data plumbing* (flatten to typed scalar inputs first), never the ru
 # DMN TCK (clone github.com/dmn-tck/tck): for each TestCases/<level>/<dir>, feelc import + run vs expected.
 # Cross-engine: scenarios ported under packages/engine/test/corpus/x-*.rules, swept vs the CLI by
 npm -w @feelc-examples/node-smoke test     # WASM == native CLI across every example + corpus decision
-npm -w @feelc/engine test                  # frozen-output conformance corpus + rejection/tripwire tests
+npm -w feelc test                  # frozen-output conformance corpus + rejection/tripwire tests
 ```

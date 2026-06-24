@@ -93,12 +93,12 @@ decision d : string {
 			wantErr: "not declared",
 		},
 		{
-			name: "unsupported hit policy (output order deferred)",
+			name: "unsupported hit policy (unknown aggregation)",
 			src: `model "m" {}
 input a : number
 decision d : string {
   needs: a
-  hit: output order
+  hit: collect avg
   - => "x"
 }`,
 			dec:     "d",

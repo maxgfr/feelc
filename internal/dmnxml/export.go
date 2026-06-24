@@ -140,6 +140,8 @@ func mapHitPolicyOut(hp string) (policy, agg string) {
 		return "PRIORITY", ""
 	case "rule order":
 		return "RULE ORDER", ""
+	case "output order":
+		return "OUTPUT ORDER", ""
 	case "collect":
 		return "COLLECT", ""
 	case "collect sum":

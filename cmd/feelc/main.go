@@ -1,5 +1,5 @@
 // Command feelc: the feelc rules engine binary. Subcommands: run, compile, verify, explain, check,
-// fmt, import, export, tck, graph, inputs, docs, serve, healthcheck, version (run `feelc help` for the
+// fmt, import, export, tck, graph, inputs, docs, serve, mcp, healthcheck, version (run `feelc help` for the
 // synopsis, or see docs/cli.md).
 package main
 
@@ -34,6 +34,7 @@ import (
 	"github.com/maxgfr/feelc/internal/graph"
 	"github.com/maxgfr/feelc/internal/ir"
 	"github.com/maxgfr/feelc/internal/loader"
+	"github.com/maxgfr/feelc/internal/mcp"
 	"github.com/maxgfr/feelc/internal/modelinfo"
 	"github.com/maxgfr/feelc/internal/project"
 	"github.com/maxgfr/feelc/internal/registry"
@@ -159,6 +160,8 @@ func main() {
 		err = cmdDocs(args)
 	case "serve":
 		err = cmdServe(args)
+	case "mcp":
+		err = cmdMCP(args)
 	case "healthcheck":
 		err = cmdHealthcheck(args)
 	case "version", "--version", "-v":
@@ -213,6 +216,7 @@ Usage:
   feelc docs   --rules <file.rules|.ir.bin> [-o <DOC.md>]
   feelc serve  --rules <file.rules> [--addr :8080] [--watch] [--strict] [--ui]
   feelc serve  --project <dir> [--addr :8080] [--watch] [--strict] [--ui] [--allow-edit]
+  feelc mcp                          # MCP server over stdio (verify/run/explain/… as agent tools)
   feelc healthcheck [--addr :8080]
   feelc version
 
@@ -624,6 +628,8 @@ func hitPolicyDoc(h ir.HitPolicy) string {
 		return "collect"
 	case ir.HitRuleOrder:
 		return "rule order"
+	case ir.HitOutputOrder:
+		return "output order"
 	}
 	return ""
 }
@@ -835,6 +841,17 @@ func cmdServe(args []string) error {
 		}
 		return nil
 	}
+}
+
+// cmdMCP runs feelc as a Model Context Protocol server over stdio (JSON-RPC 2.0), exposing
+// verify/run/explain/required/check/graph/model as tools so any MCP-capable agent can author rules and
+// let the deterministic engine decide outcomes (ADR 0026). No flags: the transport is stdin/stdout.
+func cmdMCP(args []string) error {
+	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return mcp.Serve(os.Stdin, os.Stdout, Version)
 }
 
 // cmdHealthcheck probes the local /readyz endpoint and exits 0 (ready) or non-zero otherwise. It is the

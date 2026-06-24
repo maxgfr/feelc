@@ -53,6 +53,11 @@ type dmnOutput struct {
 	Name    string `xml:"name,attr"`
 	Label   string `xml:"label,attr"`
 	TypeRef string `xml:"typeRef,attr"`
+	// OutputValues declares the allowed output values; for PRIORITY / OUTPUT ORDER they are listed
+	// in decreasing priority order (DMN §8.2.11) and define the resolution ordering.
+	OutputValues struct {
+		Text string `xml:"text"`
+	} `xml:"outputValues"`
 }
 
 type dmnRule struct {
@@ -131,6 +136,14 @@ func writeTable(b *strings.Builder, d decision, warns *[]string) {
 	fmt.Fprintf(b, "decision %s : %s {\n", d.Name, outType)
 	fmt.Fprintf(b, "  needs: %s\n", strings.Join(needs, ", "))
 	fmt.Fprintf(b, "  hit: %s\n", hit)
+	// PRIORITY / OUTPUT ORDER rank outputs by the declared <outputValues> (decreasing priority).
+	if hit == "priority" || hit == "output order" {
+		if pr := priorityLine(t.Outputs); pr != "" {
+			fmt.Fprintf(b, "  priority: %s\n", pr)
+		} else {
+			*warns = append(*warns, fmt.Sprintf("decision %q: %s needs a priority order but no <outputValues> were found — add a `priority:` line manually", d.Name, strings.ToUpper(hit)))
+		}
+	}
 	for _, r := range t.Rules {
 		conds := make([]string, len(r.InputEntries))
 		for i, e := range r.InputEntries {
@@ -147,6 +160,15 @@ func writeTable(b *strings.Builder, d decision, warns *[]string) {
 		fmt.Fprintf(b, "  %s => %s\n", strings.Join(conds, " | "), strings.Join(outs, " | "))
 	}
 	b.WriteString("}\n\n")
+}
+
+// priorityLine returns the comma-separated FEEL output values (decreasing priority) declared on the
+// ranked output's <outputValues>, suitable for a DSL `priority:` line. Empty if none are declared.
+func priorityLine(outs []dmnOutput) string {
+	if len(outs) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(outs[0].OutputValues.Text)
 }
 
 func outName(o dmnOutput, i int) string {
@@ -195,8 +217,9 @@ func mapHitPolicy(hp, agg, dec string, warns *[]string) string {
 	case "RULE ORDER":
 		return "rule order"
 	case "PRIORITY":
-		*warns = append(*warns, fmt.Sprintf("decision %q: PRIORITY imported as FIRST — add a `priority:` line if needed", dec))
-		return "first"
+		return "priority"
+	case "OUTPUT ORDER":
+		return "output order"
 	case "COLLECT":
 		switch strings.ToUpper(strings.TrimSpace(agg)) {
 		case "", "LIST":

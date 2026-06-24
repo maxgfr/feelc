@@ -3,6 +3,7 @@ package vm
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	apd "github.com/cockroachdb/apd/v3"
 
@@ -114,9 +115,16 @@ func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (result ir.Valu
 				return ir.Value{}, err
 			}
 			push(r)
-		case ir.OpRoundN, ir.OpMod:
+		case ir.OpRoundN, ir.OpMod, ir.OpPow:
 			b, a := pop(), pop()
 			r, err := binaryNum(in.Op, a, b)
+			if err != nil {
+				return ir.Value{}, err
+			}
+			push(r)
+		case ir.OpStartsWith, ir.OpEndsWith, ir.OpContains:
+			b, a := pop(), pop()
+			r, err := stringPred(in.Op, a, b)
 			if err != nil {
 				return ir.Value{}, err
 			}
@@ -316,10 +324,31 @@ func binaryNum(op ir.Opcode, a, b ir.Value) (ir.Value, error) {
 		return ir.NA(), nil
 	}
 	if a.Tag != ir.TagNumber || b.Tag != ir.TagNumber {
-		return ir.Value{}, fmt.Errorf("numeric built-in (round/modulo) on a non-numeric value")
+		return ir.Value{}, fmt.Errorf("numeric built-in (round/modulo/power) on a non-numeric value")
 	}
 	r := new(apd.Decimal)
 	switch op {
+	case ir.OpPow:
+		// power(x, n): non-negative integer exponent, EXACT via repeated multiplication on the frozen
+		// Decimal128 context — bit-identical to writing x*x*...*x. Never apd.Pow (transcendental,
+		// inexact even for integer exponents). null/NA already handled above.
+		n, err := b.Num.Int64()
+		if err != nil {
+			return ir.Value{}, fmt.Errorf("power(x, n): n must be a whole number")
+		}
+		if n < 0 {
+			return ir.Value{}, fmt.Errorf("power(x, n): exponent must be non-negative (got %d) — negative powers are not exact", n)
+		}
+		if n > 1000 {
+			return ir.Value{}, fmt.Errorf("power(x, n): exponent out of range (got %d, max 1000)", n)
+		}
+		r.Set(apd.New(1, 0)) // x^0 = 1 (including 0^0 = 1 by convention)
+		for i := int64(0); i < n; i++ {
+			if _, err := decimal.Ctx.Mul(r, r, a.Num); err != nil {
+				return ir.Value{}, err
+			}
+		}
+		return ir.Num(r), nil
 	case ir.OpRoundN:
 		n, err := b.Num.Int64()
 		if err != nil {
@@ -354,6 +383,29 @@ func binaryNum(op ir.Opcode, a, b ir.Value) (ir.Value, error) {
 		return ir.Num(r), nil
 	}
 	return ir.Value{}, fmt.Errorf("unsupported two-arg built-in opcode %d", op)
+}
+
+// stringPred applies a total (string, string) -> boolean predicate (starts_with/ends_with/contains).
+// null/non-applicable propagate; both operands must be strings (no coercion).
+func stringPred(op ir.Opcode, a, b ir.Value) (ir.Value, error) {
+	if a.Tag == ir.TagNull || b.Tag == ir.TagNull {
+		return ir.Null(), nil
+	}
+	if a.Tag == ir.TagNA || b.Tag == ir.TagNA {
+		return ir.NA(), nil
+	}
+	if a.Tag != ir.TagString || b.Tag != ir.TagString {
+		return ir.Value{}, fmt.Errorf("string predicate (starts_with/ends_with/contains) requires string operands")
+	}
+	switch op {
+	case ir.OpStartsWith:
+		return ir.Bool(strings.HasPrefix(a.Str, b.Str)), nil
+	case ir.OpEndsWith:
+		return ir.Bool(strings.HasSuffix(a.Str, b.Str)), nil
+	case ir.OpContains:
+		return ir.Bool(strings.Contains(a.Str, b.Str)), nil
+	}
+	return ir.Value{}, fmt.Errorf("unknown string predicate opcode %d", op)
 }
 
 func cmpOp(op ir.Opcode) ir.Op {

@@ -66,7 +66,10 @@ generated docs. A dangling annotation (not followed by an input/decision) is an 
 ## Decisions
 
 - **literal-expression**: `decision x : number = <expr>` — a FEEL expression (see
-  [feel-subset.md](feel-subset.md)). `?` (column value) is **forbidden** here (reserved for cells).
+  [feel-subset.md](feel-subset.md)). `?` (column value) is **forbidden** here (reserved for cells),
+  except as the element placeholder in a **bounded quantifier**:
+  `decision ok : boolean = every of {a, b, c} satisfies ? < 26` (also `some of {…} satisfies ?`) — a
+  fixed scalar tuple, desugared to a finite `and`/`or` chain ([ADR 0025](adr/0025-bounded-quantifiers.md)).
 - **table**: `needs:` (input columns), `hit:` (policy), rules, optional `default`.
 - **bracket** (progressive/marginal schedule): `bracket: <number input>` then tranches
   `[lo..hi) => <rate>` and a top `>= lo => <rate>`. Computes `Σ (clamp(x,lo,hi)-lo) × rate`, lowered to
@@ -79,7 +82,7 @@ generated docs. A dangling annotation (not followed by an input/decision) is an 
 ### Hit policies
 
 `first`, `unique`, `any`, `priority` (+ `priority:` line), `rule order`,
-`collect` / `collect sum` / `collect min` / `collect max` / `collect count`.
+`output order` (+ `priority:` line), `collect` / `collect sum` / `collect min` / `collect max` / `collect count`.
 
 ### Cells
 

@@ -1,6 +1,6 @@
-# Embed in your app (`@feelc/engine`)
+# Embed in your app (`feelc`)
 
-Run the **real** feelc engine directly in your TypeScript app — **no HTTP API**. `@feelc/engine` is the
+Run the **real** feelc engine directly in your TypeScript app — **no HTTP API**. `feelc` is the
 Go engine compiled to WebAssembly, so results are byte-for-byte identical to the `feelc` CLI (same
 parser, same exact-decimal VM, same determinism). It runs in the **browser**, **Node 18+**, **bundlers**
 (Vite / webpack 5 / Next / esbuild), and **edge runtimes** (Cloudflare Workers, Deno). ESM-only.
@@ -9,13 +9,13 @@ This is the embeddable counterpart to the [in-browser playground](../playground/
 packaged for your own apps. The `.wasm` is ~6 MB (~1.5 MB gzipped), loaded lazily on `createEngine()`.
 
 ```bash
-npm install @feelc/engine
+npm install feelc
 ```
 
 ## Quick start
 
 ```ts
-import { createEngine } from "@feelc/engine";
+import { createEngine } from "feelc";
 
 const feelc = await createEngine(); // loads the WASM once
 
@@ -47,6 +47,11 @@ console.log(output); // 10
 // compile once, evaluate many
 const model = feelc.compile(source);
 model.evaluate("discount_pct", { cart_total: 120, is_member: true }); // no recompile
+// evaluate MANY rows in one JS↔WASM crossing — ~2× faster for bulk/reactive use (ADR 0024)
+model.evaluateBatch("discount_pct", [
+  { cart_total: 120, is_member: true },
+  { cart_total: 60, is_member: false },
+]); // -> { decision, results: [{ output }, ...] }  (a failed row is { error })
 model.info();              // { name, inputs, decisions } — build forms from this
 model.required("discount_pct");
 model.dispose();           // free the WASM-side handle when done
@@ -70,7 +75,7 @@ model.evaluate("discount_pct", { cart_total: 120, is_member: true });
 ## Full surface
 
 Source-based (mirror the HTTP service): `run`, `verify`, `model`, `graph`, `trace`, `required`, `check`.
-Compiled-model: `compile`, `load`, then on the model `evaluate`, `info`, `required`, `export`, `dispose`.
+Compiled-model: `compile`, `load`, then on the model `evaluate`, `evaluateBatch`, `info`, `required`, `export`, `dispose`.
 
 ```ts
 feelc.verify(source);            // { hash, report, blockers }
@@ -90,7 +95,7 @@ feelc.check(source, [{ decision: "discount_pct", input: { cart_total: 120, is_me
 - **Edge (Cloudflare Workers / Deno)** — import the `.wasm` as a module and pass it in:
 
   ```ts
-  import wasm from "@feelc/engine/wasm/feelc.wasm"; // a WebAssembly.Module
+  import wasm from "feelc/wasm/feelc.wasm"; // a WebAssembly.Module
   const feelc = await createEngine({ wasmBinary: wasm });
   ```
 
@@ -104,7 +109,7 @@ Engine failures throw `FeelcError`; compile errors carry a structured diagnostic
 `code`), the same [error schema](error-schema.html) the CLI and HTTP API use.
 
 ```ts
-import { FeelcError } from "@feelc/engine";
+import { FeelcError } from "feelc";
 try {
   feelc.run("model x {", "d", {});
 } catch (e) {

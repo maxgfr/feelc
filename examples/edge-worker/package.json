@@ -3,9 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Cloudflare Worker embedding @feelc/engine via the wasmBinary override (no node:fs).",
+  "description": "Cloudflare Worker embedding feelc via the wasmBinary override (no node:fs).",
   "dependencies": {
-    "@feelc/engine": "*"
+    "feelc": "*"
   },
   "comment": "Run with: npx wrangler dev  (wrangler is intentionally not a dependency — bring your own)."
 }

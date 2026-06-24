@@ -39,11 +39,12 @@ func main() {
 	feelc.Set("required", wrap(requiredFn))
 	feelc.Set("check", wrap(checkFn))
 	// Compiled-model handle path: compile (or load a precompiled .ir.bin) ONCE, evaluate MANY times
-	// without recompiling on every call (the reactive "ultra-opti" case). Consumed by @feelc/engine.
+	// without recompiling on every call (the reactive "ultra-opti" case). Consumed by feelc.
 	feelc.Set("compile", wrap(compileFn))
 	feelc.Set("load", wrap(loadFn))
 	feelc.Set("export", wrap(exportFn))
 	feelc.Set("evalCompiled", wrap(evalCompiledFn))
+	feelc.Set("evalCompiledBatch", wrap(evalCompiledBatchFn))
 	feelc.Set("infoCompiled", wrap(infoCompiledFn))
 	feelc.Set("requiredCompiled", wrap(requiredCompiledFn))
 	feelc.Set("dispose", wrap(disposeFn))
@@ -363,6 +364,44 @@ func evalCompiledFn(args []js.Value) (any, error) {
 		return nil, err
 	}
 	return evalResult(cm, doc.Decision, doc.Input, doc.Explain, doc.Full)
+}
+
+// evalCompiledBatchFn: {handle,decision,inputs:[...],explain?,full?} -> {decision,results:[...]}.
+// Amortizes the JS<->WASM boundary + JSON marshalling across N input rows (ONE parse, ONE handle
+// lookup, ONE crossing) — the dominant cost of the per-call path (~14.7µs/op is mostly marshalling,
+// not evaluation). The per-row engine evaluation is byte-identical to evalCompiledFn; a fresh
+// evaluator per row (engine.Eval) means no memo/state is shared across rows. One bad row yields a
+// {error} entry instead of failing the whole batch.
+func evalCompiledBatchFn(args []js.Value) (any, error) {
+	var doc struct {
+		Handle   int              `json:"handle"`
+		Decision string           `json:"decision"`
+		Inputs   []map[string]any `json:"inputs"`
+		Explain  bool             `json:"explain"`
+		Full     bool             `json:"full"`
+	}
+	dec := json.NewDecoder(strings.NewReader(argStr(args, 0)))
+	dec.UseNumber() // decimal exactness of input numbers (mirror evalCompiledFn)
+	if err := dec.Decode(&doc); err != nil {
+		return nil, err
+	}
+	if doc.Decision == "" {
+		return nil, errors.New("`decision` field required")
+	}
+	cm, err := getModel(doc.Handle)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]any, len(doc.Inputs))
+	for i, in := range doc.Inputs {
+		r, err := evalResult(cm, doc.Decision, in, doc.Explain, doc.Full)
+		if err != nil {
+			results[i] = map[string]any{"error": err.Error()}
+			continue
+		}
+		results[i] = r
+	}
+	return map[string]any{"decision": doc.Decision, "results": results}, nil
 }
 
 // infoCompiledFn: {handle} -> {name,inputs,decisions}. The handle twin of modelFn.

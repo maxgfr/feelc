@@ -6,7 +6,7 @@
 // {file, decision, input, expected | error}. The conformance test replays these through WASM.
 //
 // Run after intentionally changing the engine's semantics or adding corpus files:
-//   make build && npm -w @feelc/engine run build && node packages/engine/scripts/capture-cases.mjs
+//   make build && npm -w feelc run build && node packages/engine/scripts/capture-cases.mjs
 //
 // Requires the native CLI: $FEELC_BIN, `feelc` on PATH, or ../../../feelc (repo root).
 import { execFileSync } from "node:child_process";

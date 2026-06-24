@@ -67,6 +67,9 @@ deterministic Go that never calls a model. That separation is the point — it m
 - **Bring your own LLM.** Author by chatting with your own provider/model/key (Anthropic or any
   OpenAI-compatible endpoint); the key stays in your browser. No key ⇒ AI endpoints return `501` and
   the engine still works fully.
+- **MCP server (`feelc mcp`).** Expose verify/run/explain/required/check/graph/model as
+  [Model Context Protocol](docs/mcp.md) tools over stdio, so any agent (Claude Code, Cursor, …) can
+  author rules and have the deterministic engine decide outcomes — the verification moat as an agent tool.
 - **Verify → repair → converge.** The **ingest** endpoint (`POST /v1/ingest`) drafts a model, runs
   `verify` / `check`, feeds the deterministic blockers (with counterexample witnesses) back to the LLM,
   and repeats until clean — the **engine**, never the model, decides when it's done.
@@ -152,7 +155,7 @@ docker run --rm -p 8080:8080 -v "$PWD/sample-project:/work" feelc   # open http:
 
 ## Status
 
-Core **operational**: language → compiler → IR → deterministic VM (exact decimal), 6 hit policies,
+Core **operational**: language → compiler → IR → deterministic VM (exact decimal), 7 DMN hit policies,
 **formal verification** (completeness/conflicts/dead rules with counterexamples), **HTTP service +
 hot-reload**, **semantic gate** (`check`), **DMN XML import**. Verified reference models live under
 [`examples/`](examples/). Optional **SMT (Z3) backend** (`-tags smt`,

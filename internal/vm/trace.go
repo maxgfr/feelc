@@ -210,16 +210,21 @@ func (e *evaluator) traceTable(t *ir.DecisionTable, tr *DecisionTrace) error {
 		}
 	}
 
-	// COLLECT / RULE ORDER: the justification is the set of contributing rules.
-	if t.HitPolicy == ir.HitCollect || t.HitPolicy == ir.HitRuleOrder {
+	// COLLECT / RULE ORDER / OUTPUT ORDER: the justification is the set of contributing rules.
+	if t.HitPolicy == ir.HitCollect || t.HitPolicy == ir.HitRuleOrder || t.HitPolicy == ir.HitOutputOrder {
 		rules := make([]ir.Rule, len(matched))
 		for i, ri := range matched {
 			rules[i] = t.Rules[ri]
 			tr.Contributors = append(tr.Contributors, RuleRef{Index: ri + 1, Line: t.Rules[ri].Line})
 		}
-		out, err := e.collect(t, rules)
-		if err != nil {
-			return err
+		var out ir.Value
+		if t.HitPolicy == ir.HitOutputOrder {
+			out = orderByPriority(t, rules)
+		} else {
+			var err error
+			if out, err = e.collect(t, rules); err != nil {
+				return err
+			}
 		}
 		tr.Matched = len(matched) > 0
 		tr.Output = out.ToAny()
@@ -308,6 +313,8 @@ func hitPolicyName(h ir.HitPolicy) string {
 		return "collect"
 	case ir.HitRuleOrder:
 		return "rule order"
+	case ir.HitOutputOrder:
+		return "output order"
 	}
 	return "?"
 }

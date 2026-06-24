@@ -3,8 +3,8 @@
 // Edge runtimes have no node:fs and don't resolve `new URL(..., import.meta.url)` file assets, so we
 // import the .wasm as a module (the runtime hands us a WebAssembly.Module) and pass it through the
 // `wasmBinary` override. Everything else is identical to the browser/Node API.
-import { createEngine, type FeelcEngine } from "@feelc/engine";
-import wasm from "@feelc/engine/wasm/feelc.wasm"; // Cloudflare compiles this to a WebAssembly.Module
+import { createEngine, type FeelcEngine } from "feelc";
+import wasm from "feelc/wasm/feelc.wasm"; // Cloudflare compiles this to a WebAssembly.Module
 
 const SOURCE = `model "promo" {}
 input cart_total : number >= 0

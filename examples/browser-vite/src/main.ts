@@ -1,4 +1,4 @@
-import { createEngine } from "@feelc/engine";
+import { createEngine } from "feelc";
 
 const SOURCE = `model "promo" {}
 input cart_total : number >= 0

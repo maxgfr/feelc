@@ -6,6 +6,8 @@ How feelc compares to the major business-rule engines, what it deliberately does
 [json-logic-js](https://github.com/jwadhams/json-logic-js),
 [GoRules ZEN](https://github.com/gorules/zen),
 [node-rules](https://github.com/mithunsatheesh/node-rules), and the DMN 1.3 / FEEL standard (Drools).
+For *measured throughput* on one identical decision across feelc + 6 engines (Node/Go/Rust/JVM), see
+the reproducible [competitive benchmark report](competitive-report.md).
 
 ## Where feelc leads
 
@@ -14,7 +16,7 @@ How feelc compares to the major business-rule engines, what it deliberately does
 | **Verification in the engine** (completeness, conflict, subsumption, with counterexamples) | ✅ proven, in-engine | ❌ | ❌ | ❌ | ❌ | ⚠️ modeler-only¹ |
 | **Exact decimals** (no float drift) | ✅ | ❌ float | ❌ float | ✅ | ❌ float | ✅ |
 | **Determinism / replayability** (pure, no I/O, hashed model) | ✅ | ⚠️ async facts | ✅ | ⚠️ JS nodes | ⚠️ restart loop | ✅ |
-| **DMN hit policies** (U/A/P/F/R/C + collect agg; DMN also defines OUTPUT ORDER) | ✅ 6/7 (no OUTPUT ORDER) | ❌ | ❌ | ⚠️ first+collect | ❌ | ✅ all 7 |
+| **DMN hit policies** (U/A/P/F/R/C/OUTPUT ORDER + collect agg) | ✅ 7/7 (ADR 0021) | ❌ | ❌ | ⚠️ first+collect | ❌ | ✅ all 7 |
 | **Progressive brackets** (marginal-rate schedules) | ✅ primitive | ❌ | ❌ | ⚠️ hand-rolled | ❌ | ⚠️ hand-rolled |
 | **Units / dimensional analysis** (EUR + EUR/month = compile error) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Applicability / non-applicable sentinel** (distinct from null/0) | ✅ | ❌ | ❌ | ❌ | ❌ | ⚠️ |
@@ -56,21 +58,27 @@ The quick wins are now implemented — deterministic, exact, and verification-sa
 **`round(x, n)`**, **`abs(x)`**, **`trunc(x)`**, and **`modulo(x, y)`** (FEEL-standard function, DMN
 floored semantics). Their tripwire tests flipped from *rejected* → *supported*.
 
-## Gaps still open (philosophy-compatible)
+## Gaps — closed and still open (philosophy-compatible)
 
-Ranked. Each is deterministic and verifiable — these would widen coverage **without** weakening any
-guarantee. Each has a live tripwire test (`packages/engine/test/conformance.test.ts`).
+Each is deterministic and verifiable — widening coverage **without** weakening any guarantee. Each has
+a tripwire test (`packages/engine/test/conformance.test.ts`) that flips from "rejected" to "supported"
+when shipped, plus an append-only ADR.
+
+**Recently closed (2026-06-24):**
+
+| Gap | Shipped as | ADR |
+|-----|-----------|-----|
+| **Bounded** quantifiers over a fixed scalar tuple (`every/some of {a,b,c} satisfies ?`) | DSL desugar → finite `and`/`or` chain (stays verifiable) | [0025](adr/0025-bounded-quantifiers.md) |
+| `starts_with` / `ends_with` / `contains` predicates | pure `(string,string)→bool`; cells degrade honestly to *not-verifiable* | [0023](adr/0023-string-predicates.md) |
+| Integer-exponent power | `power(x, n)` function (exact, integer exponent; `**`/`^` stay unlexed) | [0022](adr/0022-power-builtin.md) |
+| DMN OUTPUT ORDER + PRIORITY import fidelity | 7/7 hit policies; `<outputValues>` → `priority:` | [0021](adr/0021-output-order-hit-policy.md) |
+
+**Still open (ranked):**
 
 | # | Gap | Impact / effort | Recommendation |
 |---|-----|-----------------|----------------|
-| 1 | **Bounded** quantifiers over a fixed-arity input tuple (`every of {a,b,c} satisfies ? < 26`) | high / medium | Keeps the input space hyper-rectangular → verification stays sound. Recovers most "every dependant"/"sum line items" cases **without** a list type. |
-| 2 | `starts_with` / `ends_with` / `contains` as **cell tests** | medium / medium | Pure, total, decidable. Covers code/policy-number routing. Not a string-building library. |
-| 3 | Expression-level Kleene (3-valued) null logic | medium / medium | Closer DMN alignment; weigh against feelc's "fail loudly" stance (consider opt-in). |
-| 4 | Downstream **read** of an upstream context field (`result.rate`) | medium / high | Removes DRG-composition friction while keeping inputs flat/typed. |
-| 5 | Integer-exponent `**` only | low / low | Optional; general real exponents risk precision blow-up, so integer-only stays exact. |
-
-Each remaining addition must ship with an append-only ADR and flip its tripwire test from "rejected"
-to "supported".
+| 1 | Expression-level Kleene (3-valued) null logic | medium / medium | Closer DMN alignment; weigh against feelc's "fail loudly" stance (consider opt-in). |
+| 2 | Downstream **read** of an upstream context field (`result.rate`) | medium / high | Removes DRG-composition friction while keeping inputs flat/typed. **Deferred**: the geometric verifier has no context-valued dimension, so staying sound needs an inter-decisional constraint mechanism. |
 
 ## Why feelc is unusually AI-friendly
 
@@ -87,7 +95,7 @@ split — the AI writes the `.rules`; the deterministic engine is the oracle:
   bit-for-bit, replayable. Generated rules are trustworthy because the *engine*, not the model, executes.
 - **A ready agent skill.** `skill/` is a portable Claude/Codex/Cursor skill with the red→green authoring
   loop and references; the `feelc` binary is the deterministic tool.
-- **Runs anywhere the agent's app runs.** `@feelc/engine` (WASM) executes the generated rules in the
+- **Runs anywhere the agent's app runs.** `feelc` (WASM) executes the generated rules in the
   browser/Node/edge with no server — byte-identical to the CLI ([embedding.md](embedding.html)).
 - **Reviewable artifacts.** `.rules` is plain text, git-diffable, and compiles to a content-hashed
   `.ir.bin` (the hash *is* the model identity) — every AI edit is auditable and re-verified.

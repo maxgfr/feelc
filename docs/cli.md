@@ -44,7 +44,12 @@ feelc serve --project <dir>   [--addr :8080] [--watch] [--strict] [--ui] [--allo
 feelc serve --ui              # start empty; author a model in the browser
 # opt-in hardening (any mode):  [--auth-token <tok>]  [--rate-limit <rps>]
 feelc healthcheck [--addr :8080]   # probe a running server's /readyz; exit 0 if ready, ≠0 otherwise
+feelc mcp                          # MCP server over stdio (JSON-RPC 2.0) — see mcp.md
 ```
+
+`feelc mcp` exposes the engine as [Model Context Protocol](mcp.md) tools (`feelc_verify`, `feelc_run`,
+`feelc_explain`, `feelc_required`, `feelc_check`, `feelc_graph`, `feelc_model`) over stdin/stdout, so any
+MCP-capable agent can author rules and let the deterministic engine decide outcomes. No flags.
 
 `--rules` and `--project` are mutually exclusive. `--watch` hot-reloads on file change; `--strict` refuses
 to (re)load a model with verification blockers; `--ui` serves the embedded authoring UI at `/`;

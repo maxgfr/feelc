@@ -29,6 +29,15 @@ export interface RunResult {
   traceError?: string;
 }
 
+/** One row of a batch evaluation: a {@link RunResult}, or `{ error }` if that row failed to evaluate. */
+export type BatchRowResult = RunResult | { error: string };
+
+/** Result of {@link CompiledModel.evaluateBatch}: the decision name + one entry per input row. */
+export interface BatchResult {
+  decision: string;
+  results: BatchRowResult[];
+}
+
 /** A model input as surfaced for widgets, question-flow and docs (internal/modelinfo.InputInfo). */
 export interface InputInfo {
   name: string;

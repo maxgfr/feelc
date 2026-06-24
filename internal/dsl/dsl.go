@@ -163,7 +163,7 @@ func (p *parser) parse() (*model.Model, error) {
 			m.BKMs = append(m.BKMs, b)
 			p.i++
 		case strings.HasPrefix(t, "decision "):
-			if strings.Contains(t, "{") {
+			if isTableHeader(t) {
 				dec, err := p.parseDecision(t, ln.no, indent) // table (advances p.i)
 				if err != nil {
 					return nil, err
@@ -411,6 +411,18 @@ func isDefaultLHS(cells []cellSeg) bool {
 	return true
 }
 
+// isTableHeader reports whether a `decision …` line opens a table block (`… : type {`) rather than a
+// literal-expression decision (`… : type = expr`). A `{` that appears AFTER the `=` belongs to the
+// expression body (e.g. `= every of {a, b} satisfies ? < 26`), not a table header.
+func isTableHeader(t string) bool {
+	brace := strings.IndexByte(t, '{')
+	if brace < 0 {
+		return false
+	}
+	eq := strings.IndexByte(t, '=')
+	return eq < 0 || eq > brace
+}
+
 // parseExprDecision parses `decision <name> : <type> = <FEEL expr>` (literal-expression decision).
 func parseExprDecision(t string, no int) (model.Decision, error) {
 	h := strings.TrimSpace(strings.TrimPrefix(t, "decision"))
@@ -424,7 +436,14 @@ func parseExprDecision(t string, no int) (model.Decision, error) {
 			"decision %q: expected `{` (table) or `= expression`", name)
 	}
 	exprSrc = strings.TrimSpace(exprSrc)
-	node, err := feel.ParseString(exprSrc)
+	// Bounded-quantifier sugar is expanded to a plain FEEL AND/OR chain BEFORE parsing (ADR 0025);
+	// the original text is kept as Src for traceability, the expanded form drives the AST.
+	parseSrc, err := expandBoundedQuantifier(exprSrc)
+	if err != nil {
+		return model.Decision{}, diag.Wrap(diag.CodeFeelSyntax, no,
+			fmt.Sprintf("invalid bounded quantifier %q", exprSrc), err)
+	}
+	node, err := feel.ParseString(parseSrc)
 	if err != nil {
 		return model.Decision{}, diag.Wrap(diag.CodeFeelSyntax, no,
 			fmt.Sprintf("invalid FEEL expression %q", exprSrc), err)
@@ -435,6 +454,85 @@ func parseExprDecision(t string, no int) (model.Decision, error) {
 		Expr:     &model.Cell{Src: exprSrc, Node: node, Line: no},
 		Line:     no,
 	}, nil
+}
+
+// expandBoundedQuantifier rewrites the bounded-quantifier sugar
+//
+//	every of {a, b, c} satisfies <body>  ->  ((<body|?→a>) and (<body|?→b>) and (<body|?→c>))
+//	some  of {a, b, c} satisfies <body>  ->  ((<body|?→a>) or  (<body|?→b>) or  (<body|?→c>))
+//
+// where {a,b,c} is a FIXED, compile-time tuple of scalar names/literals and `?` is the element
+// placeholder. The result is plain and/or over a finite set, so the input space stays
+// hyper-rectangular and BOTH the geometric and SMT verifiers stay sound for free (ADR 0025). A string
+// that is not this sugar is returned unchanged. Native FEEL `every x in <list> satisfies …` (the list
+// may be runtime-sized) is deliberately NOT matched here and stays rejected by the lowerer.
+func expandBoundedQuantifier(src string) (string, error) {
+	s := strings.TrimSpace(src)
+	var op, joiner string
+	switch {
+	case strings.HasPrefix(s, "every of "):
+		op, joiner = "every", " and "
+	case strings.HasPrefix(s, "some of "):
+		op, joiner = "some", " or "
+	default:
+		return src, nil
+	}
+	rest := strings.TrimSpace(s[len(op)+len(" of "):])
+	if !strings.HasPrefix(rest, "{") {
+		return "", fmt.Errorf("expected `{` after `%s of`", op)
+	}
+	closeIdx := strings.IndexByte(rest, '}')
+	if closeIdx < 0 {
+		return "", fmt.Errorf("missing `}` in `%s of {...}`", op)
+	}
+	inner := strings.TrimSpace(rest[1:closeIdx])
+	after := strings.TrimSpace(rest[closeIdx+1:])
+	const sat = "satisfies"
+	if !strings.HasPrefix(after, sat) {
+		return "", fmt.Errorf("expected `satisfies` after `{...}`")
+	}
+	body := strings.TrimSpace(after[len(sat):])
+	if body == "" {
+		return "", fmt.Errorf("empty `satisfies` body")
+	}
+	var elems []string
+	if inner != "" {
+		for _, e := range strings.Split(inner, ",") {
+			if e = strings.TrimSpace(e); e == "" {
+				return "", fmt.Errorf("empty element in `{...}`")
+			}
+			elems = append(elems, e)
+		}
+	}
+	if len(elems) == 0 { // vacuous: every of {} = true ; some of {} = false
+		if op == "every" {
+			return "true", nil
+		}
+		return "false", nil
+	}
+	parts := make([]string, len(elems))
+	for i, e := range elems {
+		parts[i] = "(" + substitutePlaceholder(body, e) + ")"
+	}
+	return "(" + strings.Join(parts, joiner) + ")", nil
+}
+
+// substitutePlaceholder replaces each `?` token (outside string literals) in body with repl.
+func substitutePlaceholder(body, repl string) string {
+	var b strings.Builder
+	inStr := false
+	for i := 0; i < len(body); i++ {
+		switch c := body[i]; {
+		case c == '"':
+			inStr = !inStr
+			b.WriteByte(c)
+		case c == '?' && !inStr:
+			b.WriteString(repl)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
 }
 
 // parseBKM parses `bkm <name>(p1:t1, p2:t2):ret = <FEEL expr>`.

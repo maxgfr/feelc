@@ -1,16 +1,16 @@
-// Drift guard: the WASM engine (@feelc/engine) must produce byte-identical results to the native
+// Drift guard: the WASM engine (feelc) must produce byte-identical results to the native
 // `feelc` CLI, and the .ir.bin artifact must be interchangeable between the two tools.
 //
 // Prereqs (handled by CI, see .github/workflows/npm.yml):
 //   - the native CLI is built at the repo root (`make build` -> ./feelc)
-//   - @feelc/engine is built (`npm -w @feelc/engine run build`)
+//   - feelc is built (`npm -w feelc run build`)
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { createEngine, type InputInfo, type InputValue } from "@feelc/engine";
+import { createEngine, type InputInfo, type InputValue } from "feelc";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = resolve(here, "../../.."); // test/ -> node-smoke/ -> examples/ -> repo root

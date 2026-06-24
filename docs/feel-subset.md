@@ -18,7 +18,14 @@ Supported (`internal/compiler/lower_expr.go`):
 - **logic**: `and`, `or`, `not(x)`;
 - **conditional**: `if c then a else b` (compiled into `OpJmpFalse`/`OpJmp` jumps);
 - **pure single-arg built-ins**: `floor(x)`, `ceiling(x)`, `round(x)`, `abs(x)`, `trunc(x)` (toward zero) — HALF_EVEN, deterministic;
-- **deterministic two-arg built-ins** ([ADR 0020](adr/0020-deterministic-extra-builtins.md)): `round(x, n)` (round to `n` decimal places, HALF_EVEN) and `modulo(x, y)` (floored modulo `x − y·floor(x/y)`, DMN semantics; modulo-by-zero errors);
+- **deterministic two-arg built-ins** ([ADR 0020](adr/0020-deterministic-extra-builtins.md), [ADR 0022](adr/0022-power-builtin.md)): `round(x, n)` (round to `n` decimal places, HALF_EVEN), `modulo(x, y)` (floored modulo `x − y·floor(x/y)`, DMN semantics; modulo-by-zero errors), and `power(x, n)` (integer-exponent exponentiation, exact via repeated multiplication; non-integer/negative/over-range `n` errors);
+- **string predicates** ([ADR 0023](adr/0023-string-predicates.md)): `starts_with(s, t)`,
+  `ends_with(s, t)`, `contains(s, t)` → boolean (pure, total; for code/policy routing — **not** a
+  string-manipulation library);
+- **bounded quantifiers** ([ADR 0025](adr/0025-bounded-quantifiers.md)): `every of {a, b, c} satisfies <body>`
+  and `some of {a, b, c} satisfies <body>` over a FIXED tuple of scalar names/literals (`?` is the
+  element placeholder) → boolean; desugared to a finite `and`/`or` chain (stays verifiable). Native
+  unbounded `every x in <list> satisfies …` is **rejected** (the list may be runtime-sized);
 - **BKM invocation**: `name(a, b)` — **inlined** at compile time (AST substitution, zero call
   frame; self/mutual recursion is detected and **rejected**).
 
@@ -30,8 +37,8 @@ verification), and free expression (reference `?`/other columns → *Op=Prog*, n
 
 ## Out of scope (loud failure)
 
-- **multi-argument** built-ins beyond the whitelist: `substring(s, i, n)`, other string/list functions, etc. ([ADR 0004 §3](adr/0004-deferrals.md)); `round(x, n)` and `modulo(x, y)` ARE supported ([ADR 0020](adr/0020-deterministic-extra-builtins.md));
-- `for` / `some` / `every`, lists/filters, higher-order functions, `function(...)`;
+- **multi-argument** built-ins beyond the whitelist: `substring(s, i, n)`, other string/list functions, etc. ([ADR 0004 §3](adr/0004-deferrals.md)); `round(x, n)`, `modulo(x, y)` and `power(x, n)` ARE supported ([ADR 0020](adr/0020-deterministic-extra-builtins.md), [ADR 0022](adr/0022-power-builtin.md)). The `**`/`^` operators are NOT lexed — use `power(x, n)`;
+- native unbounded `for` / `some x in <list>` / `every x in <list>` (list possibly runtime-sized), lists/filters, higher-order functions, `function(...)` — note the **bounded** `every/some of {fixed tuple} satisfies ?` form IS supported ([ADR 0025](adr/0025-bounded-quantifiers.md));
 - **out-of-subset temporal** forms: `time`, `dateTime`, year-month durations (`date` and day-based
   `duration` ARE supported — see below);
 - `**` (power), operators not listed;

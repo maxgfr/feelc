@@ -1,4 +1,4 @@
-# @feelc/engine
+# feelc
 
 The **portable feelc engine** — the real Go decision/calculation engine compiled to WebAssembly,
 runnable directly in your TypeScript app with **no HTTP API**. Results are byte-for-byte identical to
@@ -8,13 +8,13 @@ Runs in the **browser**, **Node 18+**, **bundlers** (Vite / webpack 5 / Next / e
 runtimes** (Cloudflare Workers, Deno). ESM-only.
 
 ```bash
-npm install @feelc/engine
+npm install feelc
 ```
 
 ## Quick start
 
 ```ts
-import { createEngine } from "@feelc/engine";
+import { createEngine } from "feelc";
 
 const feelc = await createEngine(); // loads the WASM once
 
@@ -94,7 +94,7 @@ model.evaluate("discount_pct", { cart_total: 120, is_member: true });
 - **Edge (Cloudflare Workers / Deno)** — import the `.wasm` as a module and pass it in:
 
   ```ts
-  import wasm from "@feelc/engine/wasm/feelc.wasm"; // Worker: a WebAssembly.Module
+  import wasm from "feelc/wasm/feelc.wasm"; // Worker: a WebAssembly.Module
   const feelc = await createEngine({ wasmBinary: wasm });
   ```
 
@@ -109,7 +109,7 @@ model.evaluate("discount_pct", { cart_total: 120, is_member: true });
 Engine failures throw `FeelcError`. Compile errors carry a structured `diag` (`file`/`line`/`col`/`code`):
 
 ```ts
-import { FeelcError } from "@feelc/engine";
+import { FeelcError } from "feelc";
 try {
   feelc.run("model x {", "d", {});
 } catch (e) {
@@ -127,9 +127,9 @@ try {
 
 ```bash
 make wasm                                   # build feelc.wasm + wasm_exec.js (from the Go source)
-npm ci && npm -w @feelc/engine run build && npm -w @feelc/engine test
+npm ci && npm -w feelc run build && npm -w feelc test
 cd packages/engine && npm publish --access public   # first release: bootstrap on npm
 ```
 
-After the first publish, enable **npm OIDC trusted publishing** for `@feelc/engine`; subsequent
+After the first publish, enable **npm OIDC trusted publishing** for `feelc`; subsequent
 releases are published by CI on a `v*` tag (`.github/workflows/npm.yml`) with no token.

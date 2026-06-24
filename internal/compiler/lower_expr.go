@@ -247,6 +247,35 @@ func (l *lowerer) emitCall(fc *feel.FunCall) error {
 		}
 		l.push(ir.OpMod, 0)
 		return nil
+	case "power":
+		// power(x, n): integer-exponent exponentiation (exact). The `**`/`^` operators are NOT lexed
+		// by the vendored FEEL parser, so this is the FEEL-standard function form (cf. ADR 0020/modulo).
+		if len(fc.Args) != 2 || !positionalArgs(fc.Args) {
+			return diag.Newf(diag.CodeUnsupported, 0, "power expects power(x, n) with two positional arguments")
+		}
+		if err := l.emit(fc.Args[0].Arg); err != nil {
+			return err
+		}
+		if err := l.emit(fc.Args[1].Arg); err != nil {
+			return err
+		}
+		l.push(ir.OpPow, 0)
+		return nil
+	case "starts_with", "ends_with", "contains":
+		// Pure, total (string, string) -> boolean predicates for code/policy routing (NOT a
+		// string-manipulation library: no substring/upper/replace). Verification-safe: a cell that
+		// uses one becomes Op=Prog (non-geometric) and degrades to not-verifiable, never falsely complete.
+		if len(fc.Args) != 2 || !positionalArgs(fc.Args) {
+			return diag.Newf(diag.CodeUnsupported, 0, "%s expects %s(s, t) with two positional arguments", ref.Name, ref.Name)
+		}
+		if err := l.emit(fc.Args[0].Arg); err != nil {
+			return err
+		}
+		if err := l.emit(fc.Args[1].Arg); err != nil {
+			return err
+		}
+		l.push(stringPredOpcode(ref.Name), 0)
+		return nil
 	}
 	if op, isBuiltin := monoArgBuiltins[ref.Name]; isBuiltin {
 		if len(fc.Args) != 1 || fc.Args[0].Name != "" {
@@ -404,6 +433,18 @@ func progUsesInput(p *ir.ExprProgram) bool {
 	return false
 }
 
+// stringPredOpcode maps a string-predicate built-in name to its opcode (caller guarantees the name).
+func stringPredOpcode(name string) ir.Opcode {
+	switch name {
+	case "starts_with":
+		return ir.OpStartsWith
+	case "ends_with":
+		return ir.OpEndsWith
+	default: // "contains"
+		return ir.OpContains
+	}
+}
+
 func binopcode(op string) (ir.Opcode, error) {
 	switch op {
 	case "+":
@@ -447,7 +488,8 @@ func maxStack(code []ir.Instr) int {
 			depth++
 		case ir.OpAdd, ir.OpSub, ir.OpMul, ir.OpDivOp,
 			ir.OpEqOp, ir.OpNeOp, ir.OpLtOp, ir.OpLeOp, ir.OpGtOp, ir.OpGeOp,
-			ir.OpAnd, ir.OpOr, ir.OpRoundN, ir.OpMod, ir.OpJmpFalse:
+			ir.OpAnd, ir.OpOr, ir.OpRoundN, ir.OpMod, ir.OpPow,
+			ir.OpStartsWith, ir.OpEndsWith, ir.OpContains, ir.OpJmpFalse:
 			depth-- // pop 2 push 1 (binops/logical/two-arg builtins); OpJmpFalse pops the condition
 		}
 		if depth > max {

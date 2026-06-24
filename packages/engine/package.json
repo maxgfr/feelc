@@ -1,5 +1,5 @@
 {
-  "name": "@feelc/engine",
+  "name": "feelc",
   "version": "0.1.0",
   "description": "Portable feelc decision/calculation engine — the real Go engine compiled to WebAssembly. Runs in the browser, Node, bundlers (Vite/webpack/Next) and edge runtimes, with no HTTP API.",
   "keywords": [
@@ -17,12 +17,14 @@
   "author": "maxgfr",
   "repository": {
     "type": "git",
-    "url": "https://github.com/maxgfr/feelc",
+    "url": "git+https://github.com/maxgfr/feelc.git",
     "directory": "packages/engine"
   },
   "homepage": "https://github.com/maxgfr/feelc/tree/main/packages/engine#readme",
   "type": "module",
-  "sideEffects": ["**/wasm_exec.js"],
+  "sideEffects": [
+    "**/wasm_exec.js"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -35,7 +37,7 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "feelc-compile": "./bin/feelc-compile.mjs"
+    "feelc-compile": "bin/feelc-compile.mjs"
   },
   "files": [
     "dist",

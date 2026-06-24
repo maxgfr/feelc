@@ -84,6 +84,146 @@ decision rd : number = round(x)`
 	}
 }
 
+// Bounded quantifiers over a FIXED compile-time tuple: `every of {a,b,c} satisfies ?` /
+// `some of {a,b,c} satisfies ?`. Desugared to a finite AND/OR chain (sound for both verifiers).
+func TestBoundedQuantifiers(t *testing.T) {
+	src := `model "m" {}
+input a : number
+input b : number
+input c : number
+decision allUnder26 : boolean = every of {a, b, c} satisfies ? < 26
+decision someNeg : boolean = some of {a, b, c} satisfies ? < 0`
+	in := func(a, b, c string) map[string]any { return map[string]any{"a": jn(a), "b": jn(b), "c": jn(c)} }
+	if got, err := engine.Run(src, "allUnder26", in("10", "20", "25")); err != nil || got != true {
+		t.Errorf("every all<26 = %v err %v, want true", got, err)
+	}
+	if got, _ := engine.Run(src, "allUnder26", in("10", "30", "25")); got != false {
+		t.Errorf("every with one>=26 = %v, want false", got)
+	}
+	if got, _ := engine.Run(src, "someNeg", in("1", "-2", "3")); got != true {
+		t.Errorf("some neg = %v, want true", got)
+	}
+	if got, _ := engine.Run(src, "someNeg", in("1", "2", "3")); got != false {
+		t.Errorf("some none-neg = %v, want false", got)
+	}
+	// native FEEL `every x in [list] satisfies` stays REJECTED (guardian of scope; list may be runtime-sized).
+	bad := `model "m" {}
+decision d : boolean = some i in [1,2] satisfies i > 0`
+	if _, err := engine.Run(bad, "d", map[string]any{}); err == nil {
+		t.Error("native `some i in [...]` must stay rejected")
+	}
+}
+
+// String predicates starts_with / ends_with / contains: pure, total (string, string) -> boolean
+// predicates for code/policy routing (not a string-manipulation library).
+func TestStringPredicates(t *testing.T) {
+	src := `model "m" {}
+input code : string
+decision sw : boolean = starts_with(code, "EU")
+decision ew : boolean = ends_with(code, "X")
+decision ct : boolean = contains(code, "-")`
+	for _, c := range []struct {
+		dec, code string
+		want      bool
+	}{
+		{"sw", "EU-123", true}, {"sw", "US-123", false},
+		{"ew", "EU-123X", true}, {"ew", "EU-123", false},
+		{"ct", "EU-123", true}, {"ct", "EU123", false},
+	} {
+		got, err := engine.Run(src, c.dec, map[string]any{"code": c.code})
+		if err != nil {
+			t.Fatalf("%s(%q): %v", c.dec, c.code, err)
+		}
+		if b, ok := got.(bool); !ok || b != c.want {
+			t.Errorf("%s(%q) = %v, want %v", c.dec, c.code, got, c.want)
+		}
+	}
+	// non-string argument -> loud error (predicates are string-only).
+	src2 := `model "m" {}
+input n : number
+decision d : boolean = starts_with(n, "x")`
+	if _, err := engine.Run(src2, "d", map[string]any{"n": jn("5")}); err == nil {
+		t.Error("starts_with on a number should error")
+	}
+}
+
+// A string-predicate cell is non-geometric (Op=Prog): the table must degrade to *not-verifiable*
+// (honest), never falsely claim completeness/conflict-freedom. This is the soundness guard.
+func TestStringPredicateCellDegradesNotVerifiable(t *testing.T) {
+	src := `model "m" {}
+input code : string
+decision route : string {
+  needs: code
+  hit: first
+  starts_with(?, "EU") => "eu"
+  -                     => "other"
+}`
+	got, err := engine.Run(src, "route", map[string]any{"code": "EU-1"})
+	if err != nil || got != "eu" {
+		t.Fatalf("route(EU-1) = %v err %v, want eu", got, err)
+	}
+	m, err := dsl.Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cm, err := compiler.Compile(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep := verify.Verify(cm)
+	found := false
+	for _, f := range rep.Findings {
+		if f.Kind == verify.KindNotVerifiable {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("string-predicate cell must degrade to not-verifiable; findings: %+v", rep.Findings)
+	}
+}
+
+// power(x, n): exact integer exponentiation (repeated multiplication, never the inexact apd.Pow).
+func TestPowerBuiltin(t *testing.T) {
+	src := `model "m" {}
+input base : number
+input exp : number
+decision p : number = power(base, exp)`
+	for _, c := range []struct{ b, e, want string }{
+		{"2", "10", "1024"},
+		{"10", "0", "1"}, // x^0 = 1
+		{"3", "3", "27"},
+		{"1.5", "2", "2.25"}, // exact decimal, no float drift
+		{"2", "3", "8"},
+		{"0", "5", "0"},
+	} {
+		got, err := engine.Run(src, "p", map[string]any{"base": jn(c.b), "exp": jn(c.e)})
+		if err != nil {
+			t.Fatalf("power(%s,%s): %v", c.b, c.e, err)
+		}
+		if numText(t, got) != c.want {
+			t.Errorf("power(%s,%s) = %s, want %s", c.b, c.e, numText(t, got), c.want)
+		}
+	}
+	// non-integer exponent -> loud error (exactness guard).
+	if _, err := engine.Run(src, "p", map[string]any{"base": jn("2"), "exp": jn("2.5")}); err == nil {
+		t.Error("power with non-integer exponent should error")
+	}
+	// negative exponent -> loud error (would produce a non-terminating fraction; not exact).
+	if _, err := engine.Run(src, "p", map[string]any{"base": jn("2"), "exp": jn("-1")}); err == nil {
+		t.Error("power with negative exponent should error")
+	}
+	// power(x*x*...*x) == power(x, n): consistency with the * operator (decimal128 semantics).
+	src2 := `model "m" {}
+input x : number
+decision a : number = power(x, 4)
+decision b : number = x * x * x * x`
+	ga, _ := engine.Run(src2, "a", map[string]any{"x": jn("1.1")})
+	gb, _ := engine.Run(src2, "b", map[string]any{"x": jn("1.1")})
+	if numText(t, ga) != numText(t, gb) {
+		t.Errorf("power(x,4)=%s but x*x*x*x=%s — must match", numText(t, ga), numText(t, gb))
+	}
+}
+
 // not(<test>) in a cell: geometric negation (value equivalence, interval, comparison),
 // + multi-test not(a, b) = outside the set.
 func TestNotCellNegation(t *testing.T) {
@@ -173,7 +313,11 @@ decision md : number = modulo(x, y)`
 
 // Error cases for the new built-ins: modulo by zero, round to a non-integer number of places.
 func TestArithBuiltinErrors(t *testing.T) {
-	cases := []struct{ name, src, dec string; in map[string]any; wantSub string }{
+	cases := []struct {
+		name, src, dec string
+		in             map[string]any
+		wantSub        string
+	}{
 		{"modulo by zero", "model \"m\" {}\ninput x : number\ninput y : number\ndecision d : number = modulo(x, y)", "d",
 			map[string]any{"x": jn("10"), "y": jn("0")}, "zero"},
 		{"round non-integer n", "model \"m\" {}\ninput x : number\ninput k : number\ndecision d : number = round(x, k)", "d",

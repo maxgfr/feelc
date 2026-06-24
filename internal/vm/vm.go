@@ -5,6 +5,7 @@ package vm
 
 import (
 	"fmt"
+	"sort"
 
 	apd "github.com/cockroachdb/apd/v3"
 
@@ -132,6 +133,8 @@ func (e *evaluator) evalTable(t *ir.DecisionTable) (ir.Value, error) {
 		return buildOutput(t.Outputs, best.Outputs), nil
 	case ir.HitCollect, ir.HitRuleOrder:
 		return e.collect(t, matched)
+	case ir.HitOutputOrder:
+		return orderByPriority(t, matched), nil
 	default:
 		return ir.Value{}, fmt.Errorf("unsupported hit policy at execution time")
 	}
@@ -196,6 +199,22 @@ func aggregateNumbers(agg ir.Aggregation, matched []ir.Rule) (ir.Value, error) {
 		}
 	}
 	return ir.Num(acc), nil
+}
+
+// orderByPriority returns the matched rules' outputs as a list, ordered by output-value priority
+// (descending) — the OUTPUT ORDER hit policy. A stable sort keeps a deterministic order among
+// equal-priority outputs. Shared by Eval and the trace/explain path so they never diverge.
+func orderByPriority(t *ir.DecisionTable, matched []ir.Rule) ir.Value {
+	ordered := make([]ir.Rule, len(matched))
+	copy(ordered, matched)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return rank(t.Priority, ordered[i].Outputs[0]) < rank(t.Priority, ordered[j].Outputs[0])
+	})
+	xs := make([]ir.Value, 0, len(ordered))
+	for _, r := range ordered {
+		xs = append(xs, buildOutput(t.Outputs, r.Outputs))
+	}
+	return ir.List(xs)
 }
 
 // rank returns the index of v in the priority list (smaller = higher priority);

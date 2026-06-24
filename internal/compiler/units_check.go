@@ -166,6 +166,26 @@ func (c *unitChecker) inferRange(p *ir.ExprProgram, lo, hi, line int) (units.Uni
 			}
 			push(u)
 			i++
+		case ir.OpPow:
+			// power(x, n): the static unit model cannot represent U^n for a runtime exponent, so the
+			// base must be dimensionless; the result is dimensionless. A dimensioned base is a loud
+			// error (never a silent unit drop).
+			base, _, ok := pop2()
+			if !ok {
+				return bad()
+			}
+			if !base.IsZero() {
+				return nil, c.mismatch(base, units.Unit{}, line, "power() base (must be dimensionless)")
+			}
+			push(units.Unit{})
+			i++
+		case ir.OpStartsWith, ir.OpEndsWith, ir.OpContains:
+			// string predicates: dimensionless string operands -> dimensionless boolean result.
+			if _, _, ok := pop2(); !ok {
+				return bad()
+			}
+			push(units.Unit{})
+			i++
 		case ir.OpEqOp, ir.OpNeOp, ir.OpLtOp, ir.OpLeOp, ir.OpGtOp, ir.OpGeOp:
 			a, b, ok := pop2()
 			if !ok {

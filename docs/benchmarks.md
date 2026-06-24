@@ -17,6 +17,13 @@ The figures below are illustrative (Apple Silicon, single core) — reproduce wi
 Sub-microsecond per decision once compiled. This is the number that matters for a Go service, a Docker
 sidecar, or a server embedding the engine. Exact-decimal arithmetic is included (no float shortcuts).
 
+**Profiling note.** A CPU profile of the hot path shows it is already tight: `EvalTable` is 7 allocs /
+880 B per op, and the engine functions (`vm.resolve`, `vm.matches`, `ir.MatchCell`) are a small slice of
+runtime — the rest is GC/scheduler overhead. There is no high-ROI, determinism-safe micro-optimization
+to chase here; the real per-op cost (the WASM JSON boundary) was addressed by the batch API above.
+Deeper native micro-opts are deliberately deferred — they would trade the exact-decimal / bit-for-bit
+determinism contract for marginal gains.
+
 ## JavaScript head-to-head (same "best discount" rule)
 
 `/tmp` micro-benchmark: the identical rule evaluated in feelc (WASM), json-logic-js, and
@@ -32,7 +39,32 @@ json-rules-engine. **All three produce identical outputs.**
 throughput because it has no boundary to cross — feelc's ~14 µs is almost entirely the per-call JSON
 round-trip, not evaluation (the Go bench shows the engine itself at ~0.6 µs). feelc is in the same order
 of magnitude as json-rules-engine. The boundary cost is **fixed per call**, so it amortizes as rules get
-larger (more decisions per call) and is removable with a batch-evaluate API (a documented optimization).
+larger (more decisions per call).
+
+### Batch evaluation removes most of the boundary cost (ADR 0024)
+
+`CompiledModel.evaluateBatch(decision, rows[])` evaluates N input rows in **one** JS↔WASM crossing
+(one JSON parse, one handle lookup). Since the boundary — not the evaluation — dominates the per-call
+cost, batching amortizes it. Measured on the `promo` model, 20 000 rows (Apple Silicon):
+
+| Path | Node 24 | Bun 1.3 |
+|---|---|---|
+| `evaluate()` per row | 14.4 µs/row | 13.1 µs/row |
+| `evaluateBatch()` | **6.95 µs/row** | **5.59 µs/row** |
+| speed-up | **2.1×** | **2.3×** |
+
+The win grows with batch size and shrinks with per-row work; for reactive UIs and bulk scoring it is the
+recommended path. Reproduce: `node packages/engine/scripts/bench-batch.mjs` (or `bun`), or see
+`packages/engine/test/engine.test.ts`.
+
+### Head-to-head vs other engines
+
+For one identical decision benchmarked across feelc + **6 other engines** (json-logic-js,
+json-rules-engine, grule, GoRules ZEN/Rust, Drools & Camunda on the JVM) on the same host — with full
+per-engine caveats — see the [competitive benchmark report](competitive-report.md). Short version:
+feelc's native compiled-table path (~0.65 µs/op) is the **second-fastest measured and the fastest engine
+that also offers in-engine verification, exact decimals, and cgo-free portability**; a bare JSON
+interpreter is faster only because it skips all of that.
 
 ## What you actually trade for
 
@@ -47,5 +79,5 @@ same engine as WASM.
 
 ```sh
 go test -bench=. -benchmem -run='^$' ./internal/engine/   # native Go
-# JS head-to-head: npm i @feelc/engine json-logic-js json-rules-engine && node bench.mjs
+# JS head-to-head: npm i feelc json-logic-js json-rules-engine && node bench.mjs
 ```
