@@ -114,11 +114,11 @@ func runFn(args []js.Value) (any, error) {
 	switch {
 	case doc.Full:
 		if ft, e := explain.ExplainFull(cm, doc.Decision, doc.Input); e == nil {
-			resp["trace"] = ft
+			resp["trace"] = explain.NormalizeFullJSON(ft) // decimals as fixed-notation numbers, like `output`
 		}
 	case doc.Explain:
 		if tr, e := explain.Explain(cm, doc.Decision, doc.Input); e == nil {
-			resp["trace"] = tr
+			resp["trace"] = explain.NormalizeJSON(tr)
 		}
 	}
 	return resp, nil

@@ -57,16 +57,19 @@
       <div class="trace" id="trace"></div>
 
       <div class="run">
-        <h3>Simulator</h3>
-        <div class="run-row">
-          <input id="decision" placeholder="decision name (e.g. eligibility)" />
-          <button id="form-btn">Build form</button>
-          <button id="run-btn">Run JSON</button>
+        <div class="run-head">
+          <h3>Inputs &amp; simulation</h3>
+          <label class="goal-label">decision <select id="goal" title="Which decision to evaluate"></select></label>
+          <span class="recompute idle" id="recompute">live</span>
           <button id="explain-btn" title="Narrate the last result in plain English (LLM)">Explain</button>
         </div>
         <div id="sim-form" class="sim-form"></div>
-        <textarea id="input" rows="3" spellcheck="false" placeholder='{"credit_score":700,"annual_income":60000,"monthly_debt":1500,"age":40}'></textarea>
-        <div class="output" id="output"></div>
+        <details class="json-adv">
+          <summary>edit inputs as JSON</summary>
+          <textarea id="input" rows="4" spellcheck="false" placeholder='{"credit_score":700,"annual_income":60000,"monthly_debt":1500,"age":40}'></textarea>
+          <div class="json-err" id="json-err"></div>
+        </details>
+        <div class="result" id="result"></div>
         <div class="narration" id="narration"></div>
       </div>
     </section>
@@ -94,6 +97,7 @@
     </form>
   </dialog>
 
+  <script src="shared.js"></script>
   <script src="app.js"></script>
   <script src="project.js"></script>
 </body>

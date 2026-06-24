@@ -78,3 +78,23 @@ func TestJSONify(t *testing.T) {
 		t.Errorf("JSONify passes non-numbers through")
 	}
 }
+
+// JSONify must recurse into contexts/lists and emit trailing-zero decimals in FIXED notation, never
+// scientific. This is the contract the CLI `run --json` path relies on (cmd/feelc) so its output is
+// byte-identical to the HTTP service for the same model+input — regression for the "2E+3" CLI divergence.
+func TestJSONify_NestedFixedNotation(t *testing.T) {
+	v := map[string]any{
+		"amount": apd.New(2, 3), // coefficient 2, exponent 3 = 2000 (would render "2E+3" via apd.String)
+		"label":  "ok",
+		"rates":  []any{apd.New(1, 2), apd.New(5, -1)}, // 100, 0.5
+	}
+	b, err := json.Marshal(modelinfo.JSONify(v))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	want := `{"amount":2000,"label":"ok","rates":[100,0.5]}`
+	if got != want {
+		t.Errorf("JSONify nested = %s, want %s", got, want)
+	}
+}

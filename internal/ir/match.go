@@ -94,6 +94,13 @@ func matchCellBase(ct CellTest, v Value) (bool, error) {
 	case OpEq:
 		return ValueEq(v, ct.A), nil
 	case OpNe:
+		// null/NA satisfies no cell, including `!= x` (ADR 0003 "null satisfies no condition",
+		// ADR 0013 "NA behaves like null in matching"). Without this guard a null/NA value would
+		// spuriously match `!= x` (ValueEq is false on a tag mismatch), the opposite of the invariant
+		// and inconsistent with the equivalent `not(= x)` negation path above.
+		if v.Tag == TagNull || v.Tag == TagNA {
+			return false, nil
+		}
 		return !ValueEq(v, ct.A), nil
 	case OpLt, OpLe, OpGt, OpGe:
 		return NumCompare(ct.Op, v, ct.A)

@@ -152,6 +152,16 @@ function buildExamples() {
   console.log(`examples: ${out.length} → site/examples.json`);
 }
 
+// copyShared mirrors the single source of truth for the reactive renderers (the embedded serve --ui's
+// shared.js) into the playground, so the WASM playground and `feelc serve --ui` can never drift.
+function copyShared() {
+  const src = join(root, "internal", "service", "web", "shared.js");
+  const dst = join(siteDir, "playground", "shared.js");
+  writeFileSync(dst, readFileSync(src, "utf8"));
+  console.log("shared: internal/service/web/shared.js -> site/playground/shared.js");
+}
+
 renderDocs();
+copyShared();
 buildExamples();
 checkLinks();

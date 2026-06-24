@@ -1,7 +1,7 @@
 "use strict";
 // Project-mode UI (additive, zero-dependency). Activates ONLY when GET /v1/project returns 200
 // (i.e. `feelc serve --project`); in single-file mode it does nothing and the existing UI is untouched.
-// Reuses app.js globals: $, api, renderGraph, banner, clearReport, escapeHtml, detectDecision, verify.
+// Reuses shared.js/app.js globals: $, api, renderGraph, banner, clearReport, escapeHtml, verify, refreshAll.
 
 let PROJECT = null;
 let CURRENT_MODULE = null;
@@ -116,9 +116,9 @@ async function selectModule(name) {
   renderModuleList();
   const res = await fetch(`/v1/modules/${encodeURIComponent(name)}/source`);
   $("source").value = res.ok ? await res.text() : "";
-  if (typeof detectDecision === "function") { $("decision").value = ""; detectDecision(); }
   ensureSaveButton();
-  if (typeof verify === "function") verify();
+  // refreshAll (shared.js) re-verifies, re-graphs and rebuilds the reactive simulator for this module.
+  if (typeof refreshAll === "function") refreshAll();
 }
 
 function ensureSaveButton() {

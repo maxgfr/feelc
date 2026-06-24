@@ -45,7 +45,11 @@ var tokenMatchers = []tokenMatcher{
 
 	match(TokenTemporal, `@"(\\.|[^"])*"`),
 	match(TokenString, `"(\\.|[^"])*"`),
-	match(TokenNumber, `\-?[0-9]+(\.[0-9]+)?\b`),
+	// feelc fork: the number literal no longer absorbs a leading '-'. A bare `\-?` made the lexer
+	// context-free, so `2-3` tokenized as `2` then `-3` (two unrelated numbers) — silently breaking
+	// subtraction without surrounding spaces (`a*3-1`, `10-1`). A leading '-' that is genuinely a
+	// negative literal (unary position) is handled context-sensitively in Next() via negNumberRe.
+	match(TokenNumber, `[0-9]+(\.[0-9]+)?\b`),
 
 	match("?", ""),
 	match("..", ""),
@@ -83,6 +87,23 @@ var tokenMatchers = []tokenMatcher{
 	// variable name support unicode chars, currently Han and Greek is in the list
 	// refer to https://github.com/google/re2/wiki/Syntax
 	match(TokenName, `[a-zA-Z_\$\p{Han}\p{Greek}\p{Bopomofo}\p{Hangul}][a-zA-Z_\$0-9\p{Han}\p{Greek}}\p{Bopomofo}\p{Hangul}]*`),
+}
+
+// negNumberRe matches a negative numeric literal (a '-' immediately followed by digits). It is applied
+// only in "unary position" (see operandEnd) so a leading '-' is read as part of the number there, while
+// after an operand the standalone '-' operator (binary subtraction) is matched instead.
+var negNumberRe = regexp.MustCompile(`^-[0-9]+(\.[0-9]+)?\b`)
+
+// operandEnd reports whether a token ENDS an operand, i.e. a following '-' must be binary subtraction
+// rather than the sign of a negative literal. After anything else (start of input, an operator, '(',
+// '[', ',', ':', a comparison, a keyword like `in`/`return`/`then`/`else`) a '-' before digits is a
+// negative literal.
+func operandEnd(kind string) bool {
+	switch kind {
+	case TokenNumber, TokenName, TokenString, TokenTemporal, ")", "]", "}":
+		return true
+	}
+	return false
 }
 
 type ScanPosition struct {
@@ -191,6 +212,19 @@ func (scanner *Scanner) Next() error {
 	} else if scanner.rest == "" {
 		scanner.currentToken = ScannerToken{Kind: TokenEOF, Pos: scanner.Pos}
 		return nil
+	}
+
+	// Context-sensitive negative literal: in a unary position (start of input, or right after an
+	// operator/'('/'['/','/':'/comparison/keyword) a '-' immediately followed by digits is the sign of a
+	// negative number, not the subtraction operator. After an operand it falls through to the '-' op
+	// below (binary subtraction). scanner.currentToken still holds the previous real token here
+	// (whitespace recursion does not update it).
+	if !operandEnd(scanner.currentToken.Kind) {
+		if m := negNumberRe.FindString(scanner.rest); m != "" {
+			scanner.currentToken = ScannerToken{Kind: TokenNumber, Value: m, Pos: scanner.Pos}
+			scanner.goAhead(m)
+			return nil
+		}
 	}
 
 	for _, matcher := range tokenMatchers {

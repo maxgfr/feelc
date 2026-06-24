@@ -30,3 +30,4 @@ go.work.sum
 /site/static/
 /site/docs/
 /site/examples.json
+/site/playground/shared.js
