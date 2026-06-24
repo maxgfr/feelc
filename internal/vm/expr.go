@@ -15,12 +15,33 @@ import (
 // matching path (match.go); this guard applies only at the expression level (here).
 var errNAComparison = errors.New("non-applicable value reached in a comparison")
 
+// vmFault is a typed panic raised by the bytecode interpreter on an internal invariant violation
+// (e.g. stack underflow from a corrupt program). evalExpr recovers it into a clean error; any other
+// panic is re-raised so genuine bugs surface instead of being masked.
+type vmFault struct{ msg string }
+
 // evalExpr executes a bytecode program. input != nil for an Op=Prog cell
 // (value of the `?` column). OpLoadVar goes through the demand-driven resolver.
-func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (ir.Value, error) {
+func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (result ir.Value, err error) {
+	// Defensive: the compiler never emits a program that pops an empty stack, but a malformed/corrupt
+	// program (e.g. a tampered .ir.bin loaded from disk) could. pop() raises a typed vmFault on
+	// underflow, which we convert to a clean engine error here — any OTHER panic is re-raised so real
+	// bugs are never masked.
+	defer func() {
+		if r := recover(); r != nil {
+			if f, ok := r.(vmFault); ok {
+				result, err = ir.Value{}, fmt.Errorf("malformed expression program: %s", f.msg)
+				return
+			}
+			panic(r)
+		}
+	}()
 	stack := make([]ir.Value, 0, p.MaxStack+1)
 	push := func(v ir.Value) { stack = append(stack, v) }
 	pop := func() ir.Value {
+		if len(stack) == 0 {
+			panic(vmFault{"stack underflow in expression bytecode"})
+		}
 		v := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		return v

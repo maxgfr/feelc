@@ -137,6 +137,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/decisions/{key}/explain", s.handleExplain)
 	mux.HandleFunc("POST /v1/evaluate", s.handleEvaluate)
 	mux.HandleFunc("GET /v1/model", s.handleModel)
+	mux.HandleFunc("POST /v1/model", s.handleModelCandidate)              // model info (name/inputs/decisions) of a CANDIDATE source
 	mux.HandleFunc("GET /v1/source", s.handleSource)                      // current .rules source (web editor)
 	mux.HandleFunc("POST /v1/verify", s.handleVerifyCandidate)            // verify a CANDIDATE source (without swap)
 	mux.HandleFunc("POST /v1/check", s.handleCheckCandidate)              // check claims against a CANDIDATE source
@@ -422,11 +423,11 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case doc.Full:
 		if ft, err := explain.ExplainFull(cm, doc.Decision, doc.Input); err == nil {
-			resp["trace"] = ft
+			resp["trace"] = explain.NormalizeFullJSON(ft) // decimals as fixed-notation numbers, like `output`
 		}
 	case doc.Explain:
 		if tr, err := explain.Explain(cm, doc.Decision, doc.Input); err == nil {
-			resp["trace"] = tr
+			resp["trace"] = explain.NormalizeJSON(tr)
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -642,6 +643,26 @@ func (s *Server) handleModel(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"name": entry.Model.Name, "version": entry.Version, "hash": entry.Hash,
 		"inputs": modelinfo.Inputs(entry.Model), "decisions": modelinfo.Decisions(entry.Model),
+	})
+}
+
+// handleModelCandidate returns the model surface (name, inputs, decisions) of a CANDIDATE source
+// supplied in the request body — without publishing it. It mirrors the WASM `feelc.model(src)` entry
+// so the web editor's live loop (goal selector + reactive inputs) is identical over HTTP and WASM.
+func (s *Server) handleModelCandidate(w http.ResponseWriter, r *http.Request) {
+	src, err := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "reading body: "+err.Error())
+		return
+	}
+	cm, _, _, err := s.cache.Compile(src)
+	if err != nil {
+		writeCompileErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name": cm.Name, "inputs": modelinfo.Inputs(cm), "decisions": modelinfo.Decisions(cm),
 	})
 }
 

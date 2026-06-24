@@ -390,6 +390,13 @@ func buildDim(col string, rules []ir.Rule, idx int, dom ir.Domain) dim {
 	}
 
 	switch {
+	case dom.Kind == ir.DomEnum && hasNum:
+		// Numeric enum (`in {1,2,3}`): the only legal inputs are exactly the enumerated members — a
+		// DISCRETE set, like a string enum. Witness at each member only; never fabricate midpoints or
+		// neighbours (1.5, 0, 4) the way numericWitnesses does for a continuous range — those are illegal
+		// inputs and would be reported as false completeness gaps, and a rule that matches only outside
+		// the set must surface as a dead rule, not be "covered" by a fabricated point.
+		return dim{col: col, witnesses: numericEnumWitnesses(dom)}
 	case hasNum:
 		return dim{col: col, witnesses: numericWitnesses(nums, dom)}
 	case hasBool:
@@ -399,6 +406,30 @@ func buildDim(col string, rules []ir.Rule, idx int, dom ir.Domain) dim {
 	default:
 		return dim{col: col, witnesses: []ir.Value{ir.Null()}} // free column (always Any)
 	}
+}
+
+// numericEnumWitnesses returns exactly the (deduped) numeric members of an enum domain — the discrete
+// numeric analogue of the string-enum branch of discreteWitnesses.
+func numericEnumWitnesses(dom ir.Domain) []ir.Value {
+	var out []ir.Value
+	seen := map[string]bool{}
+	for _, v := range dom.Enum {
+		if v.Tag != ir.TagNumber || v.Num == nil {
+			continue
+		}
+		r := new(apd.Decimal)
+		r.Reduce(v.Num)
+		k := r.Text('f')
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, ir.Num(v.Num))
+	}
+	if len(out) == 0 {
+		return []ir.Value{ir.Null()} // degenerate empty enum: nothing legal to witness
+	}
+	return out
 }
 
 func numericWitnesses(cuts []*apd.Decimal, dom ir.Domain) []ir.Value {

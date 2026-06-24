@@ -291,8 +291,37 @@ func (p *Parser) addOrSubOp() (Node, error) {
 func (p *Parser) mulOrDivOp() (Node, error) {
 	return p.binop(
 		[]string{"*", "/", "%"},
-		p.parseFuncallOrIndexOrDot,
+		p.unaryOp,
 	)
+}
+
+// unaryOp handles a prefix '-' (and a no-op prefix '+') on an arbitrary operand. The scanner already
+// folds `-<digits>` into a negative literal in unary position, so this fires for the remaining cases:
+// negating a variable/expression (`-a`, `-(a+1)`, `3 * -x`) and a '-' separated from its digits by a
+// space (`- 3`). Unary minus is desugared to `0 - operand` using the existing Binop node, so no new AST
+// node or compiler/SMT/units lowering is required, and exact-decimal arithmetic is preserved.
+func (p *Parser) unaryOp() (Node, error) {
+	switch p.CurrentToken().Kind {
+	case "-":
+		textRange := p.startTextRange()
+		if err := p.scanner.Next(); err != nil {
+			return nil, err
+		}
+		operand, err := p.unaryOp() // allow chained unary, e.g. `- -a`
+		if err != nil {
+			return nil, err
+		}
+		textRange.End = p.CurrentToken().Pos
+		zero := &NumberNode{Value: "0", textRange: textRange}
+		return &Binop{Op: "-", Left: zero, Right: operand, textRange: textRange}, nil
+	case "+":
+		if err := p.scanner.Next(); err != nil { // unary plus: a no-op
+			return nil, err
+		}
+		return p.unaryOp()
+	default:
+		return p.parseFuncallOrIndexOrDot()
+	}
 }
 
 func (p *Parser) parseFuncallOrIndexOrDot() (Node, error) {

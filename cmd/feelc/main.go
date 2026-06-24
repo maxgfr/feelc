@@ -34,6 +34,7 @@ import (
 	"github.com/maxgfr/feelc/internal/graph"
 	"github.com/maxgfr/feelc/internal/ir"
 	"github.com/maxgfr/feelc/internal/loader"
+	"github.com/maxgfr/feelc/internal/modelinfo"
 	"github.com/maxgfr/feelc/internal/project"
 	"github.com/maxgfr/feelc/internal/registry"
 	"github.com/maxgfr/feelc/internal/service"
@@ -953,7 +954,10 @@ func cmdRun(args []string) error {
 	unit := cm.Units[*decision]
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
-		out := map[string]any{"decision": *decision, "output": display(out)}
+		// modelinfo.JSONify (the single decimal->JSON converter shared by the HTTP service and the WASM
+		// playground) recurses into contexts/lists and emits decimals as fixed-notation JSON numbers, so
+		// the CLI's --json output is byte-identical to /v1/run for the same model+input (no "2E+3" strings).
+		out := map[string]any{"decision": *decision, "output": modelinfo.JSONify(out)}
 		if unit != "" {
 			out["unit"] = unit
 		}

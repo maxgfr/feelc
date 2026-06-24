@@ -26,15 +26,18 @@
       <textarea id="source" spellcheck="false" placeholder="Write or paste a .rules model — it is verified and run live, in your browser."></textarea>
 
       <div class="run">
-        <h3>Simulator</h3>
-        <div class="run-row">
-          <input id="decision" placeholder="decision (auto-detected)" />
-          <button id="form-btn">Build form</button>
-          <button id="run-btn" class="primary">Run</button>
+        <div class="run-head">
+          <h3>Inputs &amp; simulation</h3>
+          <label class="goal-label">decision <select id="goal" title="Which decision to evaluate"></select></label>
+          <span class="recompute idle" id="recompute">live</span>
         </div>
         <div id="sim-form" class="sim-form"></div>
-        <textarea id="input" rows="2" spellcheck="false" placeholder='{"cart_total": 120, "is_member": true}'></textarea>
-        <div class="output" id="output"></div>
+        <details class="json-adv">
+          <summary>edit inputs as JSON</summary>
+          <textarea id="input" rows="3" spellcheck="false" placeholder='{"cart_total": 120, "is_member": true}'></textarea>
+          <div class="json-err" id="json-err"></div>
+        </details>
+        <div class="result" id="result"></div>
       </div>
     </section>
 
@@ -55,6 +58,7 @@
   </main>
 
   <script src="../static/wasm_exec.js"></script>
+  <script src="shared.js"></script>
   <script src="playground.js"></script>
 </body>
 </html>
