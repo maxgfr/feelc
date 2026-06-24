@@ -59,11 +59,13 @@ jobs:
       - uses: goreleaser/goreleaser-action@v6
         with:
           install-only: true
+      # NOTE: no `registry-url` here on purpose — actions/setup-node would write an empty
+      # `//registry.npmjs.org/:_authToken=` to .npmrc, which makes npm take the (failing) token path
+      # instead of OIDC trusted publishing. Without it, npm uses the default registry + OIDC cleanly.
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          registry-url: "https://registry.npmjs.org"
-      - run: npm install -g npm@latest # OIDC trusted publishing needs a recent npm
+      - run: npm install -g npm@latest # OIDC trusted publishing needs a recent npm (>= 11.5.1)
       - run: npm ci
       # semantic-release (exec plugin): tag + push -> goreleaser binaries -> bump the npm version to the
       # release version -> npm publish via OIDC. The npm bump happens AFTER goreleaser so the tree is
