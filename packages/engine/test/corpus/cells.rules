@@ -1,0 +1,139 @@
+model "cells" {
+  rounding: half_even
+}
+
+input score  : number in [0..1000]
+input region : string in {"urban", "suburban", "rural", "remote"}
+input flag   : boolean
+
+# Negation: not(<test>) on a number literal.
+decision neg_num : string {
+  needs: score
+  hit: first
+  #  score    => label
+     not(580) => "other"
+     -        => "is580"
+}
+
+# Negation of a set: not(a, b) on strings.
+decision neg_set : string {
+  needs: region
+  hit: first
+  #  region                       => label
+     not("urban", "suburban")     => "outside"
+     -                            => "inside"
+}
+
+# Closed interval [a..b].
+decision range_closed : string {
+  needs: score
+  hit: first
+  #  score        => label
+     [580..680]   => "inband"
+     -            => "outband"
+}
+
+# Open interval (a..b).
+decision range_open : string {
+  needs: score
+  hit: first
+  #  score        => label
+     (580..680)   => "inband"
+     -            => "outband"
+}
+
+# Mixed-bound interval [a..b).
+decision range_mixed : string {
+  needs: score
+  hit: first
+  #  score        => label
+     [580..680)   => "inband"
+     -            => "outband"
+}
+
+# Comparison ranges: >=, >, <=, <.
+decision cmp_ge : string {
+  needs: score
+  hit: first
+  #  score   => label
+     >= 580  => "hi"
+     -       => "lo"
+}
+
+decision cmp_gt : string {
+  needs: score
+  hit: first
+  #  score   => label
+     > 580   => "hi"
+     -       => "lo"
+}
+
+decision cmp_le : string {
+  needs: score
+  hit: first
+  #  score   => label
+     <= 580  => "lo"
+     -       => "hi"
+}
+
+decision cmp_lt : string {
+  needs: score
+  hit: first
+  #  score   => label
+     < 580   => "lo"
+     -       => "hi"
+}
+
+# Set / OR-of-values on strings.
+decision set_str : string {
+  needs: region
+  hit: first
+  #  region                  => label
+     "urban", "suburban"     => "metro"
+     -                       => "nonmetro"
+}
+
+# Wildcard '-' (any). Two columns, second is any.
+decision wildcard : string {
+  needs: score, region
+  hit: first
+  #  score   | region => label
+     >= 580  | -      => "hi-any"
+     -       | -      => "lo-any"
+}
+
+# Default row.
+decision default_row : string {
+  needs: score
+  hit: first
+  #  score      => label
+     >= 999     => "max"
+     default    => "fallback"
+}
+
+# Number literal comparand (bare equality).
+decision lit_num : string {
+  needs: score
+  hit: first
+  #  score => label
+     580   => "exact"
+     -     => "no"
+}
+
+# String literal comparand (bare equality).
+decision lit_str : string {
+  needs: region
+  hit: first
+  #  region   => label
+     "urban"  => "isurban"
+     -        => "noturban"
+}
+
+# Boolean literal comparand (bare equality).
+decision lit_bool : string {
+  needs: flag
+  hit: first
+  #  flag  => label
+     true  => "on"
+     false => "off"
+}

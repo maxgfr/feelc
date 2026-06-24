@@ -1,0 +1,12 @@
+model "compare" {}
+
+input a : number
+input b : number
+
+# Comparison operators (return boolean)
+decision eq  : boolean = a = b
+decision ne  : boolean = a != b
+decision lt  : boolean = a < b
+decision le  : boolean = a <= b
+decision gt  : boolean = a > b
+decision ge  : boolean = a >= b

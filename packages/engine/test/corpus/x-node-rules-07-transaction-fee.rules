@@ -1,0 +1,35 @@
+model "transaction_fee" {}
+
+# Payment-processing fee (node-rules' domain is transaction/payment rules). A condition->consequence
+# fee schedule keyed on card type, plus arithmetic for the actual fee. node-rules would do this with
+# one rule per card type setting fact.feeRate; feelc uses a first-hit table for the rate and a
+# literal-expression decision (round(x,2)) for the money amount.
+#   Credit Card        -> 2.9% + 0.30 fixed
+#   Debit              -> 1.5% + 0.00
+#   American Express   -> 3.5% + 0.10
+# Scenario: transaction_total=600, card_type="Credit Card"
+#   -> fee = round(600*0.029 + 0.30, 2) = round(17.70, 2) = 17.70
+
+input transaction_total : number >= 0 unit "USD"
+input card_type         : string
+
+decision fee_rate : number {
+  needs: card_type
+  hit: first
+  #  card_type          => fee_rate
+     "Credit Card"      => 0.029
+     "Debit"            => 0.015
+     "American Express" => 0.035
+     default            => 0.03
+}
+
+decision fixed_fee : number {
+  needs: card_type
+  hit: first
+  #  card_type          => fixed_fee
+     "Credit Card"      => 0.30
+     "American Express" => 0.10
+     default            => 0
+}
+
+decision fee : number = round(transaction_total * fee_rate + fixed_fee, 2)

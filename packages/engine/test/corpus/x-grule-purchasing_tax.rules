@@ -1,0 +1,23 @@
+model "purchasing_tax" {
+  rounding: half_even
+}
+
+# Ported from CashFlowRule.grl (TaxingLuxuryItems / TaxingNormalItems / TaxingOtherTypeItems).
+# Grule: LUXURY -> +15%, NORMAL -> +10%, anything else -> +20%.
+# NOTE: in grule the field is named `Tax` but it is assigned Price + Price*rate, i.e. it actually
+# stores the gross (price-after-tax) amount. We reproduce that exact arithmetic.
+input item_type : string in {"LUXURY", "NORMAL", "OTHER"}
+input price     : number >= 0
+
+# Tax rate selected by item type (FIRST table, but conditions are mutually exclusive).
+decision rate : number {
+  needs: item_type
+  hit: unique
+  #  item_type  => rate
+     "LUXURY"   => 0.15
+     "NORMAL"   => 0.1
+     "OTHER"    => 0.2
+}
+
+# Grule:  Purchase.Tax = Purchase.Price + (Purchase.Price * rate)
+decision tax : number = price + (price * rate)

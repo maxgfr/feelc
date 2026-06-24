@@ -1,6 +1,6 @@
 # ADR 0004 — Acknowledged deferrals: parameterized BKM and SMT extension
 
-- **Status**: accepted (2026-06-22); temporal deferral since lifted by [ADR 0014](0014-temporal-types.md)
+- **Status**: accepted (2026-06-22); temporal deferral since lifted by [ADR 0014](0014-temporal-types.md); §3 multi-arg builtin deferral partially lifted by [ADR 0020](0020-deterministic-extra-builtins.md) (2026-06-24)
 - **Deciders**: maxgfr
 
 In line with the project's ethics ("never silently conform/pretend"), we explicitly document
@@ -61,3 +61,9 @@ scope** and **fail outright** (never silently conformed):
 these functions would add semantics (decimal handling, string indices) with no justifying
 example. The lowerer emits an explicit diagnostic referring to this ADR. **Resumption.** Add
 the dedicated opcode/lowering + tests when a real need arises.
+
+> **Status updated (2026-06-24): partially LIFTED by [ADR 0020](0020-deterministic-extra-builtins.md).**
+> `round(x, n)`, `abs(x)`, `trunc(x)` and `modulo(x, y)` are now supported (deterministic, exact,
+> verification-safe — a gap analysis vs other rule engines showed they were excluded only by this
+> blanket rule, not by philosophy). Genuinely problematic multi-arg built-ins (`substring`, string/list
+> functions, `for`/`some`/`every`) remain out of scope and still fail outright.

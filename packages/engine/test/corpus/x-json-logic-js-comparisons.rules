@@ -1,0 +1,15 @@
+model "jsonlogic_comparisons" {}
+
+# Ports json-logic comparison operators on data:
+#   {">":  [{"var":"a"}, {"var":"b"}]}
+#   {">=": [...]}, {"<": [...]}, {"<=": [...]}, {"!=": [...]}
+# Example from README "Compound": ( (3 > 1) && (1 < 3) ) -> true
+
+input a : number
+input b : number
+
+decision gt  : boolean = a > b
+decision gte : boolean = a >= b
+decision lt  : boolean = a < b
+decision lte : boolean = a <= b
+decision neq : boolean = a != b

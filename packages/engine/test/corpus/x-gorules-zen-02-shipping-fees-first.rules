@@ -1,0 +1,31 @@
+model "zen_shipping_fees" {}
+
+# Ported from zen README "Decision Table Unary Test" example.
+#   IF country == 'US' AND cart_total > 1000 THEN percent fee 2
+#   ELSE IF country == 'US'                  THEN flat fee 30
+#   ELSE IF country == 'CA' OR 'MX'          THEN flat fee 50
+#   ELSE                                          flat fee 150
+# zen README input: {country:"US", cart_total:1500} -> percent fee = 2.
+# feelc tables emit literal outputs; we model the chosen fee amount and whether it is a percent.
+input country    : string
+input cart_total : number >= 0
+
+# fee_value: the numeric fee (percent when is_percent, otherwise a flat amount).
+decision fee_value : number {
+  needs: country, cart_total
+  hit: first
+  #  country    | cart_total => fee_value
+     "US"       | > 1000     => 2
+     "US"       | -          => 30
+     "CA","MX"  | -          => 50
+     default    |            => 150
+}
+
+# is_percent: true only for the US-over-1000 branch.
+decision is_percent : boolean {
+  needs: country, cart_total
+  hit: first
+  #  country    | cart_total => is_percent
+     "US"       | > 1000     => true
+     default    |            => false
+}

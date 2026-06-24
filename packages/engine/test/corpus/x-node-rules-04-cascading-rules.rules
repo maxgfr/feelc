@@ -1,0 +1,25 @@
+model "cascading_rules" {}
+
+# node-rules 3.CascadingRules: rule 1 matches application=="MOB" and SETS fact.isMobile=true
+# (R.next, no stop), then rule 2 blocks if cardType=="Debit".
+# This is forward chaining: a derived fact (isMobile) is computed upstream, then consumed.
+# Modelled as an upstream boolean decision is_mobile that the final outcome table needs (DRG edge).
+# Scenario fact: application="MOB", cardType="Credit" -> is_mobile=true, result=true (valid).
+# (Table outputs must be literals, so is_mobile is its own decision; the outcome table
+#  consumes it only as a NEEDS column, and we evaluate both decisions.)
+
+input application : string
+input card_type   : string
+
+# Derived fact (node-rules rule 1 consequence: fact.isMobile = true).
+decision is_mobile : boolean = application = "MOB"
+
+# Final block/allow decision; depends on the derived is_mobile fact (here only via card_type,
+# but is_mobile is wired as a needs column to mirror the cascade dependency).
+decision result : boolean {
+  needs: card_type, is_mobile
+  hit: first
+  #  card_type | is_mobile => result
+     "Debit"   | -         => false
+     default   |           => true
+}

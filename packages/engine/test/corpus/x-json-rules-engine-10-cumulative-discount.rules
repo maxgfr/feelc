@@ -1,0 +1,26 @@
+model "cumulative_discount" {}
+
+# json-rules-engine cumulative-events pattern (multiple rules fire, consumer sums their effects;
+# cf. the loyalty/promo style seen across engine-run + examples). Here several discount rules can
+# fire at once and their percentages are summed, then a final price is computed.
+#   rule A: cart_total >= 100        -> 5%
+#   rule B: is_member == true        -> 10%
+#   rule C: coupon == "SAVE15"       -> 15%
+# A buyer matching all three accrues 5+10+15 = 30%. Final price = cart_total * (1 - pct/100),
+# rounded to 2 decimals. feelc: `collect sum` for the additive rules + an expression decision for
+# the arithmetic (json-rules-engine would do the multiply in the success handler).
+
+input cart_total : number >= 0 unit "USD"
+input is_member  : boolean
+input coupon     : string
+
+decision discount_pct : number {
+  needs: cart_total, is_member, coupon
+  hit: collect sum
+  #  cart_total | is_member | coupon    => pct
+     >= 100     | -         | -         => 5
+     -          | true      | -         => 10
+     -          | -         | "SAVE15"  => 15
+}
+
+decision final_price : number = round(cart_total * (1 - discount_pct / 100), 2)

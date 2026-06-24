@@ -1,0 +1,10 @@
+model "builtins2" {}
+
+# Deterministic extra built-ins (ADR 0020): abs, trunc, round(x,n), modulo(x,y).
+input x : number
+input y : number
+
+decision abs_x   : number = abs(x)
+decision trunc_x : number = trunc(x)
+decision round_x : number = round(x, 2)
+decision mod_xy  : number = modulo(x, y)

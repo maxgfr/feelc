@@ -1,0 +1,15 @@
+model "multigraph" {}
+
+# Two-node decision graph: an if/then/else expression decision feeds a downstream table.
+# (The if-condition must be a comparison expression, not a bare boolean variable.)
+input logged_in : boolean
+input amount    : number >= 0
+
+decision customer_type : string = if logged_in = true then "member" else "guest"
+
+decision block_payment : boolean {
+  needs: customer_type, amount
+  hit: first
+  "guest" | > 10000 => true
+  -       | -       => false
+}

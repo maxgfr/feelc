@@ -1,0 +1,16 @@
+model "zen_table_hello" {}
+
+# Ported from zen test-data/table.json (decision.rs decision_from_content).
+# zen "Hello" decisionTable, hitPolicy: first
+#   input > 10 => 10
+#   (else)     => 0
+# zen test: input {"input": 5} -> {"output": 0}; and >10 -> 10.
+input input : number
+
+decision output : number {
+  needs: input
+  hit: first
+  #  input  => output
+     > 10   => 10
+     default => 0
+}

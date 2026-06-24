@@ -1,0 +1,24 @@
+model "issue108_priority" {}
+
+# Ported from Issue108_test.go.
+# Three rules all eligible (each *Done flag starts false); salience decides which fires first:
+#   Conflicting2 salience 3 -> "2"  (highest, fires first)
+#   Conflicting3 salience 2 -> "3"
+#   Conflicting1 salience 1 -> "1"
+# The test asserts the FIRST element of the sequence is "2" (the highest-salience rule).
+# We model "which rule fires first" as a PRIORITY-hit table: all rows match, the highest
+# priority output wins. Priority order (most->least): "2", "3", "1".
+input rule1_done : boolean
+input rule2_done : boolean
+input rule3_done : boolean
+
+decision first_fired : string {
+  needs: rule1_done, rule2_done, rule3_done
+  hit: priority
+  priority: "2", "3", "1"
+  #  rule1_done | rule2_done | rule3_done => fires
+     -          | false      | -          => "2"
+     -          | -          | false      => "3"
+     false      | -          | -          => "1"
+     default    |            |            => "none"
+}

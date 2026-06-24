@@ -1,0 +1,15 @@
+model "jsonlogic_boolean" {}
+
+# Ports json-logic `and` / `or` / `!` (negation) over boolean data:
+#   {"and":[{"var":"x"},{"var":"y"}]}
+#   {"or" :[{"var":"x"},{"var":"y"}]}
+#   {"!":  {"var":"x"}}
+# json-logic and/or return the deciding VALUE (truthy/falsy); over pure booleans this is the
+# same as feelc's boolean and/or. Negation `!` over a boolean = not(x).
+
+input x : boolean
+input y : boolean
+
+decision conj : boolean = (x) and (y)
+decision disj : boolean = (x) or (y)
+decision neg  : boolean = not(x)

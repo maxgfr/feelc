@@ -1,0 +1,20 @@
+model "salience_rating" {}
+
+# Ported from SalienceExample_test.go.
+# Grule uses salience (priority) + the "Rating == empty" guard so the FIRST applicable band wins:
+#   IntValue < 33  -> "Low"   (salience 30, highest)
+#   IntValue < 66  -> "Medium"(salience 20)
+#   IntValue < 300 -> "High"  (salience 10)
+#   otherwise      -> "This is not right" (salience -100, catch-all)
+# This is exactly a FIRST-hit decision table ordered most-specific (lowest band) first.
+input int_value : number
+
+decision rating : string {
+  needs: int_value
+  hit: first
+  #  int_value  => rating
+     < 33       => "Low"
+     < 66       => "Medium"
+     < 300      => "High"
+     default    => "This is not right"
+}

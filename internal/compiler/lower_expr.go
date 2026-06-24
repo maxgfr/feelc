@@ -173,12 +173,14 @@ func (l *lowerer) emit(node feel.Node) error {
 	return nil
 }
 
-// monoArgBuiltins: pure mono-arg built-ins supported in expressions. floor/ceiling/round map
-// onto the frozen decimal context (determinism); `not` is boolean negation.
+// monoArgBuiltins: pure mono-arg built-ins supported in expressions. floor/ceiling/abs/trunc map
+// onto the frozen decimal context (determinism); `not` is boolean negation. `round` is handled
+// separately (it accepts 1 OR 2 args); `modulo` is two-arg (see emitCall).
 var monoArgBuiltins = map[string]ir.Opcode{
 	"floor":   ir.OpFloor,
 	"ceiling": ir.OpCeil,
-	"round":   ir.OpRound,
+	"abs":     ir.OpAbs,
+	"trunc":   ir.OpTrunc,
 	"not":     ir.OpNot,
 }
 
@@ -204,17 +206,52 @@ func (l *lowerer) emitIf(n *feel.IfExpr) error {
 	return nil
 }
 
-// emitCall routes an invocation: mono-arg built-in, otherwise BKM inlining.
+// emitCall routes an invocation: deterministic built-in (mono- or two-arg), otherwise BKM inlining.
 func (l *lowerer) emitCall(fc *feel.FunCall) error {
 	ref, ok := fc.FunRef.(*feel.Var)
 	if !ok {
 		return diag.Newf(diag.CodeUnsupported, 0, "invocation: only `name(...)` is supported, got %s", fc.FunRef.Repr())
 	}
+	// Deterministic multi-arg built-ins (whitelist carve-out of ADR 0004, see ADR 0020). Genuinely
+	// problematic multi-arg builtins (substring, …) still fail outright (they are not whitelisted).
+	switch ref.Name {
+	case "round":
+		// round(x) -> nearest integer; round(x, n) -> n decimal places. Both HALF_EVEN.
+		switch {
+		case len(fc.Args) == 1 && positionalArgs(fc.Args):
+			if err := l.emit(fc.Args[0].Arg); err != nil {
+				return err
+			}
+			l.push(ir.OpRound, 0)
+		case len(fc.Args) == 2 && positionalArgs(fc.Args):
+			if err := l.emit(fc.Args[0].Arg); err != nil {
+				return err
+			}
+			if err := l.emit(fc.Args[1].Arg); err != nil {
+				return err
+			}
+			l.push(ir.OpRoundN, 0)
+		default:
+			return diag.Newf(diag.CodeUnsupported, 0, "round expects round(x) or round(x, n) with positional arguments")
+		}
+		return nil
+	case "modulo":
+		if len(fc.Args) != 2 || !positionalArgs(fc.Args) {
+			return diag.Newf(diag.CodeUnsupported, 0, "modulo expects modulo(x, y) with two positional arguments")
+		}
+		if err := l.emit(fc.Args[0].Arg); err != nil {
+			return err
+		}
+		if err := l.emit(fc.Args[1].Arg); err != nil {
+			return err
+		}
+		l.push(ir.OpMod, 0)
+		return nil
+	}
 	if op, isBuiltin := monoArgBuiltins[ref.Name]; isBuiltin {
-		// Multi-arg (e.g. round(x, n), substring(s, i, n)): fail outright, cf ADR 0004.
 		if len(fc.Args) != 1 || fc.Args[0].Name != "" {
 			return diag.Newf(diag.CodeUnsupported, 0,
-				"built-in %q expects exactly 1 positional argument (multi-arguments not supported, cf ADR 0004)", ref.Name)
+				"built-in %q expects exactly 1 positional argument", ref.Name)
 		}
 		if err := l.emit(fc.Args[0].Arg); err != nil {
 			return err
@@ -245,6 +282,16 @@ func (l *lowerer) emitCall(fc *feel.FunCall) error {
 		return nil
 	}
 	return l.emitBKMCall(fc)
+}
+
+// positionalArgs reports whether every argument is positional (no `name:` kwargs).
+func positionalArgs(args []feel.FunCallArg) bool {
+	for _, a := range args {
+		if a.Name != "" {
+			return false
+		}
+	}
+	return true
 }
 
 // emitBKMCall inlines a BKM invocation `name(a1, ..., an)`: AST substitution of
@@ -400,8 +447,8 @@ func maxStack(code []ir.Instr) int {
 			depth++
 		case ir.OpAdd, ir.OpSub, ir.OpMul, ir.OpDivOp,
 			ir.OpEqOp, ir.OpNeOp, ir.OpLtOp, ir.OpLeOp, ir.OpGtOp, ir.OpGeOp,
-			ir.OpAnd, ir.OpOr, ir.OpJmpFalse:
-			depth-- // pop 2 push 1 (binops/logical); OpJmpFalse pops the condition
+			ir.OpAnd, ir.OpOr, ir.OpRoundN, ir.OpMod, ir.OpJmpFalse:
+			depth-- // pop 2 push 1 (binops/logical/two-arg builtins); OpJmpFalse pops the condition
 		}
 		if depth > max {
 			max = depth

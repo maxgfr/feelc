@@ -1,0 +1,26 @@
+model "price_after_tax" {
+  rounding: half_even
+}
+
+# Ported from CashFlowRule.grl rule CalculatePriceAfterTax:
+#   Purchase.PriceAfterTax = Purchase.Price + Purchase.Tax
+# combined with the tax rule. Demonstrates DRG chaining + a reusable BKM for the tax amount.
+input item_type : string in {"LUXURY", "NORMAL", "OTHER"}
+input price     : number >= 0
+
+# Reusable pure formula: the tax surcharge for a given price & rate.
+bkm surcharge(p: number, r: number) : number = p * r
+
+decision rate : number {
+  needs: item_type
+  hit: unique
+  "LUXURY"  => 0.15
+  "NORMAL"  => 0.1
+  "OTHER"   => 0.2
+}
+
+# tax amount = price * rate (the actual surcharge, not the grule mislabeled gross)
+decision tax : number = surcharge(price, rate)
+
+# price after tax = price + tax
+decision price_after_tax : number = price + tax

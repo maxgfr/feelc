@@ -1,0 +1,11 @@
+model "jsonlogic_between" {}
+
+# Ports json-logic 3-arg `<` / `<=` (BETWEEN):
+#   {"<":  [1, {"var":"x"}, 10]}  -> (1 <  x) && (x <  10)   (exclusive both ends)
+#   {"<=": [1, {"var":"x"}, 10]}  -> (1 <= x) && (x <= 10)   (inclusive both ends)
+# logic.js: "<": (a,b,c) => (c===undefined) ? a<b : (a<b) && (b<c)
+
+input x : number
+
+decision between_excl : boolean = (1 < x) and (x < 10)
+decision between_incl : boolean = (1 <= x) and (x <= 10)

@@ -1,0 +1,14 @@
+model "metadata" {}
+
+# All four annotation kinds on an input.
+@title "Annual income"
+@doc "The applicant's gross annual income."
+@question "What is your annual income?"
+@source "Lending policy v3, section 2"
+input income : number >= 0
+
+# All four annotation kinds on a decision.
+@title "Credit eligibility"
+@doc "Whether the applicant qualifies, and why."
+@source "Lending policy v3, section 4"
+decision eligible : boolean = income >= 30000

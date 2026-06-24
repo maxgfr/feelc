@@ -1,0 +1,12 @@
+model "cond" {}
+
+input x : number
+
+# if/then/else
+decision sign : string = if x > 0 then "pos" else (if x < 0 then "neg" else "zero")
+
+# if returning number
+decision absish : number = if x < 0 then (0 - x) else x
+
+# nested if with boolean cond
+decision band : string = if x >= 0 and x <= 10 then "in" else "out"

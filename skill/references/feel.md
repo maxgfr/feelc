@@ -28,9 +28,10 @@ decision <name> : <type|ContextType> {
 
 ## Types
 
-`number` (**exact** decimal, never floating-point), `string`, `boolean`, and the declared
-`context { … }` types (multi-column output). A decision `: number|string|boolean` has **one** scalar output;
-a decision `: MyContext` has one output per context field (as many output columns).
+`number` (**exact** decimal, never floating-point), `string`, `boolean`, `date` and `duration`
+(whole-day, ISO — see *Temporal* below), and the declared `context { … }` types (multi-column output,
+**output only** — a `context` type cannot be used as an `input`). A decision `: number|string|boolean|date|duration`
+has **one** scalar output; a decision `: MyContext` has one output per context field (as many output columns).
 
 ## Input domains (used for completeness checking)
 
@@ -57,12 +58,56 @@ a decision `: MyContext` has one output per context field (as many output column
 ## Expressions (in `decision … = <expr>` and `?`-vs-column cells)
 
 Supported: literals, variables (input or upstream decision), `+ - * /`, comparisons
-`< <= > >= = !=`, `and`, `or`, parentheses. Example: `monthly_debt / (annual_income / 12)`.
+`< <= > >= = !=`, `and`, `or`, `not(x)`, parentheses, the conditional `if c then a else b`, the
+**single-arg** built-ins `floor(x)` / `ceiling(x)` / `round(x)` / `abs(x)` / `trunc(x)` (HALF_EVEN), the
+**two-arg** built-ins `round(x, n)` (n decimal places) and `modulo(x, y)` (floored, DMN; modulo-by-zero
+errors), and **BKM** invocation (`name(a, b)`, inlined at compile time). Example:
+`if annual_income > 0 then round(monthly_debt / (annual_income / 12), 2) else 0`.
 
-**NOT supported in v2** (fails compilation): function calls (`sum(...)`, `floor(...)`…),
-`if/then/else`, `not(...)` as an expression, `**`, lists/ranges as expressions, unary minus,
-dates/durations/timezones. ⚠️ `sum`/`min`/`max`/`count` do **not** exist as FEEL functions — they
-are **COLLECT hit policy aggregations** (see below).
+**NOT supported** (fails compilation): **multi-argument** built-ins beyond `round(x, n)` / `modulo(x, y)`
+(`substring(s, i, n)`, other string/list functions…); `for` / `some` / `every`, lists/filters/
+higher-order functions; `**` (power), unary minus; times of day, date-times, year-month durations,
+timezones; `?` inside a literal-expression (reserved for cells). ⚠️ `sum`/`min`/`max`/`count` are
+**COLLECT hit-policy aggregations** (see below), not functions.
+
+## Temporal (date & duration)
+
+Whole-day model (a `date` and a `duration` are integer day counts):
+- **literals**: `date("YYYY-MM-DD")`, `duration("P30D")` (ISO-8601, day granularity);
+- **arithmetic**: `date − date = duration`, `date ± duration = date`, `duration ± duration = duration`;
+- **comparisons**: `= != < <= > >=` between two dates or two durations.
+
+Out of scope (fails): times of day, date-times, year-month durations, timezones, mixing a date with a
+bare number. The engine never reads the clock — pass "today" as an input.
+
+## Units (money & dimensions)
+
+A numeric input/decision may carry a unit: `input salary : number >= 0 unit "EUR/month"`. Units are
+checked at compile time (dimensional analysis: `EUR + EUR/month` is rejected); runtime values stay plain
+decimals. Money = `number unit "<currency>"`.
+
+## Progressive brackets (marginal-rate schedules)
+
+```
+decision tax : number {
+  bracket: taxable
+  [0..10000)     => 0%
+  [10000..30000) => 11%
+  >= 30000       => 30%
+}
+```
+Computes `Σ (clamp(x,lo,hi) − lo) × rate`, lowered to arithmetic (no `default`). Rates accept `%` literals.
+
+## Applicability (eligibility gating)
+
+A block-form expression decision can be gated:
+`decision aid : number { = 200  applicable if income < 1500 }` (or `not applicable if <cond>`). A
+non-applicable result drops out of sums / poisons products and renders as `"non-applicable"`.
+
+## BKM (reusable pure functions)
+
+`bkm dti(d:number, i:number):number = d / (i / 12)`, then call `dti(monthly_debt, annual_income)` in any
+expression. Inlined at compile time; self/mutual recursion is rejected.
 
 ## Hit policies
 

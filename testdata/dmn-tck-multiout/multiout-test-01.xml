@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testCases xmlns="http://www.omg.org/spec/DMN/20160719/testcase" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <testCase id="c1">
+    <inputNode name="score"><value xsi:type="xsd:integer">60</value></inputNode>
+    <resultNode name="approval" type="decision">
+      <expected>
+        <component name="ok"><value xsi:type="xsd:boolean">true</value></component>
+        <component name="label"><value xsi:type="xsd:string">pass</value></component>
+      </expected>
+    </resultNode>
+  </testCase>
+  <testCase id="c2">
+    <inputNode name="score"><value xsi:type="xsd:integer">40</value></inputNode>
+    <resultNode name="approval" type="decision">
+      <expected>
+        <component name="ok"><value xsi:type="xsd:boolean">false</value></component>
+        <component name="label"><value xsi:type="xsd:string">fail</value></component>
+      </expected>
+    </resultNode>
+  </testCase>
+</testCases>

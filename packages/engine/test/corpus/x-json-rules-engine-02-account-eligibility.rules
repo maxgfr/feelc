@@ -1,0 +1,25 @@
+model "account_eligibility" {}
+
+# json-rules-engine advanced example (README "microsoft christmas pto"):
+#   all[
+#     account.company == "microsoft",
+#     account.status in ["active", "paid-leave"],
+#     account.ptoDaysTaken contains "2016-12-25"
+#   ]
+# - company == literal  -> equality cell
+# - status in {...}      -> set-membership cell
+# - ptoDaysTaken contains "2016-12-25": json-rules-engine 'contains' over an ARRAY fact.
+#   feelc has no unbounded lists, so the array-scan is precomputed upstream into the
+#   boolean fact `took_christmas` (the engine evaluating the array would feed this in).
+
+input company         : string
+input status          : string in {"active", "paid-leave", "terminated", "suspended"}
+input took_christmas  : boolean
+
+decision is_microsoft_christmas_pto : boolean {
+  needs: company, status, took_christmas
+  hit: first
+  #  company       | status              | took_christmas => match
+     "microsoft"   | "active","paid-leave" | true         => true
+     default       |                     |                => false
+}

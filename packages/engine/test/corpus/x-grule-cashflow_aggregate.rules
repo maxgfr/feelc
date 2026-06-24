@@ -1,0 +1,16 @@
+model "cashflow_aggregate" {
+  rounding: half_even
+}
+
+# Ported from CashFlowRule.grl SumUpPurchase (CashFlow.PurchasesAfterTax accumulation).
+# feelc has no unbounded iteration, so we model a FIXED, bounded batch of 3 purchase slots and sum
+# their price-after-tax. Each slot's after-tax = price + price*rate. Empty slots have price 0 and
+# contribute 0. Expected for 3 luxury purchases of 100000 @ 15% => 3 * 115000 = 345000.
+input p1 : number >= 0
+input p2 : number >= 0
+input p3 : number >= 0
+input rate : number >= 0
+
+bkm after_tax(p: number, r: number) : number = p + (p * r)
+
+decision total_after_tax : number = after_tax(p1, rate) + after_tax(p2, rate) + after_tax(p3, rate)

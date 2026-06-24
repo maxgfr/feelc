@@ -1,0 +1,9 @@
+model "zen_grade" {}
+
+# Ported from zen expression standard.csv ternary rows (line 389):
+#   score > 90 ? 'A' : score > 80 ? 'B' : score > 70 ? 'C' : 'D'
+# zen: {score:85} -> 'B'. feelc has no string output from a literal-expression returning
+# different strings? It does: a decision : string = if ... then "A" else ... is fine.
+input score : number in [0..100]
+
+decision grade : string = if score > 90 then "A" else if score > 80 then "B" else if score > 70 then "C" else "D"

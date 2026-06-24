@@ -1,0 +1,19 @@
+model "context_out" {}
+
+input credit_score  : number in [300..850]
+input age           : number in [0..120]
+
+# Context multi-output type.
+type Eligibility = context { eligible: boolean, reason: string }
+
+@title "Eligibility decision"
+@doc "Multi-column context output."
+decision eligibility : Eligibility {
+  needs: credit_score, age
+  hit: first
+  #  credit_score | age   => eligible | reason
+     < 580        | -     => false    | "insufficient score"
+     -            | < 18  => false    | "minor"
+     >= 580       | >= 18 => true     | "approved"
+     default      |       => false    | "not covered"
+}

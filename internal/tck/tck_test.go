@@ -73,6 +73,20 @@ func TestRunGradeFixture(t *testing.T) {
 	}
 }
 
+// Regression: a multi-output decision's expected result is `<expected><component>...</component>`
+// (NOT wrapped in <value>); the runner must parse it (it previously read nil -> spuriously failed
+// every multi-output / collect / ruleOrder case, badly under-reporting conformance).
+func TestRunMultiOutputComponentExpected(t *testing.T) {
+	rep, err := tck.Run("../../testdata/dmn-tck-multiout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Passed != 2 || rep.Failed != 0 {
+		t.Errorf("multi-output <component> expected must parse + pass: got %d pass / %d fail ; report=%+v",
+			rep.Passed, rep.Failed, rep.Cases)
+	}
+}
+
 // The report is JSON-serializable (consumed by --json).
 func TestReportJSON(t *testing.T) {
 	rep, err := tck.Run("../../testdata/dmn-tck")

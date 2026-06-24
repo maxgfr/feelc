@@ -1,0 +1,26 @@
+model "feedtable" {}
+
+input annual_income : number >= 0
+input monthly_debt  : number >= 0
+input credit_score  : number in [300..850]
+input age           : number in [0..120]
+
+type Eligibility = context { eligible: boolean, reason: string }
+
+# Intermediate literal-expression decision (arithmetic + if/then/else) feeding a table.
+decision dti : number = if annual_income > 0 then monthly_debt / (annual_income / 12) else (if monthly_debt > 0 then 1 else 0)
+
+# Second intermediate literal-expr decision using a built-in + comparison feeding the table.
+decision score_band : number = floor(credit_score / 100)
+
+decision eligibility : Eligibility {
+  needs: score_band, dti, age
+  hit: first
+  #  score_band | dti     | age   => eligible | reason
+     < 6        | -       | -     => false    | "insufficient score"
+     -          | > 0.43  | -     => false    | "debt too high"
+     -          | -       | < 18  => false    | "minor"
+     [6..7)     | <= 0.43 | >= 18 => true     | "approved with conditions"
+     >= 7       | <= 0.43 | >= 18 => true     | "approved"
+     default    |         |       => false    | "not covered"
+}

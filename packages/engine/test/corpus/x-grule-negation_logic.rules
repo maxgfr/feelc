@@ -1,0 +1,15 @@
+model "negation_logic" {}
+
+# Ported from NegationSymbolExample_test.go.
+# NegationRule1:  when !(StringValue != "ABC")  ==  StringValue == "ABC"  -> outcome "ITS ABC"
+# NegationRule2:  when !BoolValue               ==  BoolValue == false    -> outcome "YES ITS NOT"
+# Both are pure boolean predicates. We expose them as boolean decisions (the grule "then" writes a
+# label string; the gating logic is what we verify).
+input string_value : string
+input bool_value   : boolean
+
+# !(s != "ABC")  <=>  s = "ABC"
+decision is_abc : boolean = not(string_value != "ABC")
+
+# !bool_value
+decision not_bool : boolean = not(bool_value)

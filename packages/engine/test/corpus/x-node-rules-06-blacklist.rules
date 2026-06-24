@@ -1,0 +1,18 @@
+model "blacklist" {}
+
+# node-rules 6.MoreRulesAndFacts rule 10: block if user's name is in a blacklist
+#   var blacklist = ["user4"]; R.when(blacklist.indexOf(f.name) > -1)
+# node-rules implements this with Array.indexOf; feelc expresses a finite blacklist as a
+# set-membership unary test ("user4","user99",...). (An UNBOUNDED, runtime-supplied blacklist
+# would NOT be modelable; a fixed compile-time set is.)
+# Scenario: name="user4" -> blocked (result=false). name="user1" -> allowed (true).
+
+input name : string
+
+decision result : boolean {
+  needs: name
+  hit: first
+  #  name              => result
+     "user4","user99" => false
+     default           => true
+}

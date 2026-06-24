@@ -1,0 +1,11 @@
+model "jsonlogic_ternary" {}
+
+# Ports json-logic `if` / `?:` else-if chains:
+#   {"if":[ {"<":[{"var":"t"},0]}, "freezing",
+#           {"<":[{"var":"t"},100]}, "liquid",
+#           "gas" ]}
+# Classic water-state example from jsonlogic.com. Maps to nested feelc if-then-else.
+
+input temp : number
+
+decision state : string = if (temp < 0) then "freezing" else (if (temp < 100) then "liquid" else "gas")

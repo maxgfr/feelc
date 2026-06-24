@@ -1,0 +1,17 @@
+model "simple_rule" {}
+
+# node-rules 1.SimpleRule: block a transaction if its total is below 500.
+#   condition: R.when(fact.transactionTotal < 500)
+#   consequence: fact.result = false (blocked)
+# Scenario fact: transactionTotal = 400 -> blocked (result=false).
+
+input transaction_total : number >= 0
+
+# result=true means a valid (accepted) transaction; false means blocked.
+decision result : boolean {
+  needs: transaction_total
+  hit: first
+  #  transaction_total => result
+     < 500             => false
+     default           => true
+}

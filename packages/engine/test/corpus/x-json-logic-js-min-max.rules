@@ -1,0 +1,19 @@
+model "jsonlogic_min_max" {}
+
+# Ports json-logic `min` / `max` over a FIXED arity (3 args here):
+#   {"min":[{"var":"a"},{"var":"b"},{"var":"c"}]}
+#   {"max":[{"var":"a"},{"var":"b"},{"var":"c"}]}
+# feelc has no variadic min/max function, but for fixed arity it is plain pairwise if-then-else,
+# staged through intermediate decisions (min/max are associative). Variadic min/max over an
+# UNBOUNDED list would be a gap (that needs collect-aggregation over a list input feelc lacks).
+# NB feelc FEEL quirk: an if-branch that is a bare variable must be parenthesized: `then (a) else (b)`.
+
+input a : number
+input b : number
+input c : number
+
+decision ab   : number = if (a < b) then (a) else (b)
+decision min3 : number = if (ab < c) then (ab) else (c)
+
+decision xy   : number = if (a > b) then (a) else (b)
+decision max3 : number = if (xy > c) then (xy) else (c)

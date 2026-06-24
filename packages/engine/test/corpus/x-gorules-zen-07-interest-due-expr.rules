@@ -1,0 +1,9 @@
+model "zen_interest_due" {}
+
+# Ported from zen policy fixture loan_summary.json expression:
+#   account.interestDue = account.balance * account.apr
+# Exact-decimal arithmetic. balance 2500, apr 0.073 -> 182.5
+input balance : number >= 0 unit "USD"
+input apr     : number >= 0
+
+decision interest_due : number unit "USD" = balance * apr

@@ -1,0 +1,10 @@
+model "zen_modulo" {}
+
+# Ported from zen expression standard.csv modulo rows:
+#   10 % 4 == 2   (line 105)   ->  modulo(10,4) = 2
+#   10 % 3 != 0   (line 211)   ->  modulo(10,3) = 1
+# zen uses % ; feelc uses the two-arg builtin modulo(x,y) (floored, DMN).
+input a : number
+input b : number
+
+decision rem : number = modulo(a, b)

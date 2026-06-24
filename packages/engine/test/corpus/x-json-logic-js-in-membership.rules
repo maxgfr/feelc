@@ -1,0 +1,16 @@
+model "jsonlogic_in" {}
+
+# Ports json-logic `in` over a LITERAL set (membership):
+#   {"in":[{"var":"color"}, ["red","green","blue"]]} -> true/false
+# logic.js `in`: b.indexOf(a) !== -1. For a fixed literal set this is a feelc set-membership cell.
+# (`in` over a SUBSTRING, e.g. {"in":["Spring","Springfield"]}, is string ops — a gap.)
+
+input color : string in {"red", "green", "blue", "yellow", "black"}
+
+decision is_primary : boolean {
+  needs: color
+  hit: first
+  # color
+    "red", "green", "blue" => true
+    default                => false
+}

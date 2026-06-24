@@ -1,0 +1,53 @@
+model "collect" {}
+
+input income     : number >= 0
+input children   : number in [0..15]
+input is_student : boolean
+input age        : number in [0..120]
+
+# Raw COLLECT -> list of all matching outputs.
+decision aids : string {
+  needs: income, children, is_student
+  hit: collect
+  #  income | children | is_student => benefit
+     < 1500 | -        | -          => "housing"
+     -      | >= 1     | -          => "family"
+     < 1000 | -        | true       => "student_grant"
+}
+
+# COLLECT SUM (C+).
+decision surcharge_sum : number {
+  needs: income, children, age
+  hit: collect sum
+  #  income | children | age   => amount
+     < 1500 | -        | -      => 300
+     -      | >= 1     | -      => 150
+     -      | -        | >= 70  => 200
+}
+
+# COLLECT MIN (C<).
+decision surcharge_min : number {
+  needs: income, children, age
+  hit: collect min
+     < 1500 | -        | -      => 300
+     -      | >= 1     | -      => 150
+     -      | -        | >= 70  => 200
+}
+
+# COLLECT MAX (C>).
+decision surcharge_max : number {
+  needs: income, children, age
+  hit: collect max
+     < 1500 | -        | -      => 300
+     -      | >= 1     | -      => 150
+     -      | -        | >= 70  => 200
+}
+
+# COLLECT COUNT (C#).
+decision matches_count : number {
+  needs: income, children, age
+  hit: collect count
+     < 1500 | -        | -      => 300
+     -      | >= 1     | -      => 150
+     -      | -        | >= 70  => 200
+}

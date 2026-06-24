@@ -1,0 +1,18 @@
+model "discount_nested_operators" {}
+
+# Port of the two operator-grouped (nested) rules in the Discount workflow:
+#   GiveDiscount30NestedOrExample  (Operator: OrElse)  -> "30"
+#   GiveDiscount35NestedAndExample (Operator: AndAlso) -> "35"
+# RulesEngine groups child sub-rules with OrElse/AndAlso. feelc expresses these
+# directly with `or` / `and`. Each is its own boolean decision (rule satisfied?).
+
+input loyaltyFactor        : number
+input totalPurchasesToDate : number >= 0
+input totalOrders          : number >= 0
+input noOfVisitsPerMonth   : number >= 0
+
+# OrElse: (loyalty>3 AND purchases in [50000..100000]) OR (totalOrders>15)
+decision nestedOr30 : boolean = (loyaltyFactor > 3 and totalPurchasesToDate >= 50000 and totalPurchasesToDate <= 100000) or (totalOrders > 15)
+
+# AndAlso: loyalty>3 AND purchases>=100000 AND (totalOrders>15 AND visits>25)
+decision nestedAnd35 : boolean = loyaltyFactor > 3 and totalPurchasesToDate >= 100000 and (totalOrders > 15 and noOfVisitsPerMonth > 25)

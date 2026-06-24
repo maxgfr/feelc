@@ -1,0 +1,22 @@
+model "prioritized_rules" {}
+
+# node-rules 4.PrioritizedRules: same two rules but with explicit priority.
+#   Rule A: priority 4,  R.when(transactionTotal < 500) -> "less than 500"
+#   Rule B: priority 10, R.when(cardType === "Debit")    -> "debit not allowed"
+# Higher priority applies first. Scenario fact: transactionTotal = 600, cardType = "Debit"
+#   -> Rule B (priority 10) fires first -> blocked with the DEBIT reason.
+# Modelled with hit: priority; the priority: line lists outputs most->least prioritized.
+# The two blocking outputs differ by reason, so priority disambiguates which reason wins.
+
+input transaction_total : number >= 0
+input card_type         : string
+
+decision block_reason : string {
+  needs: transaction_total, card_type
+  hit: priority
+  priority: "blocked: debit cards not allowed", "blocked: less than 500", "valid"
+  #  transaction_total | card_type => block_reason
+     < 500             | -         => "blocked: less than 500"
+     -                 | "Debit"   => "blocked: debit cards not allowed"
+     default           |           => "valid"
+}

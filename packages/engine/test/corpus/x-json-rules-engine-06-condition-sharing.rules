@@ -1,0 +1,20 @@
+model "condition_sharing" {}
+
+# json-rules-engine examples/10-condition-sharing.js:
+#   shared condition 'screwdriverAficionado' = all[ drinksOrangeJuice, enjoysVodka ]
+#   invite-to-screwdriver-social = all[ screwdriverAficionado,      isSociable ]
+#   invite-to-other-social       = all[ not{screwdriverAficionado}, isSociable ]
+# The shared condition is modeled as an upstream decision reused by both downstream decisions
+# (feelc DRG: a decision may depend on another decision).
+
+input drinks_orange_juice : boolean
+input enjoys_vodka        : boolean
+input is_sociable         : boolean
+
+# NOTE: bare `a and b` (two plain boolean variables) is misparsed by the FEEL frontend as a single
+# identifier; parenthesizing each boolean operand `(a) and (b)` is the documented workaround.
+decision screwdriver_aficionado : boolean = (drinks_orange_juice) and (enjoys_vodka)
+
+decision invite_screwdriver_social : boolean = (screwdriver_aficionado) and (is_sociable)
+
+decision invite_other_social : boolean = (not(screwdriver_aficionado)) and (is_sociable)

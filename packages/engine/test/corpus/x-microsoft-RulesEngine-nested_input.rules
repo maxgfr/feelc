@@ -1,0 +1,18 @@
+model "nested_input" {}
+
+# Port of RulesEngine "NestedInputDemo" workflows 1 & 2.
+# RulesEngine reaches into nested objects/lists (input1.NestedProp.SimpleProp,
+# input1.NestedProp.ListProp[0].Id). feelc has no nested objects or list
+# indexing, so the nested paths are FLATTENED to dotted input names that the
+# caller supplies pre-resolved. The boolean rule logic is preserved exactly.
+
+# Workflow1: input1.NestedProp.SimpleProp == "nestedSimpleProp"
+input nestedProp_simpleProp : string
+
+# Workflow2: ListProp[0].Id == 1 AND ListProp[1].Value == "second"
+input listProp_0_id     : number
+input listProp_1_value  : string
+
+decision checkNestedSimpleProp : boolean = nestedProp_simpleProp = "nestedSimpleProp"
+
+decision checkNestedListProp : boolean = listProp_0_id = 1 and listProp_1_value = "second"

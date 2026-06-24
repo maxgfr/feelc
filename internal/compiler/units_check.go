@@ -140,11 +140,31 @@ func (c *unitChecker) inferRange(p *ir.ExprProgram, lo, hi, line int) (units.Uni
 			}
 			push(a.Div(b))
 			i++
-		case ir.OpNeg, ir.OpFloor, ir.OpCeil, ir.OpRound:
+		case ir.OpNeg, ir.OpFloor, ir.OpCeil, ir.OpRound, ir.OpAbs, ir.OpTrunc:
 			// unary, unit-preserving
 			if len(st) < 1 {
 				return bad()
 			}
+			i++
+		case ir.OpRoundN:
+			// round(x, n): result has x's unit (n is a dimensionless count of places).
+			a, _, ok := pop2()
+			if !ok {
+				return bad()
+			}
+			push(a)
+			i++
+		case ir.OpMod:
+			// modulo(x, y): operands share a dimension; the result keeps it (lenient on dimensionless).
+			a, b, ok := pop2()
+			if !ok {
+				return bad()
+			}
+			u, err := c.combineAddSub(a, b, line)
+			if err != nil {
+				return nil, err
+			}
+			push(u)
 			i++
 		case ir.OpEqOp, ir.OpNeOp, ir.OpLtOp, ir.OpLeOp, ir.OpGtOp, ir.OpGeOp:
 			a, b, ok := pop2()

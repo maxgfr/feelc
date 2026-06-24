@@ -133,13 +133,72 @@ decision set : string {
 	check("set", map[string]any{"n": jn("2")}, "small")
 }
 
+// Deterministic multi-arg / extra built-ins (ADR 0020): abs, trunc, round(x,n), modulo(x,y).
+func TestArithBuiltins(t *testing.T) {
+	src := `model "m" {}
+input x : number
+input y : number
+input k : number
+decision ab : number = abs(x)
+decision tr : number = trunc(x)
+decision r2 : number = round(x, 2)
+decision rk : number = round(x, k)
+decision md : number = modulo(x, y)`
+	cases := []struct {
+		dec, x, y, k, want string
+	}{
+		// abs
+		{"ab", "-2.5", "0", "0", "2.5"}, {"ab", "2.5", "0", "0", "2.5"}, {"ab", "0", "0", "0", "0"},
+		// trunc (toward zero)
+		{"tr", "2.7", "0", "0", "2"}, {"tr", "-2.7", "0", "0", "-2"}, {"tr", "2", "0", "0", "2"},
+		// round to N decimals (HALF_EVEN)
+		{"r2", "3.14159", "0", "0", "3.14"}, {"r2", "2.71828", "0", "0", "2.72"},
+		{"r2", "1.235", "0", "0", "1.24"}, {"r2", "1.245", "0", "0", "1.24"},
+		// round with runtime n
+		{"rk", "3.14159", "0", "3", "3.142"}, {"rk", "3.14159", "0", "0", "3"},
+		// modulo (floored, DMN semantics: result follows the divisor's sign)
+		{"md", "10", "3", "0", "1"}, {"md", "10", "-3", "0", "-2"},
+		{"md", "-10", "3", "0", "2"}, {"md", "7.5", "2", "0", "1.5"},
+	}
+	for _, c := range cases {
+		got, err := engine.Run(src, c.dec, map[string]any{"x": jn(c.x), "y": jn(c.y), "k": jn(c.k)})
+		if err != nil {
+			t.Fatalf("%s(x=%s,y=%s,k=%s): %v", c.dec, c.x, c.y, c.k, err)
+		}
+		if numText(t, got) != c.want {
+			t.Errorf("%s(x=%s,y=%s,k=%s) = %s, expected %s", c.dec, c.x, c.y, c.k, numText(t, got), c.want)
+		}
+	}
+}
+
+// Error cases for the new built-ins: modulo by zero, round to a non-integer number of places.
+func TestArithBuiltinErrors(t *testing.T) {
+	cases := []struct{ name, src, dec string; in map[string]any; wantSub string }{
+		{"modulo by zero", "model \"m\" {}\ninput x : number\ninput y : number\ndecision d : number = modulo(x, y)", "d",
+			map[string]any{"x": jn("10"), "y": jn("0")}, "zero"},
+		{"round non-integer n", "model \"m\" {}\ninput x : number\ninput k : number\ndecision d : number = round(x, k)", "d",
+			map[string]any{"x": jn("3.14"), "k": jn("1.5")}, "whole"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := engine.Run(c.src, c.dec, c.in)
+			if err == nil {
+				t.Fatalf("expected error containing %q", c.wantSub)
+			}
+			if !strings.Contains(err.Error(), c.wantSub) {
+				t.Errorf("error = %q, expected to contain %q", err.Error(), c.wantSub)
+			}
+		})
+	}
+}
+
 // HARD failures: multi-arg built-in, and `?` outside a cell (literal-expr, direct or via BKM).
 func TestFeelExtHardFailures(t *testing.T) {
 	cases := []struct {
 		name, src, wantSub string
 	}{
-		{"round multi-arg",
-			"model \"m\" {}\ninput x : number\ndecision d : number = round(x, 1)", "argument"},
+		{"floor multi-arg (mono-arg builtin, 2 args)",
+			"model \"m\" {}\ninput x : number\ndecision d : number = floor(x, 1)", "argument"},
 		{"? in direct literal-expr",
 			"model \"m\" {}\ninput n : number\ndecision d : number = ? + n", "cell"},
 		{"? via BKM argument in literal-expr",

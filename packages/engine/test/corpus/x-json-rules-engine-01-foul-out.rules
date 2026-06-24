@@ -1,0 +1,19 @@
+model "foul_out" {}
+
+# json-rules-engine basic example (examples/02-nested-boolean-logic.js):
+# Foul out a player who:
+#   (gameDuration == 40 AND personalFoulCount >= 5)
+#   OR (gameDuration == 48 AND personalFoulCount >= 6)
+# any[ all[...], all[...] ] -> first hit returning true, default false.
+
+input game_duration        : number >= 0
+input personal_foul_count  : number >= 0
+
+decision fouled_out : boolean {
+  needs: game_duration, personal_foul_count
+  hit: first
+  #  game_duration | personal_foul_count => fouled_out
+     40            | >= 5                => true
+     48            | >= 6                => true
+     default       |                     => false
+}

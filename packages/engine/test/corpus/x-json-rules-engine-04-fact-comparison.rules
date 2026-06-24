@@ -1,0 +1,17 @@
+model "fact_comparison" {}
+
+# json-rules-engine examples/08-fact-comparison.js:
+#   account.balance  >=  product.price   (a fact compared against ANOTHER fact)
+# Determines whether the customer can afford the gift card.
+# feelc supports a cell comparing one column against another variable/column.
+
+input balance : number >= 0
+input price   : number >= 0
+
+decision can_afford : boolean {
+  needs: balance, price
+  hit: first
+  #  balance | price => can_afford
+     >= price | -    => true
+     default  |      => false
+}

@@ -1,0 +1,1798 @@
+[
+  {
+    "file": "applicability.rules",
+    "decision": "housing_aid",
+    "input": {
+      "income": 0
+    },
+    "expected": 200
+  },
+  {
+    "file": "applicability.rules",
+    "decision": "student_aid",
+    "input": {
+      "income": 0
+    },
+    "expected": 150
+  },
+  {
+    "file": "applicability.rules",
+    "decision": "total_aid",
+    "input": {
+      "income": 0
+    },
+    "expected": 350
+  },
+  {
+    "file": "arith.rules",
+    "decision": "add",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 2
+  },
+  {
+    "file": "arith.rules",
+    "decision": "sub",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 0
+  },
+  {
+    "file": "arith.rules",
+    "decision": "mul",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "arith.rules",
+    "decision": "div",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "arith.rules",
+    "decision": "mixed",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 1.25
+  },
+  {
+    "file": "arith.rules",
+    "decision": "lit_num",
+    "input": {},
+    "expected": 168.67
+  },
+  {
+    "file": "bkm.rules",
+    "decision": "ratio",
+    "input": {
+      "d": 1,
+      "i": 1
+    },
+    "expected": 12
+  },
+  {
+    "file": "bkm.rules",
+    "decision": "pctratio",
+    "input": {
+      "d": 1,
+      "i": 1
+    },
+    "expected": 1200
+  },
+  {
+    "file": "boundaries.rules",
+    "decision": "band",
+    "input": {
+      "score": 0
+    },
+    "expected": "decline"
+  },
+  {
+    "file": "brackets.rules",
+    "decision": "contribution",
+    "input": {
+      "salary": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "builtins.rules",
+    "decision": "fl",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "builtins.rules",
+    "decision": "ce",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "builtins.rules",
+    "decision": "rd",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "builtins.rules",
+    "decision": "composed",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "builtins2.rules",
+    "decision": "abs_x",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "builtins2.rules",
+    "decision": "trunc_x",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "builtins2.rules",
+    "decision": "round_x",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "builtins2.rules",
+    "decision": "mod_xy",
+    "input": {
+      "x": 1,
+      "y": 1
+    },
+    "expected": 0
+  },
+  {
+    "file": "cells.rules",
+    "decision": "neg_num",
+    "input": {
+      "score": 0
+    },
+    "expected": "other"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "neg_set",
+    "input": {
+      "region": "urban"
+    },
+    "expected": "inside"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "range_closed",
+    "input": {
+      "score": 0
+    },
+    "expected": "outband"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "range_open",
+    "input": {
+      "score": 0
+    },
+    "expected": "outband"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "range_mixed",
+    "input": {
+      "score": 0
+    },
+    "expected": "outband"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "cmp_ge",
+    "input": {
+      "score": 0
+    },
+    "expected": "lo"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "cmp_gt",
+    "input": {
+      "score": 0
+    },
+    "expected": "lo"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "cmp_le",
+    "input": {
+      "score": 0
+    },
+    "expected": "lo"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "cmp_lt",
+    "input": {
+      "score": 0
+    },
+    "expected": "lo"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "set_str",
+    "input": {
+      "region": "urban"
+    },
+    "expected": "metro"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "wildcard",
+    "input": {
+      "region": "urban",
+      "score": 0
+    },
+    "expected": "lo-any"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "default_row",
+    "input": {
+      "score": 0
+    },
+    "expected": "fallback"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "lit_num",
+    "input": {
+      "score": 0
+    },
+    "expected": "no"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "lit_str",
+    "input": {
+      "region": "urban"
+    },
+    "expected": "isurban"
+  },
+  {
+    "file": "cells.rules",
+    "decision": "lit_bool",
+    "input": {
+      "flag": true
+    },
+    "expected": "on"
+  },
+  {
+    "file": "collect.rules",
+    "decision": "aids",
+    "input": {
+      "children": 0,
+      "income": 0,
+      "is_student": true
+    },
+    "expected": [
+      "housing",
+      "student_grant"
+    ]
+  },
+  {
+    "file": "collect.rules",
+    "decision": "surcharge_sum",
+    "input": {
+      "age": 0,
+      "children": 0,
+      "income": 0
+    },
+    "expected": 300
+  },
+  {
+    "file": "collect.rules",
+    "decision": "surcharge_min",
+    "input": {
+      "age": 0,
+      "children": 0,
+      "income": 0
+    },
+    "expected": 300
+  },
+  {
+    "file": "collect.rules",
+    "decision": "surcharge_max",
+    "input": {
+      "age": 0,
+      "children": 0,
+      "income": 0
+    },
+    "expected": 300
+  },
+  {
+    "file": "collect.rules",
+    "decision": "matches_count",
+    "input": {
+      "age": 0,
+      "children": 0,
+      "income": 0
+    },
+    "expected": 1
+  },
+  {
+    "file": "compare.rules",
+    "decision": "eq",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": true
+  },
+  {
+    "file": "compare.rules",
+    "decision": "ne",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": false
+  },
+  {
+    "file": "compare.rules",
+    "decision": "lt",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": false
+  },
+  {
+    "file": "compare.rules",
+    "decision": "le",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": true
+  },
+  {
+    "file": "compare.rules",
+    "decision": "gt",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": false
+  },
+  {
+    "file": "compare.rules",
+    "decision": "ge",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": true
+  },
+  {
+    "file": "cond.rules",
+    "decision": "sign",
+    "input": {
+      "x": 1
+    },
+    "expected": "pos"
+  },
+  {
+    "file": "cond.rules",
+    "decision": "absish",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "cond.rules",
+    "decision": "band",
+    "input": {
+      "x": 1
+    },
+    "expected": "in"
+  },
+  {
+    "file": "context.rules",
+    "decision": "eligibility",
+    "input": {
+      "age": 0,
+      "credit_score": 300
+    },
+    "expected": {
+      "eligible": false,
+      "reason": "insufficient score"
+    }
+  },
+  {
+    "file": "domain_gate.rules",
+    "decision": "band",
+    "input": {
+      "score": 580
+    },
+    "expected": "in-domain"
+  },
+  {
+    "file": "domain_gate.rules",
+    "decision": "tier_ok",
+    "input": {
+      "tier": "a"
+    },
+    "expected": "in-domain"
+  },
+  {
+    "file": "domains.rules",
+    "decision": "d_ge",
+    "input": {
+      "ge_in": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "domains.rules",
+    "decision": "d_le",
+    "input": {
+      "le_in": 99
+    },
+    "expected": 99
+  },
+  {
+    "file": "domains.rules",
+    "decision": "d_gt",
+    "input": {
+      "gt_in": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "domains.rules",
+    "decision": "d_lt",
+    "input": {
+      "lt_in": 99
+    },
+    "expected": 99
+  },
+  {
+    "file": "domains.rules",
+    "decision": "d_closed",
+    "input": {
+      "closed": 580
+    },
+    "expected": 580
+  },
+  {
+    "file": "domains.rules",
+    "decision": "d_openi",
+    "input": {
+      "openi": 580
+    },
+    "expected": 580
+  },
+  {
+    "file": "domains.rules",
+    "decision": "d_lcro",
+    "input": {
+      "lcro": 580
+    },
+    "expected": 580
+  },
+  {
+    "file": "domains.rules",
+    "decision": "d_rclo",
+    "input": {
+      "rclo": 580
+    },
+    "expected": 580
+  },
+  {
+    "file": "domains.rules",
+    "decision": "d_choice",
+    "input": {
+      "choice": "a"
+    },
+    "expected": "a"
+  },
+  {
+    "file": "feedtable.rules",
+    "decision": "dti",
+    "input": {
+      "annual_income": 0,
+      "monthly_debt": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "feedtable.rules",
+    "decision": "score_band",
+    "input": {
+      "credit_score": 300
+    },
+    "expected": 3
+  },
+  {
+    "file": "feedtable.rules",
+    "decision": "eligibility",
+    "input": {
+      "age": 0,
+      "annual_income": 0,
+      "credit_score": 300,
+      "monthly_debt": 0
+    },
+    "expected": {
+      "eligible": false,
+      "reason": "insufficient score"
+    }
+  },
+  {
+    "file": "loan_drg.rules",
+    "decision": "ratio",
+    "input": {
+      "debt": 0,
+      "income": 1
+    },
+    "expected": 0
+  },
+  {
+    "file": "loan_drg.rules",
+    "decision": "band",
+    "input": {
+      "score": 300
+    },
+    "expected": "subprime"
+  },
+  {
+    "file": "loan_drg.rules",
+    "decision": "approved",
+    "input": {
+      "debt": 0,
+      "income": 1,
+      "score": 300
+    },
+    "expected": false
+  },
+  {
+    "file": "logic.rules",
+    "decision": "conj",
+    "input": {
+      "p": true,
+      "q": true
+    },
+    "expected": true
+  },
+  {
+    "file": "logic.rules",
+    "decision": "disj",
+    "input": {
+      "p": true,
+      "q": true
+    },
+    "expected": true
+  },
+  {
+    "file": "logic.rules",
+    "decision": "neg",
+    "input": {
+      "p": true
+    },
+    "expected": false
+  },
+  {
+    "file": "logic.rules",
+    "decision": "and_cmp",
+    "input": {
+      "x": 1
+    },
+    "expected": true
+  },
+  {
+    "file": "logic.rules",
+    "decision": "or_cmp",
+    "input": {
+      "x": 1
+    },
+    "expected": false
+  },
+  {
+    "file": "logic.rules",
+    "decision": "lit_true",
+    "input": {},
+    "expected": true
+  },
+  {
+    "file": "logic.rules",
+    "decision": "lit_false",
+    "input": {},
+    "expected": false
+  },
+  {
+    "file": "logic.rules",
+    "decision": "combo",
+    "input": {
+      "x": 1
+    },
+    "expected": true
+  },
+  {
+    "file": "metadata.rules",
+    "decision": "eligible",
+    "input": {
+      "income": 0
+    },
+    "expected": false
+  },
+  {
+    "file": "multigraph.rules",
+    "decision": "customer_type",
+    "input": {
+      "logged_in": true
+    },
+    "expected": "member"
+  },
+  {
+    "file": "multigraph.rules",
+    "decision": "block_payment",
+    "input": {
+      "amount": 0,
+      "logged_in": true
+    },
+    "expected": false
+  },
+  {
+    "file": "tables.rules",
+    "decision": "first_elig",
+    "input": {
+      "member": true,
+      "region": "urban",
+      "score": 0
+    },
+    "expected": {
+      "label": "low",
+      "ok": false
+    }
+  },
+  {
+    "file": "tables.rules",
+    "decision": "unique_band",
+    "input": {
+      "score": 0
+    },
+    "expected": "F"
+  },
+  {
+    "file": "tables.rules",
+    "decision": "any_status",
+    "input": {
+      "member": true,
+      "score": 0
+    },
+    "expected": "pass"
+  },
+  {
+    "file": "tables.rules",
+    "decision": "priority_tier",
+    "input": {
+      "member": true,
+      "score": 0
+    },
+    "expected": "gold"
+  },
+  {
+    "file": "tables.rules",
+    "decision": "rule_order_tags",
+    "input": {
+      "member": true,
+      "region": "urban",
+      "score": 0
+    },
+    "expected": [
+      "urban",
+      "member"
+    ]
+  },
+  {
+    "file": "tables.rules",
+    "decision": "collect_benefits",
+    "input": {
+      "member": true,
+      "region": "urban",
+      "score": 0
+    },
+    "expected": [
+      "aid",
+      "loyalty"
+    ]
+  },
+  {
+    "file": "tables.rules",
+    "decision": "collect_sum",
+    "input": {
+      "member": true,
+      "region": "urban",
+      "score": 0
+    },
+    "expected": 35
+  },
+  {
+    "file": "tables.rules",
+    "decision": "collect_min",
+    "input": {
+      "member": true,
+      "region": "urban",
+      "score": 0
+    },
+    "expected": 10
+  },
+  {
+    "file": "tables.rules",
+    "decision": "collect_max",
+    "input": {
+      "member": true,
+      "region": "urban",
+      "score": 0
+    },
+    "expected": 25
+  },
+  {
+    "file": "tables.rules",
+    "decision": "collect_count",
+    "input": {
+      "member": true,
+      "region": "urban",
+      "score": 0
+    },
+    "expected": 2
+  },
+  {
+    "file": "temporal.rules",
+    "decision": "new_year",
+    "input": {},
+    "expected": "2026-01-01"
+  },
+  {
+    "file": "temporal.rules",
+    "decision": "a_month",
+    "input": {},
+    "expected": "P30D"
+  },
+  {
+    "file": "temporal.rules",
+    "decision": "span",
+    "input": {
+      "d1": "2024-06-01",
+      "d2": "2024-06-01"
+    },
+    "expected": "P0D"
+  },
+  {
+    "file": "temporal.rules",
+    "decision": "plus",
+    "input": {
+      "d1": "2024-06-01",
+      "dur1": "P1D"
+    },
+    "expected": "2024-06-02"
+  },
+  {
+    "file": "temporal.rules",
+    "decision": "minus",
+    "input": {
+      "d1": "2024-06-01",
+      "dur1": "P1D"
+    },
+    "expected": "2024-05-31"
+  },
+  {
+    "file": "temporal.rules",
+    "decision": "dsum",
+    "input": {
+      "dur1": "P1D",
+      "dur2": "P1D"
+    },
+    "expected": "P2D"
+  },
+  {
+    "file": "temporal.rules",
+    "decision": "ddiff",
+    "input": {
+      "dur1": "P1D",
+      "dur2": "P1D"
+    },
+    "expected": "P0D"
+  },
+  {
+    "file": "temporal.rules",
+    "decision": "dcmp",
+    "input": {
+      "d1": "2024-06-01",
+      "d2": "2024-06-01"
+    },
+    "expected": false
+  },
+  {
+    "file": "temporal.rules",
+    "decision": "durcmp",
+    "input": {
+      "dur1": "P1D",
+      "dur2": "P1D"
+    },
+    "expected": true
+  },
+  {
+    "file": "types.rules",
+    "decision": "num_out",
+    "input": {
+      "n": 1
+    },
+    "expected": 2
+  },
+  {
+    "file": "types.rules",
+    "decision": "str_out",
+    "input": {
+      "s": "x"
+    },
+    "expected": "x"
+  },
+  {
+    "file": "types.rules",
+    "decision": "bool_out",
+    "input": {
+      "b": true
+    },
+    "expected": false
+  },
+  {
+    "file": "types.rules",
+    "decision": "date_diff",
+    "input": {
+      "d1": "2024-06-01",
+      "d2": "2024-06-01"
+    },
+    "expected": "P0D"
+  },
+  {
+    "file": "types.rules",
+    "decision": "date_plus",
+    "input": {
+      "d1": "2024-06-01",
+      "dur1": "P1D"
+    },
+    "expected": "2024-06-02"
+  },
+  {
+    "file": "types.rules",
+    "decision": "dur_sum",
+    "input": {
+      "dur1": "P1D",
+      "dur2": "P1D"
+    },
+    "expected": "P2D"
+  },
+  {
+    "file": "types.rules",
+    "decision": "dur_cmp",
+    "input": {
+      "dur1": "P1D",
+      "dur2": "P1D"
+    },
+    "expected": true
+  },
+  {
+    "file": "types.rules",
+    "decision": "profile",
+    "input": {
+      "n": 1
+    },
+    "expected": {
+      "label": "ok",
+      "ok": true,
+      "score": 1
+    }
+  },
+  {
+    "file": "units.rules",
+    "decision": "disposable",
+    "input": {
+      "rent": 0,
+      "salary": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-gorules-zen-01-table-hello-first.rules",
+    "decision": "output",
+    "input": {
+      "input": 1
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-gorules-zen-02-shipping-fees-first.rules",
+    "decision": "fee_value",
+    "input": {
+      "cart_total": 0,
+      "country": "x"
+    },
+    "expected": 150
+  },
+  {
+    "file": "x-gorules-zen-02-shipping-fees-first.rules",
+    "decision": "is_percent",
+    "input": {
+      "cart_total": 0,
+      "country": "x"
+    },
+    "expected": false
+  },
+  {
+    "file": "x-gorules-zen-03-credit-turnover-flag.rules",
+    "decision": "flag_turnover",
+    "input": {
+      "turnover": 0
+    },
+    "expected": "red"
+  },
+  {
+    "file": "x-gorules-zen-04-credit-country-flag.rules",
+    "decision": "flag_country",
+    "input": {
+      "country": "x",
+      "is_eu": true
+    },
+    "expected": "amber"
+  },
+  {
+    "file": "x-gorules-zen-05-credit-overall-priority.rules",
+    "decision": "overall",
+    "input": {
+      "amber": 0,
+      "critical": 0,
+      "green": 0,
+      "red": 0
+    },
+    "expected": "green"
+  },
+  {
+    "file": "x-gorules-zen-06-age-tier-collect.rules",
+    "decision": "tier",
+    "input": {
+      "age": 0
+    },
+    "expected": "minor"
+  },
+  {
+    "file": "x-gorules-zen-06-age-tier-collect.rules",
+    "decision": "tags",
+    "input": {
+      "age": 0
+    },
+    "expected": [
+      "minor"
+    ]
+  },
+  {
+    "file": "x-gorules-zen-07-interest-due-expr.rules",
+    "decision": "interest_due",
+    "input": {
+      "apr": 0,
+      "balance": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-gorules-zen-08-profit-margin-expr.rules",
+    "decision": "profit_margin",
+    "input": {
+      "revenue": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-gorules-zen-09-rounding-expr.rules",
+    "decision": "r2",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "x-gorules-zen-09-rounding-expr.rules",
+    "decision": "r1",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "x-gorules-zen-09-rounding-expr.rules",
+    "decision": "tr",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "x-gorules-zen-09-rounding-expr.rules",
+    "decision": "fl",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "x-gorules-zen-09-rounding-expr.rules",
+    "decision": "ce",
+    "input": {
+      "x": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "x-gorules-zen-10-grade-conditional-expr.rules",
+    "decision": "grade",
+    "input": {
+      "score": 0
+    },
+    "expected": "D"
+  },
+  {
+    "file": "x-gorules-zen-11-modulo-expr.rules",
+    "decision": "rem",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-gorules-zen-12-volume-discount-bracket.rules",
+    "decision": "discount_amount",
+    "input": {
+      "qty": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-gorules-zen-13-dti-eligibility-bkm.rules",
+    "decision": "dti",
+    "input": {
+      "annual_income": 0,
+      "monthly_debt": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-gorules-zen-13-dti-eligibility-bkm.rules",
+    "decision": "verdict",
+    "input": {
+      "annual_income": 0,
+      "credit_score": 300,
+      "monthly_debt": 0
+    },
+    "expected": {
+      "approved": false,
+      "reason": "low score"
+    }
+  },
+  {
+    "file": "x-grule-cashflow_aggregate.rules",
+    "decision": "total_after_tax",
+    "input": {
+      "p1": 0,
+      "p2": 0,
+      "p3": 0,
+      "rate": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-grule-cashflow_totals.rules",
+    "decision": "total_purchases",
+    "input": {
+      "count": 0,
+      "unit_price": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-grule-issue108_priority.rules",
+    "decision": "first_fired",
+    "input": {
+      "rule1_done": true,
+      "rule2_done": true,
+      "rule3_done": true
+    },
+    "expected": "none"
+  },
+  {
+    "file": "x-grule-matching_rules.rules",
+    "decision": "matched",
+    "input": {
+      "distance": 0,
+      "duration": 0,
+      "result": true
+    },
+    "expected": false
+  },
+  {
+    "file": "x-grule-matching_rules.rules",
+    "decision": "net_amount",
+    "input": {
+      "distance": 0,
+      "duration": 0,
+      "result": true
+    },
+    "expected": "non-applicable"
+  },
+  {
+    "file": "x-grule-negation_logic.rules",
+    "decision": "is_abc",
+    "input": {
+      "string_value": "x"
+    },
+    "expected": false
+  },
+  {
+    "file": "x-grule-negation_logic.rules",
+    "decision": "not_bool",
+    "input": {
+      "bool_value": true
+    },
+    "expected": false
+  },
+  {
+    "file": "x-grule-price_after_tax.rules",
+    "decision": "rate",
+    "input": {
+      "item_type": "LUXURY"
+    },
+    "expected": 0.15
+  },
+  {
+    "file": "x-grule-price_after_tax.rules",
+    "decision": "tax",
+    "input": {
+      "item_type": "LUXURY",
+      "price": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-grule-price_after_tax.rules",
+    "decision": "price_after_tax",
+    "input": {
+      "item_type": "LUXURY",
+      "price": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-grule-purchasing_tax.rules",
+    "decision": "rate",
+    "input": {
+      "item_type": "LUXURY"
+    },
+    "expected": 0.15
+  },
+  {
+    "file": "x-grule-purchasing_tax.rules",
+    "decision": "tax",
+    "input": {
+      "item_type": "LUXURY",
+      "price": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-grule-salience_rating.rules",
+    "decision": "rating",
+    "input": {
+      "int_value": 1
+    },
+    "expected": "Low"
+  },
+  {
+    "file": "x-grule-tutorial_check.rules",
+    "decision": "check_passed",
+    "input": {
+      "int_attribute": 1,
+      "string_attribute": "x"
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-logic-js-arithmetic.rules",
+    "decision": "add",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 2
+  },
+  {
+    "file": "x-json-logic-js-arithmetic.rules",
+    "decision": "sub",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-json-logic-js-arithmetic.rules",
+    "decision": "mul",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "x-json-logic-js-arithmetic.rules",
+    "decision": "divi",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "x-json-logic-js-arithmetic.rules",
+    "decision": "nested",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "x-json-logic-js-between.rules",
+    "decision": "between_excl",
+    "input": {
+      "x": 1
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-logic-js-between.rules",
+    "decision": "between_incl",
+    "input": {
+      "x": 1
+    },
+    "expected": true
+  },
+  {
+    "file": "x-json-logic-js-boolean-logic.rules",
+    "decision": "conj",
+    "input": {
+      "x": true,
+      "y": true
+    },
+    "expected": true
+  },
+  {
+    "file": "x-json-logic-js-boolean-logic.rules",
+    "decision": "disj",
+    "input": {
+      "x": true,
+      "y": true
+    },
+    "expected": true
+  },
+  {
+    "file": "x-json-logic-js-boolean-logic.rules",
+    "decision": "neg",
+    "input": {
+      "x": true
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-logic-js-comparisons.rules",
+    "decision": "gt",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-logic-js-comparisons.rules",
+    "decision": "gte",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": true
+  },
+  {
+    "file": "x-json-logic-js-comparisons.rules",
+    "decision": "lt",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-logic-js-comparisons.rules",
+    "decision": "lte",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": true
+  },
+  {
+    "file": "x-json-logic-js-comparisons.rules",
+    "decision": "neq",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-logic-js-discount.rules",
+    "decision": "payable",
+    "input": {
+      "total": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-json-logic-js-equality.rules",
+    "decision": "equal",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": true
+  },
+  {
+    "file": "x-json-logic-js-in-membership.rules",
+    "decision": "is_primary",
+    "input": {
+      "color": "red"
+    },
+    "expected": true
+  },
+  {
+    "file": "x-json-logic-js-min-max.rules",
+    "decision": "ab",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "x-json-logic-js-min-max.rules",
+    "decision": "min3",
+    "input": {
+      "a": 1,
+      "b": 1,
+      "c": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "x-json-logic-js-min-max.rules",
+    "decision": "xy",
+    "input": {
+      "a": 1,
+      "b": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "x-json-logic-js-min-max.rules",
+    "decision": "max3",
+    "input": {
+      "a": 1,
+      "b": 1,
+      "c": 1
+    },
+    "expected": 1
+  },
+  {
+    "file": "x-json-logic-js-modulo.rules",
+    "decision": "rem",
+    "input": {
+      "a": 0,
+      "b": 0
+    },
+    "error": true
+  },
+  {
+    "file": "x-json-logic-js-modulo.rules",
+    "decision": "is_even",
+    "input": {
+      "a": 0
+    },
+    "expected": true
+  },
+  {
+    "file": "x-json-logic-js-pie-ready.rules",
+    "decision": "ready",
+    "input": {
+      "pie_filling": "x",
+      "temp": 1
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-logic-js-ternary.rules",
+    "decision": "state",
+    "input": {
+      "temp": 1
+    },
+    "expected": "liquid"
+  },
+  {
+    "file": "x-json-rules-engine-01-foul-out.rules",
+    "decision": "fouled_out",
+    "input": {
+      "game_duration": 0,
+      "personal_foul_count": 0
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-rules-engine-02-account-eligibility.rules",
+    "decision": "is_microsoft_christmas_pto",
+    "input": {
+      "company": "x",
+      "status": "active",
+      "took_christmas": true
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-rules-engine-03-not-nesting.rules",
+    "decision": "long_foul_limit",
+    "input": {
+      "game_duration": 0,
+      "personal_foul_count": 0
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-rules-engine-04-fact-comparison.rules",
+    "decision": "can_afford",
+    "input": {
+      "balance": 0,
+      "price": 0
+    },
+    "expected": true
+  },
+  {
+    "file": "x-json-rules-engine-05-honor-roll.rules",
+    "decision": "honor_roll",
+    "input": {
+      "athlete": true,
+      "gpa": 0
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-rules-engine-06-condition-sharing.rules",
+    "decision": "screwdriver_aficionado",
+    "input": {
+      "drinks_orange_juice": true,
+      "enjoys_vodka": true
+    },
+    "expected": true
+  },
+  {
+    "file": "x-json-rules-engine-06-condition-sharing.rules",
+    "decision": "invite_screwdriver_social",
+    "input": {
+      "drinks_orange_juice": true,
+      "enjoys_vodka": true,
+      "is_sociable": true
+    },
+    "expected": true
+  },
+  {
+    "file": "x-json-rules-engine-06-condition-sharing.rules",
+    "decision": "invite_other_social",
+    "input": {
+      "drinks_orange_juice": true,
+      "enjoys_vodka": true,
+      "is_sociable": true
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-rules-engine-07-rule-chaining.rules",
+    "decision": "screwdriver_aficionado",
+    "input": {
+      "drinks_orange_juice": true,
+      "enjoys_vodka": true
+    },
+    "expected": true
+  },
+  {
+    "file": "x-json-rules-engine-07-rule-chaining.rules",
+    "decision": "invite_to_social",
+    "input": {
+      "company": "x",
+      "drinks_orange_juice": true,
+      "enjoys_vodka": true,
+      "is_sociable": true
+    },
+    "expected": false
+  },
+  {
+    "file": "x-json-rules-engine-08-rule-priority.rules",
+    "decision": "top_event",
+    "input": {
+      "age": 0
+    },
+    "expected": "none"
+  },
+  {
+    "file": "x-json-rules-engine-09-operators-coverage.rules",
+    "decision": "decision_result",
+    "input": {
+      "age": 0,
+      "region": "eu",
+      "risk": 0,
+      "status": "active",
+      "tier": "gold"
+    },
+    "expected": "rejected"
+  },
+  {
+    "file": "x-json-rules-engine-10-cumulative-discount.rules",
+    "decision": "discount_pct",
+    "input": {
+      "cart_total": 0,
+      "coupon": "x",
+      "is_member": true
+    },
+    "expected": 10
+  },
+  {
+    "file": "x-json-rules-engine-10-cumulative-discount.rules",
+    "decision": "final_price",
+    "input": {
+      "cart_total": 0,
+      "coupon": "x",
+      "is_member": true
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-microsoft-RulesEngine-basic_count.rules",
+    "decision": "withinTolerance",
+    "input": {
+      "count": 1
+    },
+    "expected": true
+  },
+  {
+    "file": "x-microsoft-RulesEngine-basic_count.rules",
+    "decision": "outcome",
+    "input": {
+      "count": 1
+    },
+    "expected": "Count is within tolerance."
+  },
+  {
+    "file": "x-microsoft-RulesEngine-discount.rules",
+    "decision": "discount",
+    "input": {
+      "country": "x",
+      "loyaltyFactor": 1,
+      "noOfVisitsPerMonth": 0,
+      "totalOrders": 0,
+      "totalPurchasesToDate": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-microsoft-RulesEngine-discount_nested_operators.rules",
+    "decision": "nestedOr30",
+    "input": {
+      "loyaltyFactor": 1,
+      "totalOrders": 0,
+      "totalPurchasesToDate": 0
+    },
+    "expected": false
+  },
+  {
+    "file": "x-microsoft-RulesEngine-discount_nested_operators.rules",
+    "decision": "nestedAnd35",
+    "input": {
+      "loyaltyFactor": 1,
+      "noOfVisitsPerMonth": 0,
+      "totalOrders": 0,
+      "totalPurchasesToDate": 0
+    },
+    "expected": false
+  },
+  {
+    "file": "x-microsoft-RulesEngine-nested_input.rules",
+    "decision": "checkNestedSimpleProp",
+    "input": {
+      "nestedProp_simpleProp": "x"
+    },
+    "expected": false
+  },
+  {
+    "file": "x-microsoft-RulesEngine-nested_input.rules",
+    "decision": "checkNestedListProp",
+    "input": {
+      "listProp_0_id": 1,
+      "listProp_1_value": "x"
+    },
+    "expected": false
+  },
+  {
+    "file": "x-node-rules-01-simple-rule.rules",
+    "decision": "result",
+    "input": {
+      "transaction_total": 0
+    },
+    "expected": false
+  },
+  {
+    "file": "x-node-rules-02-multiple-rules.rules",
+    "decision": "outcome",
+    "input": {
+      "card_type": "x",
+      "transaction_total": 0
+    },
+    "expected": {
+      "reason": "blocked: less than 500",
+      "result": false
+    }
+  },
+  {
+    "file": "x-node-rules-03-prioritized-rules.rules",
+    "decision": "block_reason",
+    "input": {
+      "card_type": "x",
+      "transaction_total": 0
+    },
+    "expected": "blocked: less than 500"
+  },
+  {
+    "file": "x-node-rules-04-cascading-rules.rules",
+    "decision": "is_mobile",
+    "input": {
+      "application": "x"
+    },
+    "expected": false
+  },
+  {
+    "file": "x-node-rules-04-cascading-rules.rules",
+    "decision": "result",
+    "input": {
+      "application": "x",
+      "card_type": "x"
+    },
+    "expected": true
+  },
+  {
+    "file": "x-node-rules-05-fraud-engine.rules",
+    "decision": "is_guest",
+    "input": {
+      "user_logged_in": true
+    },
+    "expected": false
+  },
+  {
+    "file": "x-node-rules-05-fraud-engine.rules",
+    "decision": "result",
+    "input": {
+      "app_code": "x",
+      "card_issuer": "x",
+      "card_type": "x",
+      "event_risk_factor": 0,
+      "name": "x",
+      "transaction_total": 0,
+      "user_credibility": 0,
+      "user_logged_in": true
+    },
+    "expected": false
+  },
+  {
+    "file": "x-node-rules-06-blacklist.rules",
+    "decision": "result",
+    "input": {
+      "name": "x"
+    },
+    "expected": true
+  },
+  {
+    "file": "x-node-rules-07-transaction-fee.rules",
+    "decision": "fee_rate",
+    "input": {
+      "card_type": "x"
+    },
+    "expected": 0.03
+  },
+  {
+    "file": "x-node-rules-07-transaction-fee.rules",
+    "decision": "fixed_fee",
+    "input": {
+      "card_type": "x"
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-node-rules-07-transaction-fee.rules",
+    "decision": "fee",
+    "input": {
+      "card_type": "x",
+      "transaction_total": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-node-rules-08-credibility-bonus.rules",
+    "decision": "base_reward",
+    "input": {},
+    "expected": 0
+  },
+  {
+    "file": "x-node-rules-08-credibility-bonus.rules",
+    "decision": "loyalty_bonus",
+    "input": {
+      "user_credibility": 0
+    },
+    "expected": "non-applicable"
+  },
+  {
+    "file": "x-node-rules-08-credibility-bonus.rules",
+    "decision": "total_reward",
+    "input": {
+      "user_credibility": 0
+    },
+    "expected": 0
+  },
+  {
+    "file": "x-node-rules-09-amount-bracket-fee.rules",
+    "decision": "tiered_fee",
+    "input": {
+      "transaction_total": 0
+    },
+    "expected": 0
+  }
+]

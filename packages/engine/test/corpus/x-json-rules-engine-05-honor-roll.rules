@@ -1,0 +1,17 @@
+model "honor_roll" {}
+
+# json-rules-engine examples/09-rule-results.js:
+#   all[ athlete == true, GPA >= 3.5 ]  -> honor-roll
+# Students: joe(false,3.9)=no, larry(true,3.5)=yes, jane(false,3.1)=no,
+#           janet(true,4.0)=yes, sarah(true,1.1)=no.
+
+input athlete : boolean
+input gpa     : number in [0..4]
+
+decision honor_roll : boolean {
+  needs: athlete, gpa
+  hit: first
+  #  athlete | gpa    => honor_roll
+     true    | >= 3.5 => true
+     default |        => false
+}

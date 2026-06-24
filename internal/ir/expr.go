@@ -27,6 +27,10 @@ const (
 	OpFloor    // round toward -∞ (built-in floor, single-arg)
 	OpCeil     // round toward +∞ (built-in ceiling, single-arg)
 	OpRound    // round to the nearest integer, HALF_EVEN (built-in round, single-arg)
+	OpAbs      // absolute value (built-in abs, single-arg)
+	OpTrunc    // truncate toward zero (built-in trunc, single-arg)
+	OpRoundN   // round to N decimal places, HALF_EVEN (built-in round, two-arg: x, n)
+	OpMod      // floored modulo, DMN semantics x - y*floor(x/y) (built-in modulo, two-arg: x, y)
 )
 
 // Instr: an instruction (opcode + dense integer argument).

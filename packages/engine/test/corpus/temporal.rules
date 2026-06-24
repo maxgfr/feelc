@@ -1,0 +1,26 @@
+model "temporal" {}
+
+input d1 : date
+input d2 : date
+input dur1 : duration
+input dur2 : duration
+
+# date constructor + duration constructor as literals
+decision new_year : date = date("2026-01-01")
+decision a_month  : duration = duration("P30D")
+
+# date - date = duration
+decision span : duration = d2 - d1
+
+# date + duration = date ; date - duration = date
+decision plus  : date = d1 + dur1
+decision minus : date = d1 - dur1
+
+# duration + duration ; duration - duration
+decision dsum  : duration = dur1 + dur2
+decision ddiff : duration = dur1 - dur2
+
+# date comparison
+decision dcmp : boolean = d1 < d2
+# duration comparison
+decision durcmp : boolean = dur1 <= dur2

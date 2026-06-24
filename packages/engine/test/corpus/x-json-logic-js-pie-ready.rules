@@ -1,0 +1,12 @@
+model "jsonlogic_pie_ready" {}
+
+# Ports the README "complex rule that mixes literals and data":
+#   { "and" : [ {"<" : [ {"var":"temp"}, 110 ]},
+#               {"==": [ {"var":"pie_filling"}, "apple" ] } ] }
+#   data {temp:100, pie_filling:"apple"} -> true
+# The pie is ready to eat iff cooler than 110 AND filled with apples.
+
+input temp        : number
+input pie_filling : string
+
+decision ready : boolean = temp < 110 and pie_filling = "apple"

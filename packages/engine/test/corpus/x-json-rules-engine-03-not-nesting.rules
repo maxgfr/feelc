@@ -1,0 +1,18 @@
+model "not_nesting" {}
+
+# json-rules-engine examples/02 "long foul limit" branch:
+#   all[ gameDuration == 48, not{ personalFoulCount lessThan 6 } ]
+# not(lessThan 6) === greaterThanInclusive 6 (>= 6).
+# feelc rejects not(< x) on a cell, so we express the negation as the equivalent >= test
+# (semantically identical; the NOT is folded into the comparison operator).
+
+input game_duration        : number >= 0
+input personal_foul_count  : number >= 0
+
+decision long_foul_limit : boolean {
+  needs: game_duration, personal_foul_count
+  hit: first
+  #  game_duration | personal_foul_count => match
+     48            | >= 6                => true
+     default       |                     => false
+}

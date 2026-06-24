@@ -1,0 +1,21 @@
+model "credibility_bonus" {}
+
+# node-rules rule 2: "high credibility customer - avoid checks and bypass"
+#   R.when(f.userCredibility && f.userCredibility > 5) -> accept (bonus trust)
+# Modelled with feelc APPLICABILITY gating: a trust bonus that only applies when
+# user_credibility > 5; otherwise it is non-applicable (drops out of the total).
+#   loyalty_bonus = 50, applicable if user_credibility > 5
+# Scenario A: user_credibility=8 -> bonus applies -> total_reward = 50.
+# Scenario B: user_credibility=2 -> non-applicable -> total_reward = 0 (sum of all-non-applicable
+#   would itself be non-applicable, so we add a base 0 reward to keep the total numeric).
+
+input user_credibility : number >= 0
+
+decision base_reward : number = 0
+
+decision loyalty_bonus : number {
+  = 50
+  applicable if user_credibility > 5
+}
+
+decision total_reward : number = base_reward + loyalty_bonus

@@ -1,0 +1,38 @@
+model "discount" {}
+
+# Port of RulesEngine benchmark/demo "Discount" workflow.
+# Source rules (LambdaExpression) flattened across input1/input2/input3 into a
+# single decision table. RulesEngine's OnSuccess fires with the SuccessEvent of
+# the FIRST rule (in list order) that succeeds -> feelc `hit: first`.
+#
+# Two source rules (GiveDiscount30, GiveDiscount30NestedOrExample) both emit
+# "30". The nested-OR rule (loyal+spend OR totalOrders>15) and the nested-AND
+# rule (35) are folded into table rows below. Because a row's cells are ANDed,
+# the nested-OR rule is split into its two disjuncts as two separate "30" rows.
+
+input country               : string
+input loyaltyFactor         : number
+input totalPurchasesToDate  : number >= 0
+input totalOrders           : number >= 0
+input noOfVisitsPerMonth    : number >= 0
+
+decision discount : number {
+  needs: country, loyaltyFactor, totalPurchasesToDate, totalOrders, noOfVisitsPerMonth
+  hit: first
+  # GiveDiscount10: india AND loyalty<=2 AND purchases>=5000 AND orders>2 AND visits>2
+  #  country     | loyaltyFactor | totalPurchasesToDate | totalOrders | noOfVisitsPerMonth => discount
+     "india"     | <= 2          | >= 5000              | > 2         | > 2                => 10
+  # GiveDiscount20: india AND loyalty==3 AND purchases>=10000 AND orders>2 AND visits>2
+     "india"     | 3             | >= 10000             | > 2         | > 2                => 20
+  # GiveDiscount25: NOT india AND loyalty>=2 AND purchases>=10000 AND orders>2 AND visits>5
+     not("india")| >= 2          | >= 10000             | > 2         | > 5                => 25
+  # GiveDiscount30: loyalty>3 AND purchases in [50000..100000] AND orders>5 AND visits>15
+     -           | > 3           | [50000..100000]      | > 5         | > 15               => 30
+  # GiveDiscount30NestedOrExample disjunct A: loyalty>3 AND purchases in [50000..100000]
+     -           | > 3           | [50000..100000]      | -           | -                  => 30
+  # GiveDiscount30NestedOrExample disjunct B: totalOrders>15
+     -           | -             | -                    | > 15        | -                  => 30
+  # GiveDiscount35NestedAndExample: loyalty>3 AND purchases>=100000 AND orders>15 AND visits>25
+     -           | > 3           | >= 100000            | > 15        | > 25               => 35
+     default     |               |                      |             |                    => 0
+}

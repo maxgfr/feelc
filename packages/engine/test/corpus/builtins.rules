@@ -1,0 +1,11 @@
+model "builtins" {}
+
+input x : number
+
+# Single-arg pure built-ins
+decision fl : number = floor(x)
+decision ce : number = ceiling(x)
+decision rd : number = round(x)
+
+# Built-ins composed with arithmetic
+decision composed : number = floor(x / 3) + ceiling(x / 7)

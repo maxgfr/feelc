@@ -1,0 +1,22 @@
+model "zen_overall" {}
+
+# Ported from zen test-data/credit-analysis.json "Overall" decisionTable (hitPolicy: first).
+# Counts of flags drive the overall verdict:
+#   critical > 0           => "red"
+#   red > 0                => "red"
+#   amber > 1              => "amber"
+#   (default)              => "green"
+input red      : number >= 0
+input amber    : number >= 0
+input green    : number >= 0
+input critical : number >= 0
+
+decision overall : string {
+  needs: red, amber, green, critical
+  hit: first
+  #  red   | amber | green | critical => overall
+     -     | -     | -     | > 0      => "red"
+     > 0   | -     | -     | -        => "red"
+     -     | > 1   | -     | -        => "amber"
+     default | |   |                  => "green"
+}

@@ -45,8 +45,25 @@ type tckNode struct {
 }
 
 type tckResult struct {
-	Name     string   `xml:"name,attr"`
-	Expected tckValue `xml:"expected>value"`
+	Name     string      `xml:"name,attr"`
+	Expected tckExpected `xml:"expected"`
+}
+
+// tckExpected is the <expected> element, whose payload is EITHER a scalar <value>, OR a context
+// (direct <component> children), OR a <list> — not always wrapped in <value> (so `expected>value`
+// silently missed multi-output/collect/ruleOrder results, scoring them nil -> fail).
+type tckExpected struct {
+	Nil        string         `xml:"nil,attr"`
+	Value      *tckValue      `xml:"value"`
+	List       *tckList       `xml:"list"`
+	Components []tckComponent `xml:"component"`
+}
+
+func (e tckExpected) value() tckValue {
+	if e.Value != nil {
+		return *e.Value
+	}
+	return tckValue{Nil: e.Nil, List: e.List, Components: e.Components}
 }
 
 type tckValue struct {
@@ -57,8 +74,11 @@ type tckValue struct {
 	Components []tckComponent `xml:"component"`
 }
 
+// tckList: a <list> whose entries are either <item> wrappers (each a scalar <value> or a context of
+// <component>s) or, in some files, direct <value> children.
 type tckList struct {
-	Items []tckValue `xml:"value"`
+	Items  []tckExpected `xml:"item"`
+	Values []tckValue    `xml:"value"`
 }
 
 type tckComponent struct {
@@ -193,7 +213,7 @@ func runModel(dmnPath string, rep *Report) {
 					rep.add(CaseResult{Model: model, Case: c.ID, Decision: rn.Name, Status: Skipped, Reason: skipReason})
 					continue
 				}
-				expect, err := decodeValue(rn.Expected)
+				expect, err := decodeValue(rn.Expected.value())
 				if err != nil {
 					rep.add(CaseResult{Model: model, Case: c.ID, Decision: rn.Name, Status: Skipped, Reason: "result: " + err.Error()})
 					continue
@@ -285,8 +305,12 @@ func decodeValue(v tckValue) (any, error) {
 		return nil, nil
 	}
 	if v.List != nil {
-		out := make([]any, 0, len(v.List.Items))
+		items := v.List.Values
 		for _, it := range v.List.Items {
+			items = append(items, it.value())
+		}
+		out := make([]any, 0, len(items))
+		for _, it := range items {
 			e, err := decodeValue(it)
 			if err != nil {
 				return nil, err

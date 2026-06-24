@@ -9,6 +9,8 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +22,7 @@ import (
 	"github.com/maxgfr/feelc/internal/engine"
 	"github.com/maxgfr/feelc/internal/explain"
 	"github.com/maxgfr/feelc/internal/graph"
+	"github.com/maxgfr/feelc/internal/ir"
 	"github.com/maxgfr/feelc/internal/loader"
 	"github.com/maxgfr/feelc/internal/modelinfo"
 	"github.com/maxgfr/feelc/internal/trace"
@@ -27,6 +30,7 @@ import (
 
 func main() {
 	feelc := js.Global().Get("Object").New()
+	// Source-based functions (mirror the HTTP service). Unchanged: the static playground uses them.
 	feelc.Set("verify", wrap(verifyFn))
 	feelc.Set("run", wrap(runFn))
 	feelc.Set("graph", wrap(graphFn))
@@ -34,8 +38,23 @@ func main() {
 	feelc.Set("model", wrap(modelFn))
 	feelc.Set("required", wrap(requiredFn))
 	feelc.Set("check", wrap(checkFn))
+	// Compiled-model handle path: compile (or load a precompiled .ir.bin) ONCE, evaluate MANY times
+	// without recompiling on every call (the reactive "ultra-opti" case). Consumed by @feelc/engine.
+	feelc.Set("compile", wrap(compileFn))
+	feelc.Set("load", wrap(loadFn))
+	feelc.Set("export", wrap(exportFn))
+	feelc.Set("evalCompiled", wrap(evalCompiledFn))
+	feelc.Set("infoCompiled", wrap(infoCompiledFn))
+	feelc.Set("requiredCompiled", wrap(requiredCompiledFn))
+	feelc.Set("dispose", wrap(disposeFn))
 	feelc.Set("ready", js.ValueOf(true))
-	js.Global().Set("feelc", feelc)
+	// Expose under a caller-chosen global name so multiple instances per realm don't collide;
+	// defaults to `feelc`, which the static playground relies on.
+	token := "feelc"
+	if t := js.Global().Get("feelcInstanceToken"); t.Type() == js.TypeString && t.String() != "" {
+		token = t.String()
+	}
+	js.Global().Set(token, feelc)
 	select {} // keep the Go runtime alive for the registered callbacks
 }
 
@@ -106,20 +125,27 @@ func runFn(args []js.Value) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	out, err := engine.Eval(cm, doc.Decision, doc.Input)
+	return evalResult(cm, doc.Decision, doc.Input, doc.Explain, doc.Full)
+}
+
+// evalResult evaluates a decision on an already-compiled model and assembles the
+// {decision, output, trace?} response (decimals as fixed-notation numbers via JSONify). Shared by
+// runFn (compile-then-eval) and evalCompiledFn (handle path), so the two never drift.
+func evalResult(cm *ir.CompiledModel, decision string, input map[string]any, explainTrace, full bool) (any, error) {
+	out, err := engine.Eval(cm, decision, input)
 	if err != nil {
 		return nil, err
 	}
-	resp := map[string]any{"decision": doc.Decision, "output": modelinfo.JSONify(out)}
+	resp := map[string]any{"decision": decision, "output": modelinfo.JSONify(out)}
 	switch {
-	case doc.Full:
-		if ft, e := explain.ExplainFull(cm, doc.Decision, doc.Input); e == nil {
-			resp["trace"] = explain.NormalizeFullJSON(ft) // decimals as fixed-notation numbers, like `output`
+	case full:
+		if ft, e := explain.ExplainFull(cm, decision, input); e == nil {
+			resp["trace"] = explain.NormalizeFullJSON(ft)
 		} else {
 			resp["traceError"] = e.Error() // never silently drop the trace; `output` is already returned
 		}
-	case doc.Explain:
-		if tr, e := explain.Explain(cm, doc.Decision, doc.Input); e == nil {
+	case explainTrace:
+		if tr, e := explain.Explain(cm, decision, input); e == nil {
 			resp["trace"] = explain.NormalizeJSON(tr)
 		} else {
 			resp["traceError"] = e.Error()
@@ -182,7 +208,13 @@ func requiredFn(args []js.Value) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	req, err := cm.RequiredInputs(doc.Decision)
+	return requiredFor(cm, doc.Decision)
+}
+
+// requiredFor resolves the inputs a decision transitively needs (question-flow), with metadata.
+// Shared by requiredFn (source) and requiredCompiledFn (handle path).
+func requiredFor(cm *ir.CompiledModel, decision string) (any, error) {
+	req, err := cm.RequiredInputs(decision)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +226,7 @@ func requiredFn(args []js.Value) (any, error) {
 	for _, n := range req {
 		out = append(out, byName[n])
 	}
-	return map[string]any{"decision": doc.Decision, "inputs": out}, nil
+	return map[string]any{"decision": decision, "inputs": out}, nil
 }
 
 // checkFn: {rules,claims} -> {report,blockers}. Mirrors POST /v1/check.
@@ -214,4 +246,160 @@ func checkFn(args []js.Value) (any, error) {
 	}
 	rep := check.Check(cm, doc.Claims)
 	return map[string]any{"report": rep, "blockers": rep.Blockers()}, nil
+}
+
+// --- compiled-model handle registry ---
+//
+// The handle path lets the JS side compile (or load a precompiled .ir.bin) ONCE and evaluate MANY
+// times without re-parsing/-compiling on each call (the reactive "ultra-opti" case). WASM is
+// single-threaded, so a plain map needs no locking. Handles are freed explicitly via dispose().
+var (
+	models     = map[int]*ir.CompiledModel{}
+	nextHandle = 1
+)
+
+func putModel(cm *ir.CompiledModel) int {
+	h := nextHandle
+	nextHandle++
+	models[h] = cm
+	return h
+}
+
+func getModel(handle int) (*ir.CompiledModel, error) {
+	cm, ok := models[handle]
+	if !ok {
+		return nil, fmt.Errorf("unknown model handle %d (compile/load first, or it was disposed)", handle)
+	}
+	return cm, nil
+}
+
+// handleArg parses {"handle": n} from arg 0 (shared by export/info/dispose).
+func handleArg(args []js.Value) (int, error) {
+	var doc struct {
+		Handle int `json:"handle"`
+	}
+	if err := json.Unmarshal([]byte(argStr(args, 0)), &doc); err != nil {
+		return 0, err
+	}
+	return doc.Handle, nil
+}
+
+// compileFn: source -> {handle,hash,report,blockers}. Compiles once and retains the model for
+// repeated evalCompiled calls (free it with dispose).
+func compileFn(args []js.Value) (any, error) {
+	cm, hash, rep, err := loader.Compile([]byte(argStr(args, 0)))
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"handle": putModel(cm), "hash": hash, "report": rep, "blockers": rep.Blockers()}, nil
+}
+
+// loadFn: {ir} (base64 .ir.bin) -> {handle,hash}. Loads a precompiled artifact — the SAME bytes the
+// native `feelc compile` emits — with no recompilation.
+func loadFn(args []js.Value) (any, error) {
+	var doc struct {
+		IR string `json:"ir"`
+	}
+	if err := json.Unmarshal([]byte(argStr(args, 0)), &doc); err != nil {
+		return nil, err
+	}
+	blob, err := base64.StdEncoding.DecodeString(doc.IR)
+	if err != nil {
+		return nil, fmt.Errorf("ir: invalid base64: %w", err)
+	}
+	cm, err := ir.Decode(blob)
+	if err != nil {
+		return nil, err
+	}
+	h, err := ir.Hash(cm)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"handle": putModel(cm), "hash": hex.EncodeToString(h[:])}, nil
+}
+
+// exportFn: {handle} -> {ir,hash}. Serializes a compiled model to a base64 .ir.bin for shipping
+// (canonical bytes, identical to `feelc compile`).
+func exportFn(args []js.Value) (any, error) {
+	h, err := handleArg(args)
+	if err != nil {
+		return nil, err
+	}
+	cm, err := getModel(h)
+	if err != nil {
+		return nil, err
+	}
+	blob, err := ir.Encode(cm)
+	if err != nil {
+		return nil, err
+	}
+	sum, err := ir.Hash(cm)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"ir": base64.StdEncoding.EncodeToString(blob), "hash": hex.EncodeToString(sum[:])}, nil
+}
+
+// evalCompiledFn: {handle,decision,input,explain,full} -> {decision,output,trace?}. The handle twin
+// of runFn — evaluates a previously compiled/loaded model with no recompilation.
+func evalCompiledFn(args []js.Value) (any, error) {
+	var doc struct {
+		Handle   int            `json:"handle"`
+		Decision string         `json:"decision"`
+		Input    map[string]any `json:"input"`
+		Explain  bool           `json:"explain"`
+		Full     bool           `json:"full"`
+	}
+	dec := json.NewDecoder(strings.NewReader(argStr(args, 0)))
+	dec.UseNumber() // decimal exactness of input numbers (mirror runFn)
+	if err := dec.Decode(&doc); err != nil {
+		return nil, err
+	}
+	if doc.Decision == "" {
+		return nil, errors.New("`decision` field required")
+	}
+	cm, err := getModel(doc.Handle)
+	if err != nil {
+		return nil, err
+	}
+	return evalResult(cm, doc.Decision, doc.Input, doc.Explain, doc.Full)
+}
+
+// infoCompiledFn: {handle} -> {name,inputs,decisions}. The handle twin of modelFn.
+func infoCompiledFn(args []js.Value) (any, error) {
+	h, err := handleArg(args)
+	if err != nil {
+		return nil, err
+	}
+	cm, err := getModel(h)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"name": cm.Name, "inputs": modelinfo.Inputs(cm), "decisions": modelinfo.Decisions(cm)}, nil
+}
+
+// requiredCompiledFn: {handle,decision} -> {decision,inputs}. The handle twin of requiredFn.
+func requiredCompiledFn(args []js.Value) (any, error) {
+	var doc struct {
+		Handle   int    `json:"handle"`
+		Decision string `json:"decision"`
+	}
+	if err := json.Unmarshal([]byte(argStr(args, 0)), &doc); err != nil {
+		return nil, err
+	}
+	cm, err := getModel(doc.Handle)
+	if err != nil {
+		return nil, err
+	}
+	return requiredFor(cm, doc.Decision)
+}
+
+// disposeFn: {handle} -> {ok}. Frees a compiled model. Idempotent (disposing an unknown handle is a no-op).
+func disposeFn(args []js.Value) (any, error) {
+	h, err := handleArg(args)
+	if err != nil {
+		return nil, err
+	}
+	delete(models, h)
+	return map[string]any{"ok": true}, nil
 }

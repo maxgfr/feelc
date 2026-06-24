@@ -1,0 +1,16 @@
+model "brackets" {}
+
+@title "Annual salary"
+@question "What is your annual salary?"
+input salary : number >= 0 unit "EUR"
+
+# Progressive bracket schedule. Marginal rates per tranche, top tranche open-ended.
+@title "Progressive contribution"
+@doc "Marginal-rate schedule lowered to arithmetic."
+@source "Schedule v2"
+decision contribution : number {
+  bracket: salary
+  [0..3000)    => 10%
+  [3000..6000) => 15%
+  >= 6000      => 20%
+}

@@ -1,0 +1,18 @@
+{
+  "name": "@feelc-examples/browser-vite",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal Vite app embedding @feelc/engine in the browser (no API).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@feelc/engine": "*"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11"
+  }
+}

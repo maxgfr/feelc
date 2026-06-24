@@ -1,0 +1,18 @@
+model "zen_country_flag" {}
+
+# Ported from zen test-data/credit-analysis.json "Country" decisionTable (hitPolicy: first).
+# Two input columns: company.country and company.isEu.
+#   country in {US,IE,GB,CA}      => "green"
+#   isEu == true                  => "amber"
+#   (default)                     => "red"
+input country : string
+input is_eu   : boolean
+
+decision flag_country : string {
+  needs: country, is_eu
+  hit: first
+  #  country                  | is_eu  => flag
+     "US","IE","GB","CA"      | -      => "green"
+     -                        | true   => "amber"
+     default                  |        => "red"
+}

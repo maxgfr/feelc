@@ -1,0 +1,20 @@
+model "amount_bracket_fee" {}
+
+# Marginal/progressive fee schedule on transaction amount (a fee-rule shape natural to payment
+# engines; node-rules would need many threshold rules, feelc expresses it as a bracket schedule).
+#   [0..1000)       -> 2.0% marginal
+#   [1000..10000)   -> 1.0% marginal
+#   >= 10000        -> 0.5% marginal
+# Computes Sigma (clamp(amount,lo,hi)-lo)*rate.
+# Scenario: transaction_total=12000
+#   = (1000-0)*0.02 + (10000-1000)*0.01 + (12000-10000)*0.005
+#   = 20 + 90 + 10 = 120
+
+input transaction_total : number >= 0 unit "USD"
+
+decision tiered_fee : number {
+  bracket: transaction_total
+  [0..1000)     => 2%
+  [1000..10000) => 1%
+  >= 10000      => 0.5%
+}

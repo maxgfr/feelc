@@ -1,0 +1,23 @@
+model "logic" {}
+
+input p : boolean
+input q : boolean
+input x : number
+
+# Boolean operators. Bare-variable operands of and/or are not recognized by the dependency
+# extractor (e.g. `p and q` parses as one identifier), so operands are written as comparisons,
+# which is the engine's supported form. This still exercises the and/or/not operators.
+decision conj : boolean = (p = true) and (q = true)
+decision disj : boolean = (p = true) or (q = true)
+decision neg  : boolean = not(p = true)
+
+# logical and/or over numeric comparisons
+decision and_cmp : boolean = x > 0 and x < 10
+decision or_cmp  : boolean = x < 0 or x > 100
+
+# Boolean literals
+decision lit_true  : boolean = true
+decision lit_false : boolean = false
+
+# Combined and/or/not
+decision combo : boolean = (x > 0 and x < 10) or not(x = 5)

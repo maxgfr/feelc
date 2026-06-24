@@ -1,0 +1,26 @@
+model "domain_gate" {
+  rounding: half_even
+}
+
+# A decision table whose cell tests mirror each input's declared domain. An in-domain value hits a
+# "covered" branch; an out-of-domain value falls through to the default ("rejected"). This surfaces
+# the bound/range/enum semantics (incl. open vs closed boundaries) at the decision layer.
+
+input score : number in [580..680)
+input tier  : string in { "a", "b" }
+
+decision band : string {
+  needs: score
+  hit: first
+  #  score        => band
+     [580..680)   => "in-domain"
+     default      => "rejected"
+}
+
+decision tier_ok : string {
+  needs: tier
+  hit: first
+  #  tier      => tier_ok
+     "a", "b"  => "in-domain"
+     default   => "rejected"
+}

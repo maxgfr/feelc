@@ -1,0 +1,11 @@
+model "jsonlogic_equality" {}
+
+# Ports json-logic `==` / `===`:
+#   {"==":  [1, 1]}  -> true
+#   {"===": [{"var":"a"}, {"var":"b"}]} with {a:6,b:7} -> false
+# feelc `=` is exact-decimal equality (no JS loose coercion), which matches `===` for numbers.
+
+input a : number
+input b : number
+
+decision equal : boolean = a = b

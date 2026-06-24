@@ -1,0 +1,12 @@
+model "boundaries" {}
+
+# Exact open/closed interval boundary semantics: 640 is IN [640..720), 720 is NOT.
+input score : number in [0..1000]
+
+decision band : string {
+  needs: score
+  hit: first
+  [640..720) => "refer"
+  >= 720     => "approve"
+  default    => "decline"
+}

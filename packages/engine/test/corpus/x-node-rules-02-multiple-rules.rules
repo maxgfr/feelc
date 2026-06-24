@@ -1,0 +1,22 @@
+model "multiple_rules" {}
+
+# node-rules 2.MultipleRules: two blocking rules applied in array order.
+#   Rule 1: R.when(transactionTotal < 500)  -> block "less than 500"
+#   Rule 2: R.when(cardType === "Debit")    -> block "debit not allowed"
+# Scenario fact: transactionTotal = 600, cardType = "Debit"
+#   -> Rule 1 does not match (600 >= 500), Rule 2 matches -> blocked, debit reason.
+# Modelled with hit: first (rule order = the array order in node-rules).
+
+input transaction_total : number >= 0
+input card_type         : string
+
+type Outcome = context { result: boolean, reason: string }
+
+decision outcome : Outcome {
+  needs: transaction_total, card_type
+  hit: first
+  #  transaction_total | card_type => result | reason
+     < 500             | -         => false  | "blocked: less than 500"
+     -                 | "Debit"   => false  | "blocked: debit cards not allowed"
+     default           |           => true   | "valid"
+}

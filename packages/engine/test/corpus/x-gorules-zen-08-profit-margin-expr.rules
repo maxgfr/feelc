@@ -1,0 +1,8 @@
+model "zen_profit_margin" {}
+
+# Ported from zen policy fixture company_block.json expression:
+#   company.profitMargin = company.revenue * 0.1
+# revenue 1_250_000 -> 125000
+input revenue : number >= 0 unit "USD"
+
+decision profit_margin : number unit "USD" = revenue * 0.1

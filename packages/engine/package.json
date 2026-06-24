@@ -1,0 +1,60 @@
+{
+  "name": "@feelc/engine",
+  "version": "0.1.0",
+  "description": "Portable feelc decision/calculation engine — the real Go engine compiled to WebAssembly. Runs in the browser, Node, bundlers (Vite/webpack/Next) and edge runtimes, with no HTTP API.",
+  "keywords": [
+    "feelc",
+    "feel",
+    "dmn",
+    "decision",
+    "rules",
+    "rule-engine",
+    "calculation-engine",
+    "wasm",
+    "webassembly"
+  ],
+  "license": "Apache-2.0",
+  "author": "maxgfr",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maxgfr/feelc",
+    "directory": "packages/engine"
+  },
+  "homepage": "https://github.com/maxgfr/feelc/tree/main/packages/engine#readme",
+  "type": "module",
+  "sideEffects": ["**/wasm_exec.js"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./wasm/feelc.wasm": "./wasm/feelc.wasm",
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "feelc-compile": "./bin/feelc-compile.mjs"
+  },
+  "files": [
+    "dist",
+    "wasm",
+    "bin",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build:wasm": "make -C ../.. wasm",
+    "build": "npm run build:wasm && tsup",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

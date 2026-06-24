@@ -1,0 +1,111 @@
+model "tables" {}
+
+input score    : number in [0..100]
+input region   : string in {"urban", "suburban", "rural"}
+input member   : boolean
+
+# ---- HIT: FIRST (rejections / order = priority) ----
+type Elig = context { ok: boolean, label: string }
+decision first_elig : Elig {
+  needs: score, region, member
+  hit: first
+  #  score    | region  | member => ok    | label
+     < 50     | -       | -      => false | "low"
+     -        | "rural" | -      => false | "rural"
+     [50..80) | -       | -      => true  | "mid"
+     >= 80    | -       | -      => true  | "high"
+     default  |         |        => false | "uncovered"
+}
+
+# ---- HIT: UNIQUE (at most one rule matches; tiles the domain) ----
+decision unique_band : string {
+  needs: score
+  hit: unique
+  #  score    => band
+     < 40     => "F"
+     [40..70) => "M"
+     >= 70    => "T"
+}
+
+# ---- HIT: ANY (matching rules agree) ----
+decision any_status : string {
+  needs: score, member
+  hit: any
+  #  score  | member => status
+     >= 60  | -      => "pass"
+     -      | true   => "pass"
+     < 60   | false  => "fail"
+     default        => "unknown"
+}
+
+# ---- HIT: PRIORITY (highest-priority value wins) ----
+decision priority_tier : string {
+  needs: score, member
+  hit: priority
+  priority: "gold", "silver", "bronze"
+  #  score  | member => tier
+     >= 30  | -      => "bronze"
+     >= 60  | -      => "silver"
+     -      | true   => "gold"
+     default        => "none"
+}
+
+# ---- HIT: RULE ORDER (all matches, in rule order) ----
+decision rule_order_tags : string {
+  needs: score, region, member
+  hit: rule order
+  #  score  | region  | member => tag
+     >= 50  | -       | -      => "highscore"
+     -      | "urban" | -      => "urban"
+     -      | -       | true   => "member"
+}
+
+# ---- HIT: COLLECT (raw list) ----
+decision collect_benefits : string {
+  needs: score, region, member
+  hit: collect
+  #  score  | region  | member => benefit
+     < 50   | -       | -      => "aid"
+     -      | "rural" | -      => "rural_grant"
+     -      | -       | true   => "loyalty"
+}
+
+# ---- HIT: COLLECT SUM (C+) ----
+decision collect_sum : number {
+  needs: score, region, member
+  hit: collect sum
+  #  score  | region  | member => amount
+     >= 50  | -       | -      => 100
+     -      | "urban" | -      => 25
+     -      | -       | true   => 10
+}
+
+# ---- HIT: COLLECT MIN (C<) ----
+decision collect_min : number {
+  needs: score, region, member
+  hit: collect min
+  #  score  | region  | member => amount
+     >= 50  | -       | -      => 100
+     -      | "urban" | -      => 25
+     -      | -       | true   => 10
+}
+
+# ---- HIT: COLLECT MAX (C>) ----
+decision collect_max : number {
+  needs: score, region, member
+  hit: collect max
+  #  score  | region  | member => amount
+     >= 50  | -       | -      => 100
+     -      | "urban" | -      => 25
+     -      | -       | true   => 10
+}
+
+# ---- HIT: COLLECT COUNT (C#) ----
+decision collect_count : number {
+  needs: score, region, member
+  hit: collect count
+  #  score  | region  | member => amount
+     >= 50  | -       | -      => 100
+     -      | "urban" | -      => 25
+     -      | -       | true   => 10
+}

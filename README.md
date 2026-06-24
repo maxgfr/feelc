@@ -84,14 +84,21 @@ Most rule engines make you **hand-write** rules and then **trust** them. feelc's
 |---|---|---|---|---|---|
 | **AI authoring** | native — drafts *and* repairs against the engine | — | — | — | — |
 | **Rule format** | plain-text `.rules`, **git-diffable** | DRL text | DMN 1.x **XML** | JSON model | JSON conditions |
-| **Formal verification** | completeness · conflicts · dead rules **(+ SMT proofs)** | — | — | — | — |
+| **Formal verification** | **in-engine**: completeness · conflicts · subsumption **(+ SMT)** | table analysis¹ | table analysis¹ | — | — |
 | **Types & numbers** | typed · **exact decimal** (money-safe) | typed (JVM) | FEEL · decimal | dynamic | untyped JS |
 | **Deploy** | **one static binary** / ~16 MB Docker, no LLM at runtime | JVM | JVM / BPM platform | Go/Rust lib | npm lib |
 | **Try in browser** | **WASM playground** | — | modeler demo | playground | — |
 
+¹ In fairness, Camunda (dmn-js *verify table*), Trisotech and Drools/DMN **do** offer decision-table
+gap/overlap analysis — as modeling-tool features. feelc's is built into the **compiler** (adds subsumption
++ counterexamples + optional SMT) and ships in a single portable binary / WASM.
+
 Rough by nature — each tool has strengths feelc doesn't (Drools' Rete/CEP, Camunda's BPM suite, GoRules'
 polished visual editor). What's **unique to feelc** is the combination: text rules an AI drafts, a
 deterministic engine that *proves* them, and a decision graph you can actually read — in a single binary.
+Measured details: **[comparison & gaps](https://maxgfr.github.io/feelc/docs/comparison.html)** ·
+**[conformance](https://maxgfr.github.io/feelc/docs/conformance.html)** (DMN TCK + 6 engines) ·
+**[benchmarks](https://maxgfr.github.io/feelc/docs/benchmarks.html)** · **[embed in your app](https://maxgfr.github.io/feelc/docs/embedding.html)**.
 
 ![feelc decision-requirements graph — modules colour-coded, cross-module dependency dashed, verification findings overlaid](docs/img/decision-graph.png)
 

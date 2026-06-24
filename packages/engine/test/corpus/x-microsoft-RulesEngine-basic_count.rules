@@ -1,0 +1,17 @@
+model "basic_count" {}
+
+# Port of RulesEngine "BasicDemo": single rule "count < 3" with SuccessEvent
+# "Count is within tolerance." OnSuccess -> outcome true; OnFail -> false.
+# Modeled as a boolean decision (rule satisfied?) plus a string outcome table.
+
+input count : number
+
+decision withinTolerance : boolean = count < 3
+
+decision outcome : string {
+  needs: withinTolerance
+  hit: unique
+  #  withinTolerance => message
+     true            => "Count is within tolerance."
+     false           => "Over expected."
+}

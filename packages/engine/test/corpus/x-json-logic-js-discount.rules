@@ -1,0 +1,12 @@
+model "jsonlogic_discount" {}
+
+# A realistic compound business rule expressed in json-logic, ported to feelc.
+# json-logic (cart total discount tiers):
+#   {"if":[ {">=":[{"var":"total"},100]}, {"*":[{"var":"total"},0.8]},
+#           {">=":[{"var":"total"},50]},  {"*":[{"var":"total"},0.9]},
+#           {"var":"total"} ]}
+# >=100 -> 20% off, >=50 -> 10% off, else full price. Exact-decimal money math.
+
+input total : number >= 0 unit "EUR"
+
+decision payable : number = round(if (total >= 100) then total * 0.8 else (if (total >= 50) then total * 0.9 else total), 2)

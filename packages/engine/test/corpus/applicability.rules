@@ -1,0 +1,27 @@
+model "applicability" {}
+
+@title "Monthly income"
+@question "What is your monthly income?"
+input income : number >= 0 unit "EUR"
+
+@question "Are you a registered student?"
+input is_student : boolean
+
+# Applicability gate (applicable if) -> yields NON-APPLICABLE sentinel when condition is false.
+@title "Housing aid"
+decision housing_aid : number {
+  = 200
+  applicable if income < 1500
+}
+
+# Negated applicability gate (not applicable if).
+@title "Student grant"
+decision student_aid : number {
+  = 150
+  not applicable if income >= 2000
+}
+
+# NA terms drop out of a sum (act as 0); if all NA the total is NA.
+@title "Total aid"
+@doc "Sum of applicable aids; non-applicable terms drop out."
+decision total_aid : number = housing_aid + student_aid

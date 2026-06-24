@@ -1,0 +1,26 @@
+model "rule_chaining" {}
+
+# json-rules-engine examples/07-rule-chaining.js:
+#   drinkRule (priority 10): all[ drinksOrangeJuice, enjoysVodka ]
+#       onSuccess -> sets fact screwdriverAficionado = true (else false)
+#   inviteRule (priority 5): all[ screwdriverAficionado, isSociable, accountInfo.company == "microsoft" ]
+# The "rule chaining" (a downstream rule consuming a fact produced by an upstream rule's success)
+# is feelc's natural DRG: invite depends on the upstream aficionado decision.
+# washington(OJ,vodka,sociable,microsoft) -> aficionado=true, invite=true.
+# jefferson(OJ,no-vodka,sociable,microsoft) -> aficionado=false, invite=false.
+
+input drinks_orange_juice : boolean
+input enjoys_vodka        : boolean
+input is_sociable         : boolean
+input company             : string
+
+# NOTE: bare `a and b` is misparsed; parenthesize each boolean operand (FEEL frontend quirk).
+decision screwdriver_aficionado : boolean = (drinks_orange_juice) and (enjoys_vodka)
+
+decision invite_to_social : boolean {
+  needs: screwdriver_aficionado, is_sociable, company
+  hit: first
+  #  screwdriver_aficionado | is_sociable | company     => invite
+     true                   | true        | "microsoft" => true
+     default                |             |             => false
+}

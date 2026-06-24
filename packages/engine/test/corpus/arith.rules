@@ -1,0 +1,16 @@
+model "arith" {}
+
+input a : number
+input b : number
+
+# Arithmetic operators
+decision add : number = a + b
+decision sub : number = a - b
+decision mul : number = a * b
+decision div : number = a / b
+
+# Mixed precedence + literals
+decision mixed : number = a * 2 + b / 4 - 1
+
+# Numeric literals (int + decimal)
+decision lit_num : number = 45.67 + 123

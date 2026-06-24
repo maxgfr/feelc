@@ -1,0 +1,18 @@
+model "zen_volume_discount" {}
+
+# Marginal volume-discount schedule, the kind zen models as a tiered decisionTable
+# (one row per quantity band). feelc expresses a marginal schedule directly as brackets:
+# the per-unit "rate" here is the savings applied to the part of the quantity in each band.
+#   [0..10)    => 0   per-unit discount on the first 10 units
+#   [10..50)   => 1   per-unit discount for units 10..49
+#   >= 50      => 2   per-unit discount for units 50+
+# qty 60 -> (0*10) + (1*40) + (2*10) = 60
+@title "Order quantity"
+input qty : number >= 0
+
+decision discount_amount : number {
+  bracket: qty
+  [0..10)    => 0
+  [10..50)   => 1
+  >= 50      => 2
+}

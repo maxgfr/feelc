@@ -108,8 +108,15 @@ func (e *evaluator) evalExpr(p *ir.ExprProgram, input *ir.Value) (result ir.Valu
 				return ir.Value{}, fmt.Errorf("`not` on a non-boolean value")
 			}
 			push(ir.Bool(!a.Bool))
-		case ir.OpFloor, ir.OpCeil, ir.OpRound:
+		case ir.OpFloor, ir.OpCeil, ir.OpRound, ir.OpAbs, ir.OpTrunc:
 			r, err := unaryNum(in.Op, pop())
+			if err != nil {
+				return ir.Value{}, err
+			}
+			push(r)
+		case ir.OpRoundN, ir.OpMod:
+			b, a := pop(), pop()
+			r, err := binaryNum(in.Op, a, b)
 			if err != nil {
 				return ir.Value{}, err
 			}
@@ -261,17 +268,17 @@ func subCheck(a, b int64) (int64, bool) {
 	return d, true
 }
 
-// unaryNum applies a single-arg numeric built-in (floor/ceiling/round). Frozen
+// unaryNum applies a single-arg numeric built-in (floor/ceiling/round/abs/trunc). Frozen
 // decimal context (HALF_EVEN) -> determinism preserved (ADR 0002). null propagated (three-valued).
 func unaryNum(op ir.Opcode, a ir.Value) (ir.Value, error) {
 	if a.Tag == ir.TagNull {
 		return ir.Null(), nil
 	}
 	if a.Tag == ir.TagNA {
-		return ir.NA(), nil // non-applicable propagates through floor/ceiling/round
+		return ir.NA(), nil // non-applicable propagates through the built-in
 	}
 	if a.Tag != ir.TagNumber {
-		return ir.Value{}, fmt.Errorf("numeric built-in (floor/ceiling/round) on a non-numeric value")
+		return ir.Value{}, fmt.Errorf("numeric built-in (floor/ceiling/round/abs/trunc) on a non-numeric value")
 	}
 	r := new(apd.Decimal)
 	var err error
@@ -282,11 +289,71 @@ func unaryNum(op ir.Opcode, a ir.Value) (ir.Value, error) {
 		_, err = decimal.Ctx.Ceil(r, a.Num)
 	case ir.OpRound:
 		_, err = decimal.Ctx.RoundToIntegralValue(r, a.Num)
+	case ir.OpAbs:
+		_, err = decimal.Ctx.Abs(r, a.Num)
+	case ir.OpTrunc:
+		// truncate toward zero: floor for non-negative, ceil for negative.
+		if a.Num.Sign() < 0 {
+			_, err = decimal.Ctx.Ceil(r, a.Num)
+		} else {
+			_, err = decimal.Ctx.Floor(r, a.Num)
+		}
 	}
 	if err != nil {
 		return ir.Value{}, err
 	}
 	return ir.Num(r), nil
+}
+
+// binaryNum applies a deterministic two-arg numeric built-in: round(x, n) (round to n decimal
+// places, HALF_EVEN) and modulo(x, y) (DMN floored modulo). null/non-applicable propagate; both
+// operands must be numeric. Frozen decimal context -> determinism preserved (ADR 0002).
+func binaryNum(op ir.Opcode, a, b ir.Value) (ir.Value, error) {
+	if a.Tag == ir.TagNull || b.Tag == ir.TagNull {
+		return ir.Null(), nil
+	}
+	if a.Tag == ir.TagNA || b.Tag == ir.TagNA {
+		return ir.NA(), nil
+	}
+	if a.Tag != ir.TagNumber || b.Tag != ir.TagNumber {
+		return ir.Value{}, fmt.Errorf("numeric built-in (round/modulo) on a non-numeric value")
+	}
+	r := new(apd.Decimal)
+	switch op {
+	case ir.OpRoundN:
+		n, err := b.Num.Int64()
+		if err != nil {
+			return ir.Value{}, fmt.Errorf("round(x, n): n must be a whole number")
+		}
+		if n < -1000 || n > 1000 {
+			return ir.Value{}, fmt.Errorf("round(x, n): n out of range")
+		}
+		if _, err := decimal.Ctx.Quantize(r, a.Num, int32(-n)); err != nil {
+			return ir.Value{}, fmt.Errorf("round(x, %d): %w", n, err)
+		}
+		return ir.Num(r), nil
+	case ir.OpMod:
+		if b.Num.Sign() == 0 {
+			return ir.Value{}, fmt.Errorf("modulo by zero")
+		}
+		// DMN modulo: x - y*floor(x/y) (the result follows the divisor's sign).
+		q := new(apd.Decimal)
+		if _, err := decimal.Ctx.Quo(q, a.Num, b.Num); err != nil {
+			return ir.Value{}, err
+		}
+		if _, err := decimal.Ctx.Floor(q, q); err != nil {
+			return ir.Value{}, err
+		}
+		prod := new(apd.Decimal)
+		if _, err := decimal.Ctx.Mul(prod, b.Num, q); err != nil {
+			return ir.Value{}, err
+		}
+		if _, err := decimal.Ctx.Sub(r, a.Num, prod); err != nil {
+			return ir.Value{}, err
+		}
+		return ir.Num(r), nil
+	}
+	return ir.Value{}, fmt.Errorf("unsupported two-arg built-in opcode %d", op)
 }
 
 func cmpOp(op ir.Opcode) ir.Op {

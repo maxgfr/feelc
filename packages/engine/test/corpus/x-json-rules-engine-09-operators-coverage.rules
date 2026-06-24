@@ -1,0 +1,24 @@
+model "operators_coverage" {}
+
+# json-rules-engine default operators (src/engine-default-operators.js) mapped to feelc cells:
+#   equal (===)                -> literal cell             ( tier == "gold" )
+#   notEqual (!==)             -> != cell                  ( region != "blocked" )
+#   in (b.indexOf(a) > -1)     -> set-membership cell      ( status in {active, trial} )
+#   notIn                      -> !=  / set negation       ( handled via positive set above )
+#   greaterThanInclusive (>=)  -> >= cell                  ( age >= 18 )
+#   lessThan (<)               -> < cell                   ( risk < 5 )
+# All conditions ANDed (all[]) -> a single first-hit row; else "rejected".
+
+input tier   : string in {"gold", "silver", "bronze", "none"}
+input region : string in {"eu", "us", "blocked"}
+input status : string in {"active", "trial", "expired"}
+input age    : number in [0..150]
+input risk   : number in [0..10]
+
+decision decision_result : string {
+  needs: tier, region, status, age, risk
+  hit: first
+  #  tier   | region      | status          | age   | risk => result
+     "gold" | != "blocked"| "active","trial"| >= 18 | < 5  => "approved"
+     default|             |                 |       |      => "rejected"
+}

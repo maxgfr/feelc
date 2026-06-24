@@ -1,0 +1,18 @@
+model "matching_rules" {}
+
+# Ported from MatchingRules_test.go (DuplicateRule conditions).
+# Grule condition: (Distance > 5000 && Duration > 120) && (Result == false)
+#   -> NetAmount = 143.320007, Result = true
+# Rule5 differs (Duration == 120) so it does NOT match the test fact (Duration 121).
+# We model the eligibility gate (does a rule match?) plus the assigned net amount.
+input distance : number >= 0
+input duration : number >= 0
+input result   : boolean
+
+decision matched : boolean = distance > 5000 and duration > 120 and result = false
+
+# Assigned amount when matched (grule writes 143.320007); non-applicable otherwise.
+decision net_amount : number {
+  = 143.320007
+  applicable if matched
+}

@@ -1,0 +1,28 @@
+model "zen_dti_eligibility" {
+  rounding: half_even
+}
+
+# Ported from the zen credit-analysis domain (creditReport: score, totalDebt) combined with a
+# debt-to-income check. zen would compute DTI in an expressionNode then gate in a decisionTable.
+# feelc: a BKM holds the reusable DTI formula, an expression decision applies it (guarded against
+# divide-by-zero to stay TOTAL), and a FIRST table gives the eligibility verdict.
+input credit_score : number in [300..850]
+input annual_income : number >= 0 unit "EUR"
+input monthly_debt  : number >= 0 unit "EUR"
+
+# Reusable DTI formula (inlined at compile time).
+bkm dti_ratio(debt : number, income : number) : number = debt / (income / 12)
+
+decision dti : number = if annual_income > 0 then round(dti_ratio(monthly_debt, annual_income), 4) else (if monthly_debt > 0 then 1 else 0)
+
+type Verdict = context { approved: boolean, reason: string }
+
+decision verdict : Verdict {
+  needs: credit_score, dti
+  hit: first
+  #  credit_score | dti     => approved | reason
+     < 600        | -       => false    | "low score"
+     -            | > 0.4   => false    | "debt too high"
+     >= 600       | <= 0.4  => true     | "approved"
+     default      |         => false    | "not covered"
+}

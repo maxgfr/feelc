@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" name="multiout">
+  <inputData id="i1" name="score"><variable typeRef="integer"/></inputData>
+  <decision id="d1" name="approval">
+    <variable typeRef="tApproval"/>
+    <informationRequirement><requiredInput href="#i1"/></informationRequirement>
+    <decisionTable hitPolicy="UNIQUE">
+      <input label="Score"><inputExpression typeRef="integer"><text>score</text></inputExpression></input>
+      <output name="ok" typeRef="boolean"/>
+      <output name="label" typeRef="string"/>
+      <rule><inputEntry><text>&gt;= 50</text></inputEntry><outputEntry><text>true</text></outputEntry><outputEntry><text>"pass"</text></outputEntry></rule>
+      <rule><inputEntry><text>&lt; 50</text></inputEntry><outputEntry><text>false</text></outputEntry><outputEntry><text>"fail"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+</definitions>

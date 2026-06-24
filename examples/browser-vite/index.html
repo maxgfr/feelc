@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@feelc/engine — browser demo</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 32rem; margin: 3rem auto; padding: 0 1rem; }
+      label { display: block; margin: 0.75rem 0; }
+      output { font-weight: 600; font-size: 1.5rem; }
+      .status { color: #888; }
+    </style>
+  </head>
+  <body>
+    <h1>feelc in the browser</h1>
+    <p class="status" id="status">loading engine…</p>
+    <div id="form" hidden>
+      <label>Cart total <input id="cart" type="number" value="120" min="0" /></label>
+      <label><input id="member" type="checkbox" checked /> Member</label>
+      <p>Discount: <output id="out">—</output>%</p>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

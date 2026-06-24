@@ -1,0 +1,14 @@
+model "cashflow_totals" {
+  rounding: half_even
+}
+
+# Ported from CashFlowRule.grl SumUpPurchase + the test assertion in PurcasingTaxSample_test.go:
+#   11 luxury purchases of 100000 each, all in 2019.
+#   assert PurchaseCount == 11, TotalPurchases == 1100000.
+# Grule iterates the engine over a slice of facts and accumulates. feelc has no unbounded iteration,
+# so we model the *closed-form* aggregate for the homogeneous batch in the test: count purchases of a
+# fixed unit price. count * price. This reproduces the asserted totals exactly for that batch.
+input count      : number >= 0
+input unit_price : number >= 0
+
+decision total_purchases : number = count * unit_price

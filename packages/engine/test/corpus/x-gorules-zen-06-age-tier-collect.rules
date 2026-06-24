@@ -1,0 +1,30 @@
+model "zen_age_tier" {}
+
+# Ported from zen policy fixture collect_table.json (decisionTable, hitPolicy: collect).
+#   customer.age >= 65 => "senior"
+#   customer.age >= 18 => "adult"
+#   (any)              => "minor"
+# Under COLLECT, an age of 70 matches the first two rows AND the catch-all,
+# yielding ["senior","adult","minor"]. We model the single primary tier with FIRST
+# (the meaningful business answer) AND reproduce the raw COLLECT list separately.
+input age : number in [0..130]
+
+# Primary tier (what zen's UI would treat as the headline tag): first match wins.
+decision tier : string {
+  needs: age
+  hit: first
+  #  age      => tier
+     >= 65    => "senior"
+     >= 18    => "adult"
+     default  => "minor"
+}
+
+# Faithful COLLECT reproduction of zen's overlapping rows (order = rule order).
+decision tags : string {
+  needs: age
+  hit: collect
+  #  age      => tag
+     >= 65    => "senior"
+     >= 18    => "adult"
+     -        => "minor"
+}

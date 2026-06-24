@@ -1,0 +1,15 @@
+model "jsonlogic_arithmetic" {}
+
+# Ports json-logic arithmetic `+ - * /`:
+#   {"+":[4,2]}=6  {"-":[4,2]}=2  {"*":[4,2]}=8  {"/":[4,2]}=2
+#   Nested: {"+":[ {"*":[2,3]}, {"-":[10,4]} ]} = 6 + 6 = 12
+# feelc uses EXACT decimals (no float error): 0.1 + 0.2 = 0.3 exactly.
+
+input a : number
+input b : number
+
+decision add   : number = a + b
+decision sub   : number = a - b
+decision mul   : number = a * b
+decision divi  : number = a / b
+decision nested: number = (a * b) + (a - b)

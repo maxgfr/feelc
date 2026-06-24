@@ -1,0 +1,12 @@
+model "bkm" {}
+
+input d : number
+input i : number
+
+# BKM declaration + invocation (inlined at compile time)
+bkm dti(debt:number, income:number):number = debt / (income / 12)
+
+decision ratio : number = dti(d, i)
+
+# BKM used inside an expression
+decision pctratio : number = dti(d, i) * 100

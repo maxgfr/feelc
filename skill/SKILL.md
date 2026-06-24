@@ -90,8 +90,10 @@ is irreducible, **raise the question with the user**.
 ## What NOT to do
 
 - ❌ Do not compute a rule result yourself — run `feelc run`.
-- ❌ Do not use constructs outside the subset (FEEL functions, `if/then/else` inside an
-  expression, regex, dates/timezones, lambdas): it does not compile. See `references/feel.md`.
+- ❌ Do not use constructs outside the subset (multi-arg FEEL functions, `for`/`some`/`every`,
+  lists/higher-order functions, regex, time-of-day/date-times/timezones, lambdas): it does not compile.
+  (`if c then a else b`, `date`/`duration`, single-arg `floor`/`ceiling`/`round`, units, brackets,
+  applicability and BKM ARE supported — see `references/feel.md`.)
 - ❌ Do not leave a single-hit table (FIRST/UNIQUE/ANY/PRIORITY) **incomplete** without an assumed
   `default`: `verify` will report a gap with a counter-example.
 - ❌ Do not dress up a `warning`/`info` as a success, and do not delete a rule just to

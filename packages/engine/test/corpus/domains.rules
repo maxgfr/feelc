@@ -1,0 +1,28 @@
+model "domains" {
+  rounding: half_even
+}
+
+# Input Domains category: each input carries a distinct domain form.
+# Domains are a compile-time completeness concern; the decisions below simply echo the
+# inputs back so that in-domain and out-of-domain values produce observable outputs.
+
+input ge_in   : number >= 0
+input le_in   : number <= 100
+input gt_in   : number > 0
+input lt_in   : number < 100
+input closed  : number in [580..680]
+input openi   : number in (580..680)
+input lcro    : number in [580..680)
+input rclo    : number in (580..680]
+input choice  : string in { "a", "b" }
+
+# Echo decisions: surface each domain-constrained input directly.
+decision d_ge     : number = ge_in
+decision d_le     : number = le_in
+decision d_gt     : number = gt_in
+decision d_lt     : number = lt_in
+decision d_closed : number = closed
+decision d_openi  : number = openi
+decision d_lcro   : number = lcro
+decision d_rclo   : number = rclo
+decision d_choice : string = choice

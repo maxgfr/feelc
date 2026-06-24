@@ -1,0 +1,47 @@
+model "fraud_engine" {}
+
+# node-rules 6.MoreRulesAndFacts: a 10-rule prioritized fraud/payment engine.
+# Higher priority fires first; first match calls R.stop with result true/false.
+# Ported rules (priority in parentheses; regex IP rule 9 is excluded as non-modelable):
+#   (8) cardType == "Cash Card"                                   -> reject
+#   (7/6) guest (not logged in) AND transactionTotal > 10000      -> reject
+#         [folds node-rules rule 6 "set customerType=guest" + rule 5 "block guest > 10000"]
+#   (5) appCode == "MOBI4"                                        -> reject
+#   (4) Credit Card AND American Express AND transactionTotal>1000-> reject
+#   (3) transactionTotal < 500                                   -> reject
+#   (2) userCredibility > 5                                      -> accept
+#   (2) eventRiskFactor  < 5                                      -> accept
+#   (1) name == "user4" (blacklist)                              -> reject
+# Default (no rule matched): accept.
+#
+# Scenario fact = user7: not logged in, transactionTotal=100000 -> guest+>10000 rule fires -> REJECT.
+# (node-rules takes two iterations for user7 because of the chaining; we fold it -> same result.)
+
+input transaction_total : number >= 0
+input card_type         : string
+input card_issuer       : string
+input app_code          : string
+input user_logged_in    : boolean
+input user_credibility  : number >= 0
+input event_risk_factor : number >= 0
+input name              : string
+
+# is_guest = not logged in (node-rules rule 6).
+decision is_guest : boolean = not(user_logged_in)
+
+# hit: first  -> rules are listed in DESCENDING node-rules priority order, so the first
+# matching rule wins, exactly mirroring "highest-priority rule calls R.stop first".
+decision result : boolean {
+  needs: card_type, is_guest, transaction_total, app_code, card_issuer, user_credibility, event_risk_factor, name
+  hit: first
+  #  card_type   | is_guest | transaction_total | app_code | card_issuer        | user_credibility | event_risk_factor | name    => result
+     "Cash Card" | -        | -                 | -        | -                  | -                | -                 | -       => false
+     -           | true     | > 10000           | -        | -                  | -                | -                 | -       => false
+     -           | -        | -                 | "MOBI4"  | -                  | -                | -                 | -       => false
+     "Credit Card"| -       | > 1000            | -        | "American Express" | -                | -                 | -       => false
+     -           | -        | < 500             | -        | -                  | -                | -                 | -       => false
+     -           | -        | -                 | -        | -                  | > 5              | -                 | -       => true
+     -           | -        | -                 | -        | -                  | -                | < 5               | -       => true
+     -           | -        | -                 | -        | -                  | -                | -                 | "user4" => false
+     default     |          |                   |          |                    |                  |                   |         => true
+}

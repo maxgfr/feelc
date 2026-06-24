@@ -1,0 +1,51 @@
+model "types" {}
+
+# ---- Scalar input types ----
+input n      : number
+input s      : string
+input b      : boolean
+input d1     : date
+input d2     : date
+input dur1   : duration
+input dur2   : duration
+
+# ---- Context type (declared; used as a decision OUTPUT type) ----
+type Profile = context { ok: boolean, label: string, score: number }
+
+# ---- number type: arithmetic on a number input ----
+@title "Number type"
+decision num_out : number = n + 1
+
+# ---- string type: pass through a string input ----
+@title "String type"
+decision str_out : string = s
+
+# ---- boolean type: logical on a boolean input ----
+@title "Boolean type"
+decision bool_out : boolean = not(b)
+
+# ---- date type: ISO date input, date subtraction -> duration ----
+@title "Date type"
+decision date_diff : duration = d2 - d1
+
+# ---- date type: date + duration -> date (ISO date round-trip) ----
+@title "Date plus duration"
+decision date_plus : date = d1 + dur1
+
+# ---- duration type: ISO duration input, duration arithmetic ----
+@title "Duration type"
+decision dur_sum : duration = dur1 + dur2
+
+# ---- duration comparison (boolean from duration inputs) ----
+@title "Duration comparison"
+decision dur_cmp : boolean = dur1 <= dur2
+
+# ---- context type: multi-field output (decision table with multi-column result) ----
+@title "Context type output"
+decision profile : Profile {
+  needs: n
+  hit: first
+  #  n     => ok    | label      | score
+     >= 0  => true  | "ok"       | 1
+     -     => false | "negative" | 0
+}

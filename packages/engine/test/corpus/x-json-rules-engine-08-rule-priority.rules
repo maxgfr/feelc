@@ -1,0 +1,24 @@
+model "rule_priority" {}
+
+# json-rules-engine test/engine-rule-priority.js:
+#   three rules share condition any[ age >= 21 ]:
+#     priority 100 -> "highPriorityEvent"
+#     priority  50 -> "midPriorityEvent"
+#     priority   1 -> "lowestPriorityEvent"
+#   With age=22 all three match; events fire highest-priority first.
+# feelc's `hit: priority` policy returns the highest-priority matching output -> "highPriorityEvent".
+
+input age : number in [0..150]
+
+decision top_event : string {
+  needs: age
+  hit: priority
+  priority: "highPriorityEvent", "midPriorityEvent", "lowestPriorityEvent"
+  #  age   => event
+     >= 21 => "highPriorityEvent"
+     >= 21 => "midPriorityEvent"
+     >= 21 => "lowestPriorityEvent"
+  # In json-rules-engine, when no rule matches simply no event fires; modeled here as an explicit
+  # "none" so the table is TOTAL (verify-clean). Not part of the priority list -> lowest rank.
+     default => "none"
+}

@@ -1,0 +1,12 @@
+model "tutorial_check" {}
+
+# Ported from TutorialExample_test.go rule CheckValues:
+#   when MF.IntAttribute == 123 && MF.StringAttribute == "Some string value"
+#   then (set an output)
+# The grule action calls GetWhatToSay("Hello Grule") which formats a string -> string manipulation,
+# out of feelc scope. But the *decision logic* (does the condition match?) is fully modelable as a
+# boolean eligibility decision. We model the gate; the formatted side effect is not modelable here.
+input int_attribute    : number
+input string_attribute : string
+
+decision check_passed : boolean = int_attribute = 123 and string_attribute = "Some string value"

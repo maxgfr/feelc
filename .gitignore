@@ -26,6 +26,15 @@ go.work.sum
 # Node (site build dependency, installed at build time)
 /node_modules/
 
+# Node workspaces (@feelc/engine package + examples)
+node_modules/
+**/dist/
+*.tsbuildinfo
+# WASM build artifacts for @feelc/engine (rebuilt by `make wasm` / the package build)
+/packages/engine/wasm/
+# npm pack output
+*.tgz
+
 # Generated GitHub Pages artifacts (rebuilt by .github/workflows/pages.yml)
 /site/static/
 /site/docs/

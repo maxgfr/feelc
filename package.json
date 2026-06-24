@@ -1,0 +1,23 @@
+{
+  "name": "feelc-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Workspace root for feelc's JavaScript/TypeScript packages (the Go engine + docs live alongside).",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maxgfr/feelc"
+  },
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @feelc/engine",
+    "test": "npm run test -w @feelc/engine",
+    "build:wasm": "make wasm"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

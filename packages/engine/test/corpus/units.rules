@@ -1,0 +1,15 @@
+model "units" {}
+
+# Units / dimensional analysis: numeric inputs carry currency / rate units.
+@title "Monthly salary"
+@question "What is your monthly salary?"
+@source "Payroll policy v1"
+input salary : number >= 0 unit "EUR/month"
+
+@title "Monthly rent"
+input rent : number >= 0 unit "EUR/month"
+
+# EUR/month + EUR/month is dimensionally consistent -> OK.
+@title "Disposable income"
+@doc "Salary minus rent, in EUR/month."
+decision disposable : number = salary - rent

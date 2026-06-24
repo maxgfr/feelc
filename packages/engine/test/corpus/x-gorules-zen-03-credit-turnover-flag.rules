@@ -1,0 +1,18 @@
+model "zen_turnover_flag" {}
+
+# Ported from zen test-data/credit-analysis.json "Turnover" decisionTable (hitPolicy: first).
+#   company.turnover > 1_000_000           => "green"
+#   company.turnover in [200_000..1_000_000] => "amber"
+#   company.turnover < 200_000             => "red"
+#   (default)                              => "red"
+input turnover : number >= 0
+
+decision flag_turnover : string {
+  needs: turnover
+  hit: first
+  #  turnover               => flag
+     > 1000000              => "green"
+     [200000..1000000]      => "amber"
+     < 200000               => "red"
+     default                => "red"
+}

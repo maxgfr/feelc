@@ -17,7 +17,8 @@ Supported (`internal/compiler/lower_expr.go`):
 - **comparisons**: `= != < <= > >=`;
 - **logic**: `and`, `or`, `not(x)`;
 - **conditional**: `if c then a else b` (compiled into `OpJmpFalse`/`OpJmp` jumps);
-- **pure single-arg built-ins**: `floor(x)`, `ceiling(x)`, `round(x)` (HALF_EVEN rounding, deterministic);
+- **pure single-arg built-ins**: `floor(x)`, `ceiling(x)`, `round(x)`, `abs(x)`, `trunc(x)` (toward zero) — HALF_EVEN, deterministic;
+- **deterministic two-arg built-ins** ([ADR 0020](adr/0020-deterministic-extra-builtins.md)): `round(x, n)` (round to `n` decimal places, HALF_EVEN) and `modulo(x, y)` (floored modulo `x − y·floor(x/y)`, DMN semantics; modulo-by-zero errors);
 - **BKM invocation**: `name(a, b)` — **inlined** at compile time (AST substitution, zero call
   frame; self/mutual recursion is detected and **rejected**).
 
@@ -29,7 +30,7 @@ verification), and free expression (reference `?`/other columns → *Op=Prog*, n
 
 ## Out of scope (loud failure)
 
-- **multi-argument** built-ins: `round(x, n)`, `substring(s, i, n)`, etc. ([ADR 0004 §3](adr/0004-deferrals.md));
+- **multi-argument** built-ins beyond the whitelist: `substring(s, i, n)`, other string/list functions, etc. ([ADR 0004 §3](adr/0004-deferrals.md)); `round(x, n)` and `modulo(x, y)` ARE supported ([ADR 0020](adr/0020-deterministic-extra-builtins.md));
 - `for` / `some` / `every`, lists/filters, higher-order functions, `function(...)`;
 - **out-of-subset temporal** forms: `time`, `dateTime`, year-month durations (`date` and day-based
   `duration` ARE supported — see below);

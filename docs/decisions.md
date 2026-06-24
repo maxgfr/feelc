@@ -23,6 +23,8 @@ Record (the detailed context + consequences live in [`docs/adr/`](https://github
 | [0016](adr/0016-canonical-language-english.md) | English is canonical | Error strings are a test contract; one shared vocabulary. |
 | [0017](adr/0017-wasm-playground.md) | Compile the real engine to WebAssembly | Run it in the browser with zero setup, no second engine. |
 | [0018](adr/0018-docs-site.md) | Zero-dependency docs-site generator | Publish docs + decisions without an SSG toolchain. |
+| [0019](adr/0019-embeddable-engine-package.md) | Ship the engine as the `@feelc/engine` npm package | Embed the real engine in any TS app (browser/Node/bundler/edge), no API. |
+| [0020](adr/0020-deterministic-extra-builtins.md) | Deterministic extra built-ins: `round(x,n)`, `abs`, `trunc`, `modulo` | Close near-universal gaps vs other rule engines without weakening determinism/verification. |
 
 ADRs are append-only: an accepted decision is never rewritten — a later change is a dated note on the same
 ADR or a new superseding one.
