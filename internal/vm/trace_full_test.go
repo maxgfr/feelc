@@ -84,3 +84,45 @@ decision band : string {
 		t.Error("unknown goal must error")
 	}
 }
+
+// TraceFull must be demand-driven like Eval: a statically-required decision that is NOT reached at
+// runtime (here `bad`, referenced only in a rule that never fires under FIRST, and which would error
+// if evaluated) must be skipped — so the full trace SUCCEEDS exactly where Eval succeeds, instead of
+// failing and being silently dropped (GLUE-001).
+func TestTraceFullSkipsUnreachedErroringDep(t *testing.T) {
+	m, err := dsl.Parse(`model "asym" {}
+input flag : number in [0..1]
+decision bad : number = 1 / 0
+decision goal : number {
+  needs: flag
+  hit: first
+     <= 0   => 42
+     bad > 0 => 99
+}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cm, err := compiler.Compile(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputs := mkInputs(t, cm, map[string]any{"flag": 0})
+
+	// Eval succeeds (bad is never demanded under FIRST when flag <= 0).
+	if _, err := vm.Eval(cm, "goal", inputs); err != nil {
+		t.Fatalf("Eval should succeed (bad unreached), got %v", err)
+	}
+	// TraceFull must likewise succeed, return the trace, and NOT include the unreached `bad`.
+	ft, err := vm.TraceFull(cm, "goal", inputs)
+	if err != nil {
+		t.Fatalf("TraceFull should succeed like Eval, got %v", err)
+	}
+	if ft.Result == nil || ft.Result.Decision != "goal" {
+		t.Fatalf("Result must be the goal trace, got %+v", ft.Result)
+	}
+	for _, d := range ft.Path {
+		if d.Decision == "bad" {
+			t.Errorf("unreached decision `bad` must not appear in the path; path=%+v", ft.Path)
+		}
+	}
+}

@@ -32,6 +32,9 @@ func Compile(m *model.Model) (*ir.CompiledModel, error) {
 			return nil, diag.Wrap(diag.CodeInputSyntax, in.Line, fmt.Sprintf("input %q", in.Name), err)
 		}
 		cm.Domains[in.Name] = dom
+		if err := checkEnumMemberTypes(cm.Inputs[in.Name], dom); err != nil {
+			return nil, diag.Wrap(diag.CodeInputSyntax, in.Line, fmt.Sprintf("input %q", in.Name), err)
+		}
 		if md := irMeta(in.Meta); !md.Empty() {
 			cm.InputMeta[in.Name] = md
 		}
@@ -532,6 +535,77 @@ func parseHitPolicy(s string, no int) (ir.HitPolicy, ir.Aggregation, error) {
 
 // parseDomain interprets an input domain constraint (`in [a..b]`, `>= 0`, `in {..}`)
 // into an ir.Domain for completeness checking. An unrecognized form -> DomNone (no error).
+// checkEnumMemberTypes rejects an `in {..}` domain whose members do not all match the input's declared
+// scalar type (e.g. `number in {1,2,"x"}`). Without it the verifier's discrete-enum witnesses silently
+// drop the mistyped member, yielding a false "complete" verdict and a false dead-rule (NE-1).
+func checkEnumMemberTypes(t ir.Type, dom ir.Domain) error {
+	if dom.Kind != ir.DomEnum {
+		return nil
+	}
+	want, ok := enumMemberTag(t)
+	if !ok {
+		return nil // non-scalar declared type: leave to other checks
+	}
+	for _, v := range dom.Enum {
+		if v.Tag != want {
+			return fmt.Errorf("enum member of type %s does not match the declared input type %s (mixed-type enums are not allowed)",
+				tagText(v.Tag), typeText(t))
+		}
+	}
+	return nil
+}
+
+// enumMemberTag maps a declared scalar type to the ir.Tag its enum members must carry.
+func enumMemberTag(t ir.Type) (ir.Tag, bool) {
+	switch t {
+	case ir.TypeNumber:
+		return ir.TagNumber, true
+	case ir.TypeString:
+		return ir.TagString, true
+	case ir.TypeBool:
+		return ir.TagBool, true
+	case ir.TypeDate:
+		return ir.TagDate, true
+	case ir.TypeDuration:
+		return ir.TagDuration, true
+	}
+	return 0, false
+}
+
+func tagText(t ir.Tag) string {
+	switch t {
+	case ir.TagNumber:
+		return "number"
+	case ir.TagString:
+		return "string"
+	case ir.TagBool:
+		return "boolean"
+	case ir.TagDate:
+		return "date"
+	case ir.TagDuration:
+		return "duration"
+	}
+	return "value"
+}
+
+func typeText(t ir.Type) string {
+	switch t {
+	case ir.TypeNumber:
+		return "number"
+	case ir.TypeString:
+		return "string"
+	case ir.TypeBool:
+		return "boolean"
+	case ir.TypeDate:
+		return "date"
+	case ir.TypeDuration:
+		return "duration"
+	case ir.TypeContext:
+		return "context"
+	}
+	return "value"
+}
+
 func parseDomain(s string) (ir.Domain, error) {
 	rest := strings.TrimSpace(s)
 	if rest == "" {

@@ -115,10 +115,14 @@ func runFn(args []js.Value) (any, error) {
 	case doc.Full:
 		if ft, e := explain.ExplainFull(cm, doc.Decision, doc.Input); e == nil {
 			resp["trace"] = explain.NormalizeFullJSON(ft) // decimals as fixed-notation numbers, like `output`
+		} else {
+			resp["traceError"] = e.Error() // never silently drop the trace; `output` is already returned
 		}
 	case doc.Explain:
 		if tr, e := explain.Explain(cm, doc.Decision, doc.Input); e == nil {
 			resp["trace"] = explain.NormalizeJSON(tr)
+		} else {
+			resp["traceError"] = e.Error()
 		}
 	}
 	return resp, nil

@@ -328,7 +328,7 @@ function renderTrace(container, rep) {
 //   number/string/date/duration -> string (exact text, never JS-Number-coerced)
 //   boolean                      -> boolean
 // `decInfo` carries per-decision unit/kind/hitPolicy for the result card.
-const sim = { goal: "", meta: [], input: {}, decInfo: {}, syncing: false, lastTrace: null };
+const sim = { goal: "", meta: [], input: {}, decInfo: {}, syncing: false, lastTrace: null, runGen: 0 };
 
 function parseEnum(domain) {
   const m = (domain || "").match(/in\s*\{(.+)\}/);
@@ -499,7 +499,10 @@ function onWidgetChange(inp, el) {
 function validateField(inp, val, warn) {
   warn.textContent = "";
   warn.classList.remove("show");
-  if (inp.type === "boolean" || val === "" || val == null) return;
+  if (inp.type === "boolean") return;
+  // Empty required input: flag it (the engine errors on a missing variable). runGoal suppresses the run
+  // while any field is empty/invalid, so the user sees this field-level cue instead of a global error.
+  if (val === "" || val == null) { warn.textContent = "⚠ required"; warn.classList.add("show"); return; }
   let msg = "";
   const enumVals = parseEnum(inp.domain);
   if (enumVals && !enumVals.includes(String(val))) msg = "not in domain";
@@ -563,14 +566,34 @@ function onJsonChange() {
     }
   }
   if (err) { err.textContent = ""; err.classList.remove("show"); }
-  // Update canonical values for widget display (numbers kept as shortest round-trip strings).
+  // Update canonical values for widget display. For numbers we keep the EXACT source token from the raw
+  // textarea (not String(JSON.parse(...)), which would round through a JS f64 and then leak that rounded
+  // value back into the submitted JSON the next time a widget is touched — silently breaking the
+  // decimal-exact guarantee). The textarea itself is still submitted verbatim by runGoal.
   sim.meta.forEach((inp) => {
     if (!(inp.name in obj)) { delete sim.input[inp.name]; return; }
     const v = obj[inp.name];
-    sim.input[inp.name] = inp.type === "boolean" ? !!v : (typeof v === "number" ? String(v) : String(v));
+    if (inp.type === "boolean") { sim.input[inp.name] = !!v; return; }
+    if (inp.type === "number") {
+      const tok = rawNumberToken(raw, inp.name);
+      sim.input[inp.name] = tok != null ? tok : String(v);
+      return;
+    }
+    sim.input[inp.name] = String(v);
   });
   renderWidgets();
   debouncedRun();
+}
+
+// rawNumberToken returns the exact source text of a top-level numeric value in the (flat, scalar) input
+// JSON object, so a high-precision decimal pasted into the editor is preserved verbatim rather than
+// rounded through JS Number. Returns null if the key is absent or its value is not a bare number.
+function rawNumberToken(raw, key) {
+  const k = JSON.stringify(String(key)); // exact quoted key; immune to prefix collisions ("a" vs "ab")
+  const i = raw.indexOf(k);
+  if (i < 0) return null;
+  const m = /^\s*:\s*(-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)/.exec(raw.slice(i + k.length));
+  return m ? m[1] : null;
 }
 
 function setRecomputing(on) {
@@ -587,14 +610,20 @@ async function runGoal() {
   const goal = sim.goal;
   const result = $("result");
   if (!src.trim() || !goal) { if (result) result.innerHTML = ""; return; }
+  // Don't submit an incomplete object: if a required input is empty or not-yet-valid, the field-level
+  // hints (validateField) already say so — skip the run instead of provoking a cryptic global
+  // "unknown variable at execution time" engine error.
+  if (missingRequired()) { setRecomputing(false); return; }
   const box = $("input");
   let rawJSON = box ? box.value.trim() : buildInputJSON(false);
   if (rawJSON === "") rawJSON = "{}";
   try { const o = JSON.parse(rawJSON); if (o === null || typeof o !== "object" || Array.isArray(o)) throw 0; }
   catch { return; } // invalid JSON: onJsonChange already surfaced it; don't run
+  const myGen = ++sim.runGen; // stale-response guard: only the latest run may apply its result
   const body = `{"rules":${JSON.stringify(src)},"decision":${JSON.stringify(goal)},"input":${rawJSON},"full":true}`;
   setRecomputing(true);
   const { ok, status, data } = await api("/v1/run", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+  if (myGen !== sim.runGen) return; // a newer edit already fired a later run — drop this stale response
   setRecomputing(false);
   if (!ok) {
     sim.lastTrace = null;
@@ -603,17 +632,83 @@ async function runGoal() {
       const e = data && data.error;
       result.innerHTML = `<div class="rc rc-err">${escapeHtml(e && e.message ? `error: ${e.message}` : `run failed (${status})`)}</div>`;
     }
+    markActiveInputs(null);
     highlightGraph(null);
     return;
   }
   window.lastRun = { decision: goal, input: safeParse(rawJSON), output: data.output, trace: data.trace };
   sim.lastTrace = data.trace || null;
   renderResult(data, goal);
+  markActiveInputs(data.trace);
   highlightGraph(data.trace);
 }
 const debouncedRun = debounce(runGoal, 160);
 
 function safeParse(s) { try { return JSON.parse(s); } catch { return {}; } }
+
+// missingRequired reports whether any displayed (goal-required) input lacks a usable value — empty, or
+// a number still mid-typing/invalid (NUMRE). buildInputJSON drops such entries, which would make the
+// engine reject the run with a global "unknown variable" error; runGoal skips the run instead.
+function missingRequired() {
+  return sim.meta.some((inp) => {
+    if (inp.type === "boolean") return false; // a checkbox always has a value
+    const v = sim.input[inp.name];
+    if (v === undefined || v === "" || v == null) return true;
+    if (inp.type === "number") return !NUMRE.test(String(v).trim());
+    return false;
+  });
+}
+
+// markActiveInputs dims the input widgets that PROVABLY did not contribute to the current outcome, so
+// the correct-but-surprising "I changed an input and nothing happened" (a hit:first rule firing on an
+// earlier column) is visible rather than looking broken. It only dims when attribution is certain:
+//   • hit:first table whose FIRST rule won — later rules are never evaluated and there are no earlier
+//     ones, so ONLY that rule's cited cells could matter; everything else is provably irrelevant.
+// In every other case (a later rule won — earlier rules' columns may have gated the result; UNIQUE/ANY/
+// COLLECT — all rules are evaluated; a pure expression) we cannot single out inputs from the trace, so
+// we conservatively treat all of a decision's dependencies as active and dim nothing misleadingly.
+function markActiveInputs(trace) {
+  const form = $("sim-form");
+  if (!form) return;
+  const path = (trace && trace.path) || [];
+  const traceByDec = {};
+  path.forEach((t) => { traceByDec[t.decision] = t; });
+
+  const active = new Set();
+  const seen = new Set();
+  const stack = [sim.goal];
+  let canAttribute = false; // becomes true only when some decision gives a provable cell attribution
+  while (stack.length) {
+    const name = stack.pop();
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const t = traceByDec[name];
+    const info = sim.decInfo[name];
+    if (t && t.kind === "table" && t.hitPolicy === "first" && t.ruleIndex === 1 && t.cells && t.cells.length) {
+      canAttribute = true;
+      t.cells.forEach((c) => { active.add(c.input); stack.push(c.input); }); // only the deciding cells
+    } else if (info && info.deps) {
+      info.deps.forEach((d) => { active.add(d); stack.push(d); }); // can't attribute: every dependency may matter
+    }
+  }
+
+  form.querySelectorAll(".field").forEach((field) => {
+    const el = field.querySelector("[data-name]");
+    const name = el && el.dataset.name;
+    const inactive = canAttribute && !!name && !active.has(name);
+    field.classList.toggle("inactive", inactive);
+    let note = field.querySelector(".f-inactive");
+    if (inactive && !note) {
+      note = document.createElement("span");
+      note.className = "f-inactive";
+      note.textContent = "not used for this outcome";
+      const head = field.querySelector(".f-head");
+      if (head) head.appendChild(note);
+    } else if (!inactive && note) {
+      note.remove();
+    }
+  });
+}
 
 // renderResult draws the rich result card: goal → value (+unit), matched/fallback badge, and a
 // readable per-decision justification built from the FullTrace (winning rule #, line, justifying

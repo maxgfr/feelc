@@ -40,7 +40,8 @@ const (
 	KindDeadRule           Kind = "dead-rule"
 	KindUnreachableDefault Kind = "unreachable-default"
 	KindNotVerifiable      Kind = "not-verifiable"
-	KindSubsumed           Kind = "subsumed" // rule whose region is included in another
+	KindSubsumed           Kind = "subsumed"     // rule whose region is included in another
+	KindPriorityGap        Kind = "priority-gap" // HitPriority output value missing from the priority list
 )
 
 // maxSubsumeRules: the subsumption matrix fits in a uint64 bitset up to 64 rules
@@ -108,6 +109,12 @@ var smtProve func(cm *ir.CompiledModel, d *ir.Decision, rep *Report) bool
 
 func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 	t := d.Table
+
+	// Priority hygiene — checked independently of geometric provability (so it also covers Op=Prog
+	// tables): every output value a HitPriority rule can produce should appear in the `priority:` list.
+	if t.HitPolicy == ir.HitPriority {
+		checkPriorityCoverage(d.Name, t, rep)
+	}
 
 	// Op=Prog (non-geometric) cell: route to the SMT backend if it is plugged in, otherwise
 	// honest degradation `not-verifiable`.
@@ -242,10 +249,68 @@ func verifyTable(cm *ir.CompiledModel, d *ir.Decision, rep *Report) {
 		reportSubsumption(d.Name, t, subset, everCovers, rep)
 	}
 
-	// Useless `default` line.
-	if t.Default != nil && allCovered {
+	// Useless `default` line. allCovered only proves the rules tile the DECLARED (non-null) domain;
+	// it does NOT prove the `default` is dead, because a null/missing input on any column satisfies no
+	// cell (ADR 0003 §2) and so falls through every constrained rule to the default. The default is
+	// genuinely unreachable only if the explicit rules ALSO cover a null-bearing input — i.e. there is
+	// a reachable catch-all rule (all cells `-`/OpAny), which rulesCoverNull tests via the shared
+	// ir.MatchCell. Without this guard the verifier wrongly reports a still-needed default as useless
+	// and an author who deletes it silently changes the decision's output on null inputs.
+	if t.Default != nil && allCovered && rulesCoverNull(t) {
 		rep.add(Finding{Decision: d.Name, Kind: KindUnreachableDefault, Severity: SevInfo,
 			Message: "`default` line never used: the rules already cover all cases"})
+	}
+}
+
+// rulesCoverNull reports whether some explicit rule matches an all-null input — i.e. a reachable
+// catch-all (every cell `-`/OpAny), since by ADR 0003 §2 a null satisfies no other cell. If none does,
+// a null/missing value on any column falls through every rule to the `default` line, so the default is
+// reachable. Uses the same ir.MatchCell as the VM so proof and execution agree by construction.
+func rulesCoverNull(t *ir.DecisionTable) bool {
+	nullPt := make([]ir.Value, len(t.Inputs))
+	for i := range nullPt {
+		nullPt[i] = ir.Null()
+	}
+	for _, r := range t.Rules {
+		if ok, err := ruleMatches(r, nullPt); err == nil && ok {
+			return true
+		}
+	}
+	return false
+}
+
+// checkPriorityCoverage warns when a HitPriority rule produces an output value that is absent from the
+// `priority:` list. rank() (vm.go) ranks any unlisted value LAST (returns len(priority)), so such a
+// value can lose to a listed one even when its rule matches first — a silent rule-order fallback the
+// author probably did not intend, and one no other diagnostic surfaces. Matches rank()'s ValueEq
+// comparison and dedupes by value so each unlisted output is reported once.
+func checkPriorityCoverage(dec string, t *ir.DecisionTable, rep *Report) {
+	if len(t.Priority) == 0 {
+		return
+	}
+	seen := map[string]bool{}
+	for ri := range t.Rules {
+		if len(t.Rules[ri].Outputs) == 0 {
+			continue
+		}
+		v := t.Rules[ri].Outputs[0] // rank() ranks on the first output column
+		ranked := false
+		for _, p := range t.Priority {
+			if ir.ValueEq(v, p) {
+				ranked = true
+				break
+			}
+		}
+		if ranked {
+			continue
+		}
+		key := valueStr(v)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		rep.add(Finding{Decision: dec, Kind: KindPriorityGap, Severity: SevWarning, Rules: []int{ri + 1},
+			Message: fmt.Sprintf("output %s (rule #%d) is absent from the `priority:` list — it ranks last and may lose to a listed value (silent rule-order fallback)", key, ri+1)})
 	}
 }
 

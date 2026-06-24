@@ -107,8 +107,22 @@ func TraceFull(cm *ir.CompiledModel, goal string, inputs map[string]ir.Value) (*
 		return nil, err
 	}
 	e := &evaluator{cm: cm, inputs: inputs, memo: map[string]ir.Value{}, state: map[string]int{}}
+	// Resolve the goal demand-driven FIRST — exactly as engine.Eval does — so e.memo ends up holding
+	// precisely the decisions actually consumed at runtime. We then trace only those. This avoids
+	// eagerly evaluating a statically-required but UNREACHED decision (e.g. one referenced solely in a
+	// cell of a rule that never fires under FIRST): such a decision might error even though Eval never
+	// touches it, which previously made the full trace fail where Eval succeeded (and the HTTP/WASM
+	// layer silently dropped the trace). Now if Eval succeeds the trace succeeds, and vice versa.
+	if _, err := e.resolve(goal); err != nil {
+		return nil, err
+	}
 	ft := &FullTrace{Goal: goal, Inputs: jsonInputs(inputs)}
 	for _, name := range order {
+		if name != goal {
+			if _, consumed := e.memo[name]; !consumed {
+				continue // statically required but not reached at runtime — skip, mirroring Eval
+			}
+		}
 		tr, err := e.trace(name)
 		if err != nil {
 			return nil, err
@@ -117,9 +131,9 @@ func TraceFull(cm *ir.CompiledModel, goal string, inputs map[string]ir.Value) (*
 		if tr.Source != "" {
 			ft.Sources = append(ft.Sources, SourceCitation{Decision: tr.Decision, Source: tr.Source, Title: tr.Title})
 		}
-	}
-	if len(ft.Path) > 0 {
-		ft.Result = ft.Path[len(ft.Path)-1]
+		if name == goal {
+			ft.Result = tr
+		}
 	}
 	return ft, nil
 }
