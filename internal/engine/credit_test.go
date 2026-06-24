@@ -59,6 +59,56 @@ func TestCreditEligibility(t *testing.T) {
 	}
 }
 
+// Regression: annual_income = 0 is within the declared domain (number >= 0), so the model must
+// be TOTAL over it — never divide by zero. The GitHub-Pages playground auto-runs the example with
+// each input at its domain lower bound (annual_income -> 0), which previously crashed dti with
+// "division by zero" (surfaced as "run failed (422)").
+func TestCreditZeroIncomeIsTotal(t *testing.T) {
+	src := loadCredit(t)
+
+	// dti must not divide by zero for a zero-income applicant.
+	t.Run("dti no income no debt", func(t *testing.T) {
+		out, err := engine.Run(src, "dti", map[string]any{"annual_income": 0, "monthly_debt": 0})
+		if err != nil {
+			t.Fatalf("dti(income=0,debt=0): %v", err)
+		}
+		if got := numText(t, out); got != "0" {
+			t.Errorf("dti(income=0,debt=0) = %s, want 0", got)
+		}
+	})
+
+	// A zero-income applicant carrying debt is unserviceable: the ratio is undefined, treated as
+	// above every threshold, so a score-passing applicant is rejected via "debt too high".
+	t.Run("eligibility zero income with debt -> debt too high", func(t *testing.T) {
+		out, err := engine.Run(src, "eligibility", map[string]any{
+			"credit_score": 700, "annual_income": 0, "monthly_debt": 1500, "age": 40,
+		})
+		if err != nil {
+			t.Fatalf("eligibility(income=0,debt=1500): %v", err)
+		}
+		m := out.(map[string]any)
+		if m["eligible"] != false || m["reason"] != "debt too high" {
+			t.Errorf("eligibility(income=0,debt=1500) = %v, want {false, \"debt too high\"}", m)
+		}
+	})
+
+	// The exact input set the playground's auto-run produces (every input at its domain lower
+	// bound): credit_score=300, annual_income=0, monthly_debt=0, age=0. It must run (no crash)
+	// and reject on the FIRST rule (score < 580).
+	t.Run("playground default inputs -> insufficient score", func(t *testing.T) {
+		out, err := engine.Run(src, "eligibility", map[string]any{
+			"credit_score": 300, "annual_income": 0, "monthly_debt": 0, "age": 0,
+		})
+		if err != nil {
+			t.Fatalf("eligibility(playground defaults): %v", err)
+		}
+		m := out.(map[string]any)
+		if m["eligible"] != false || m["reason"] != "insufficient score" {
+			t.Errorf("eligibility(playground defaults) = %v, want {false, \"insufficient score\"}", m)
+		}
+	})
+}
+
 // The intermediate dti decision is evaluated on demand (DRG) and exactly (decimal).
 func TestCreditDTIExact(t *testing.T) {
 	src := loadCredit(t)

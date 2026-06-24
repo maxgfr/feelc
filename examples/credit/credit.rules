@@ -10,7 +10,11 @@ input age           : number in [0..120]
 type Eligibility = context { eligible: boolean, reason: string }
 
 # Intermediate decision: debt-to-income ratio, FEEL expression.
-decision dti : number = monthly_debt / (annual_income / 12)
+# annual_income = 0 is a valid input (domain >= 0) but makes the ratio undefined, so the division
+# is guarded to keep the model TOTAL (it never divides by zero). With no income, any positive debt
+# is unserviceable -> report a ratio of 1 (100%) so the table rejects via "debt too high"; with no
+# debt either, 0 lets the score/age gates decide.
+decision dti : number = if annual_income > 0 then monthly_debt / (annual_income / 12) else (if monthly_debt > 0 then 1 else 0)
 
 # Final decision: table, FIRST hit policy (rejections take priority).
 decision eligibility : Eligibility {

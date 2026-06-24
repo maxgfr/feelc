@@ -175,7 +175,43 @@ func compileDecision(m *model.Model, valid map[string]bool, bkms map[string]mode
 		}
 		table.Rules = append(table.Rules, rule)
 	}
-	return ir.Decision{Name: d.Name, Kind: ir.KindTable, Table: table, Deps: d.Needs, Meta: irMeta(d.Meta), Line: d.Line}, nil
+	return ir.Decision{Name: d.Name, Kind: ir.KindTable, Table: table, Deps: tableDeps(d.Needs, table.Rules), Meta: irMeta(d.Meta), Line: d.Line}, nil
+}
+
+// tableDeps returns the full dependency set of a decision table: its `needs:` columns PLUS any
+// name referenced inside a non-geometric (Op=Prog) cell expression — e.g. a cell that compares the
+// table column `?` against another input (the `?` itself is OpLoadInput, never a Var). Geometric
+// cells contribute nothing beyond their column. Without these extra references, RequiredInputs,
+// the DRG and the question-flow under-report what the decision actually consumes. Columns keep
+// their declared order; the extra references are appended sorted (deterministic IR identity).
+func tableDeps(needs []string, rules []ir.Rule) []string {
+	deps := append([]string(nil), needs...)
+	seen := make(map[string]bool, len(needs))
+	for _, n := range needs {
+		seen[n] = true
+	}
+	var extra []string
+	var collect func(c ir.CellTest)
+	collect = func(c ir.CellTest) {
+		if c.Op == ir.OpProg && c.Prog != nil {
+			for _, v := range c.Prog.Vars {
+				if !seen[v] {
+					seen[v] = true
+					extra = append(extra, v)
+				}
+			}
+		}
+		for _, s := range c.Sub {
+			collect(s)
+		}
+	}
+	for _, r := range rules {
+		for _, c := range r.Conds {
+			collect(c)
+		}
+	}
+	sort.Strings(extra)
+	return append(deps, extra...)
 }
 
 // irMeta copies source-level documentation annotations into the IR (descriptive only).

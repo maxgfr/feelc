@@ -15,7 +15,10 @@ The canonical example of a BRMS (the "hello world" of IBM ODM). It exercises the
 
 ## Decisions
 
-1. **`dti`** (number) — monthly debt-to-income ratio: `monthly_debt / (annual_income / 12)`.
+1. **`dti`** (number) — monthly debt-to-income ratio: `monthly_debt / (annual_income / 12)`. The
+   division is guarded so the model stays **total** over the declared domain: `annual_income = 0`
+   (allowed by `>= 0`) yields `1` when there is debt (unserviceable → rejected as "debt too high")
+   and `0` otherwise, instead of dividing by zero.
 2. **`eligibility`** (context `{eligible, reason}`) — FIRST table on `credit_score`, `dti`, `age`.
 
 ## Business rules (order = priority)
