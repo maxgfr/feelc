@@ -27,7 +27,7 @@ jobs:
           check-latest: true
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       # Native CLI — the parity test compares feelc (WASM) against it.
       - name: Build the native feelc CLI
         run: make build
@@ -59,18 +59,20 @@ jobs:
       - uses: goreleaser/goreleaser-action@v6
         with:
           install-only: true
-      # NOTE: no `registry-url` here on purpose — actions/setup-node would write an empty
-      # `//registry.npmjs.org/:_authToken=` to .npmrc, which makes npm take the (failing) token path
-      # instead of OIDC trusted publishing. Without it, npm uses the default registry + OIDC cleanly.
+      # No `registry-url` here on purpose — actions/setup-node would write an empty
+      # `//registry.npmjs.org/:_authToken=` to .npmrc, forcing the (failing) token path. The publish
+      # script (scripts/release-publish.sh) sets the token itself when NPM_TOKEN is provided, otherwise
+      # it falls back to OIDC trusted publishing.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm install -g npm@latest # OIDC trusted publishing needs a recent npm (>= 11.5.1)
       - run: npm ci
-      # semantic-release (exec plugin): tag + push -> goreleaser binaries -> bump the npm version to the
-      # release version -> npm publish via OIDC. The npm bump happens AFTER goreleaser so the tree is
-      # clean when goreleaser builds from the tag.
-      - name: Release (version, tag, binaries, npm publish via OIDC)
+      # semantic-release (exec plugin): tag + push -> goreleaser binaries -> scripts/release-publish.sh
+      # bumps the npm version and publishes feelc (NPM_TOKEN automation token if set, else OIDC). The npm
+      # bump happens AFTER goreleaser so the tree is clean when goreleaser builds from the tag.
+      - name: Release (version, tag, binaries, npm publish)
         run: npx --yes -p semantic-release -p @semantic-release/exec semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }} # optional npm "Automation" token (bypasses 2FA); empty -> OIDC

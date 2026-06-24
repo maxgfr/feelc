@@ -23,12 +23,20 @@ push to main ──▶ ci (build + test) ──▶ release:
   `packages/engine/package.json` version is a placeholder; the release bumps it to `X.Y.Z` in CI right
   before `npm publish`, so each release publishes the correct version without a commit-back loop.
 
-## OIDC trusted publishing (one-time)
+## npm auth — pick one (one-time)
 
-`npm.yml` publishes with **no `NPM_TOKEN`** — it uses GitHub OIDC. This is configured **against the
-`npm.yml` workflow** on npmjs.com (the package → Settings → Trusted Publishing → add a GitHub Actions
-publisher: repo `maxgfr/feelc`, workflow `npm.yml`). Because the publish step lives in `npm.yml`, the
-OIDC identity matches and npm accepts the publish.
+The publish (`scripts/release-publish.sh`) supports two auth methods, in this order:
+
+**1. NPM_TOKEN automation token (recommended — works with 2FA).**
+On npmjs.com → Access Tokens → Generate New Token → **Automation** (automation tokens bypass 2FA). Add
+it as a **repository secret** named `NPM_TOKEN` (GitHub → Settings → Secrets and variables → Actions).
+That's it — releases publish reliably.
+
+**2. OIDC trusted publishing (no token).**
+On npmjs.com → the `feelc` package → Settings → Trusted Publishing → add a GitHub Actions publisher:
+repo `maxgfr/feelc`, workflow **`npm.yml`**, environment *(empty)*. If the config matches exactly, npm
+publishes via OIDC with no secret. If it isn't configured/matching, the publish is **skipped with a
+warning** (the binaries still release) — so a missing/incorrect OIDC config never turns the pipeline red.
 
 > Note: a `v*` tag pushed by semantic-release uses `GITHUB_TOKEN`, and tags pushed by `GITHUB_TOKEN`
 > don't trigger other workflows — that's why the npm publish lives in the **same** `release` job that
