@@ -11,6 +11,11 @@
 - **Opt-in hardening** (default off): with `serve --auth-token`, every route except `/healthz`/`/readyz`
   requires `Authorization: Bearer <tok>` (`401` otherwise); with `serve --rate-limit`, requests are capped
   per client IP (`429` over budget). Every response carries an `X-Request-ID` (echoing a supplied one).
+- **ETag / optimistic concurrency**: `GET /v1/model`, `GET /v1/project` and `GET /v1/modules/{name}/source`
+  return an `ETag` (the content hash). A module write may send it back to detect a concurrent edit instead
+  of clobbering it: `PUT`/`DELETE /v1/modules/...` with `If-Match: "<hash>"` returns **`412`** if the module
+  changed meanwhile (and echoes the new `ETag` on success); `POST /v1/modules` with `If-None-Match: *`
+  returns **`412`** if the module already exists. Omitting the header keeps the default last-writer-wins.
 
 ## Decisions on the served model
 
@@ -58,17 +63,18 @@ The LLM is reached only here; the engine never calls it. Each takes an optional 
 | `GET /v1/project/graph` | — | cross-module decision graph |
 | `POST /v1/project/verify` | `{name, modules}` | `{hash, status, report, blockers}` (incremental reuse) |
 | `POST /v1/project/chat` | `{messages, module, llm}` | project-aware `.rules` draft (lexical retrieval) |
-| `GET /v1/modules` | — | per-module summary |
-| `GET /v1/modules/{name}/source` | — | a module's `.rules` source |
-| `PUT /v1/modules/{name}/source` | raw `.rules` | edit + persist (golden rule) |
-| `POST /v1/modules` | `{name, source}` | create a module |
-| `DELETE /v1/modules/{name}` | — | delete a module (rejected if bound by another) |
+| `GET /v1/modules` | — | per-module summary `{modules, total}`; optional `?limit=&offset=` window (absent ⇒ all) |
+| `GET /v1/modules/{name}/source` | — | a module's `.rules` source (+ `ETag`) |
+| `PUT /v1/modules/{name}/source` | raw `.rules` | edit + persist (golden rule); honors `If-Match` (`412` on conflict) |
+| `POST /v1/modules` | `{name, source}` | create a module; honors `If-None-Match: *` (`412` if it exists) |
+| `DELETE /v1/modules/{name}` | — | delete a module (rejected if bound by another); honors `If-Match` (`412`) |
 
 ## Admin & health
 
 | Method & path | Purpose |
 |---|---|
 | `POST /v1/admin/reload` | re-read the model/project from disk (`501` if reload unavailable) |
+| `POST /v1/admin/rollback` | republish the previous model version (single-file mode only; `404` in project mode, `409` if no prior version) |
 | `GET /v1/stats` | candidate-compile cache hit rate + project size (observability, JSON) |
 | `GET /metrics` | request + cache counters in Prometheus text format |
 | `GET /healthz` | liveness (`ok`) |

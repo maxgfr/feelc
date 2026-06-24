@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/maxgfr/feelc/internal/genai"
@@ -22,6 +24,7 @@ func (s *Server) handleProject(w http.ResponseWriter, _ *http.Request) {
 		writeErr(w, http.StatusNotFound, "not running in project mode")
 		return
 	}
+	w.Header().Set("ETag", strconv.Quote(p.Hash)) // the project hash is its content identity (concurrency)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"name":     p.Manifest.Name,
 		"version":  p.Manifest.Version,
@@ -34,14 +37,39 @@ func (s *Server) handleProject(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// handleModules returns the per-module summary (name, path, hash, blocker count, decision count).
-func (s *Server) handleModules(w http.ResponseWriter, _ *http.Request) {
+// handleModules returns the per-module summary (name, path, hash, blocker count, decision count). The
+// list is always sorted by module name (project.Load sorts it), so optional ?limit / ?offset windows are
+// deterministic. Absent both params it returns every module (back-compat); `total` is always included so a
+// paginating client knows the full count. Invalid/negative params degrade to the defaults rather than 400.
+func (s *Server) handleModules(w http.ResponseWriter, r *http.Request) {
 	p := s.proj.Load()
 	if p == nil {
 		writeErr(w, http.StatusNotFound, "not running in project mode")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"modules": moduleSummaries(p)})
+	all := moduleSummaries(p)
+	total := len(all)
+	resp := map[string]any{"total": total}
+	q := r.URL.Query()
+	if q.Has("limit") || q.Has("offset") {
+		limit, offset := total, 0 // default limit = all remaining
+		if v, err := strconv.Atoi(q.Get("offset")); err == nil && v > 0 {
+			offset = v
+		}
+		if v, err := strconv.Atoi(q.Get("limit")); err == nil && v >= 0 {
+			limit = v
+		}
+		lo := min(offset, total)
+		hi := total
+		if limit < total-lo { // only narrow the window when limit is below the remaining count
+			hi = lo + limit // safe: limit < total-lo ≤ total, so lo+limit cannot overflow
+		}
+		all = all[lo:hi]
+		resp["limit"] = limit
+		resp["offset"] = offset
+	}
+	resp["modules"] = all
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleModuleSource returns one module's raw .rules source (web editor: READ a module).
@@ -56,6 +84,9 @@ func (s *Server) handleModuleSource(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such module: "+r.PathValue("name"))
 		return
 	}
+	// The module's content hash is its ETag: a subsequent PUT/DELETE can send it as If-Match to detect a
+	// concurrent edit (optimistic concurrency) instead of silently clobbering someone else's change.
+	w.Header().Set("ETag", strconv.Quote(m.Hash))
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(m.Source)
@@ -207,12 +238,18 @@ func (s *Server) handlePutModule(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "reading body: "+err.Error())
 		return
 	}
-	p, err := s.ws.PutModule(r.PathValue("name"), string(src))
+	name := r.PathValue("name")
+	p, err := s.ws.PutModuleIfMatch(name, string(src), stripETagQuotes(r.Header.Get("If-Match")))
 	if err != nil {
+		if errors.Is(err, project.ErrPreconditionFailed) {
+			writeErr(w, http.StatusPreconditionFailed, err.Error()) // 412: stale If-Match (concurrent edit)
+			return
+		}
 		writeCompileErr(w, err) // 422 (structured for a diag.Error, else the link/validation message)
 		return
 	}
 	s.PublishProject(p)
+	setModuleETag(w, p, name)
 	writeProjectState(w, p)
 }
 
@@ -235,12 +272,20 @@ func (s *Server) handleCreateModule(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "`name` required")
 		return
 	}
-	p, err := s.ws.CreateModule(req.Name, req.Source)
+	// If-None-Match: * means "create only if it does not already exist" — a stale create then 412s instead
+	// of the generic "already exists" 422, matching the PUT/If-Match concurrency semantics.
+	ifNoneStar := strings.TrimSpace(r.Header.Get("If-None-Match")) == "*"
+	p, err := s.ws.CreateModuleIfNoneMatch(req.Name, req.Source, ifNoneStar)
 	if err != nil {
+		if errors.Is(err, project.ErrPreconditionFailed) {
+			writeErr(w, http.StatusPreconditionFailed, err.Error()) // 412: module already exists (If-None-Match: *)
+			return
+		}
 		writeCompileErr(w, err)
 		return
 	}
 	s.PublishProject(p)
+	setModuleETag(w, p, req.Name)
 	writeProjectState(w, p)
 }
 
@@ -250,13 +295,34 @@ func (s *Server) handleDeleteModule(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "module editing requires project mode (serve --project)")
 		return
 	}
-	p, err := s.ws.DeleteModule(r.PathValue("name"))
+	p, err := s.ws.DeleteModuleIfMatch(r.PathValue("name"), stripETagQuotes(r.Header.Get("If-Match")))
 	if err != nil {
+		if errors.Is(err, project.ErrPreconditionFailed) {
+			writeErr(w, http.StatusPreconditionFailed, err.Error()) // 412: stale If-Match (concurrent edit)
+			return
+		}
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	s.PublishProject(p)
 	writeProjectState(w, p)
+}
+
+// stripETagQuotes normalizes an If-Match / If-None-Match header value into a bare hash: it trims
+// surrounding whitespace, an optional weak-validator "W/" prefix, and the surrounding double quotes
+// (RFC 7232 entity-tags are quoted). "" stays "" (no precondition).
+func stripETagQuotes(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "W/")
+	return strings.Trim(s, `"`)
+}
+
+// setModuleETag echoes the post-mutation ETag (the module's new content hash) so the client can chain its
+// next edit's If-Match without an extra GET. No-op if the module is absent (e.g. it was just deleted).
+func setModuleETag(w http.ResponseWriter, p *project.Project, name string) {
+	if m, ok := p.Module(name); ok {
+		w.Header().Set("ETag", strconv.Quote(m.Hash))
+	}
 }
 
 // writeProjectState returns the new project hash + aggregated health after a successful mutation.

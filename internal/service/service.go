@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -157,8 +158,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/modules", s.handleCreateModule)              // create a module {name, source}
 	mux.HandleFunc("DELETE /v1/modules/{name}", s.handleDeleteModule)     // delete a module
 	mux.HandleFunc("POST /v1/admin/reload", s.handleReload)
-	mux.HandleFunc("GET /v1/stats", s.handleStats)  // candidate-compile cache hit rate + project size (observability)
-	mux.HandleFunc("GET /metrics", s.handleMetrics) // Prometheus-style request + cache counters
+	mux.HandleFunc("POST /v1/admin/rollback", s.handleRollback) // republish the previous model version (single-file mode)
+	mux.HandleFunc("GET /v1/stats", s.handleStats)              // candidate-compile cache hit rate + project size (observability)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)             // Prometheus-style request + cache counters
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	if s.EnableUI {
@@ -636,6 +638,7 @@ func (s *Server) handleModel(w http.ResponseWriter, _ *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, "no model loaded")
 		return
 	}
+	w.Header().Set("ETag", strconv.Quote(entry.Hash)) // served model's content identity
 	writeJSON(w, http.StatusOK, map[string]any{
 		"name": entry.Model.Name, "version": entry.Version, "hash": entry.Hash,
 		"inputs": modelinfo.Inputs(entry.Model), "decisions": modelinfo.Decisions(entry.Model),
@@ -745,6 +748,28 @@ func (s *Server) handleReload(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	s.handleModel(w, nil)
+}
+
+// handleRollback republishes the previous model version from the registry's bounded history (maxHistory=8)
+// as a new version. SINGLE-FILE MODE ONLY: in project mode the served model is the merged project kept in
+// sync with s.proj and the on-disk module sources under publishMu, so a registry-only rollback would
+// split-brain — the merged model would regress while GET /v1/project and the files stay current. It
+// therefore 404s in project mode (per-module history would be a separate, larger feature). It mutates
+// state but writes nothing to disk, so it needs no --allow-edit; it is NOT in the auth-exempt list, so
+// --auth-token protects it exactly like /v1/admin/reload. 409 when there is no prior version to restore.
+func (s *Server) handleRollback(w http.ResponseWriter, _ *http.Request) {
+	if s.proj.Load() != nil {
+		writeErr(w, http.StatusNotFound, "rollback is only available in single-file (--rules) mode")
+		return
+	}
+	e, ok := s.reg.Rollback()
+	if !ok {
+		writeErr(w, http.StatusConflict, "no previous version to roll back to")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name": e.Model.Name, "version": e.Version, "hash": e.Hash, "rolledBack": true,
+	})
 }
 
 // corsMW supports a browser frontend WITHOUT exposing this local, secret-proxying API (the LLM

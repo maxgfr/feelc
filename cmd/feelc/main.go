@@ -1,6 +1,6 @@
 // Command feelc: the feelc rules engine binary. Subcommands: run, compile, verify, explain, check,
-// fmt, import, export, tck, graph, inputs, docs, serve, version (run `feelc help` for the synopsis,
-// or see docs/cli.md).
+// fmt, import, export, tck, graph, inputs, docs, serve, healthcheck, version (run `feelc help` for the
+// synopsis, or see docs/cli.md).
 package main
 
 import (
@@ -11,6 +11,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -157,6 +158,8 @@ func main() {
 		err = cmdDocs(args)
 	case "serve":
 		err = cmdServe(args)
+	case "healthcheck":
+		err = cmdHealthcheck(args)
 	case "version", "--version", "-v":
 		fmt.Println("feelc", Version)
 	case "help", "--help", "-h":
@@ -209,6 +212,7 @@ Usage:
   feelc docs   --rules <file.rules|.ir.bin> [-o <DOC.md>]
   feelc serve  --rules <file.rules> [--addr :8080] [--watch] [--strict] [--ui]
   feelc serve  --project <dir> [--addr :8080] [--watch] [--strict] [--ui] [--allow-edit]
+  feelc healthcheck [--addr :8080]
   feelc version
 
 Environment:
@@ -830,6 +834,36 @@ func cmdServe(args []string) error {
 		}
 		return nil
 	}
+}
+
+// cmdHealthcheck probes the local /readyz endpoint and exits 0 (ready) or non-zero otherwise. It is the
+// Docker HEALTHCHECK for the distroless image, which has no shell or curl: the same static binary performs
+// the probe. --addr matches `feelc serve --addr` (default :8080); a bare (":8080") or all-interfaces
+// (0.0.0.0 / [::]) address is probed over loopback. /readyz is auth/rate-limit-exempt, so no token is
+// needed; it returns 503 until a model is loaded, which is the correct readiness signal.
+func cmdHealthcheck(args []string) error {
+	fs := flag.NewFlagSet("healthcheck", flag.ContinueOnError)
+	addr := fs.String("addr", ":8080", "serve address to probe (matches `feelc serve --addr`)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	host, port, err := net.SplitHostPort(*addr)
+	if err != nil {
+		return fmt.Errorf("--addr %q: %w", *addr, err)
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1" // bound to all interfaces (or just ":port") — probe loopback
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://" + net.JoinHostPort(host, port) + "/readyz")
+	if err != nil {
+		return fmt.Errorf("healthcheck: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("healthcheck: /readyz returned %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // uiURL renders a clickable URL for a net/http listen address (":8080" -> localhost).

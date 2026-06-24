@@ -95,6 +95,13 @@ directory, and every mutation follows the **golden rule**: the whole project is 
 first, and only written + swapped if it links — an invalid edit is rejected and the live project is kept.
 `--watch` additionally hot-reloads external file changes (independently of `--allow-edit`).
 
+**Optimistic concurrency.** Each module read carries an `ETag` (its content hash). To avoid silently
+overwriting a concurrent edit (a human and an AI agent editing the same module), a write can echo it back:
+`PUT`/`DELETE` with `If-Match: "<hash>"` is rejected with `412 Precondition Failed` if the module changed
+since you read it; `POST` with `If-None-Match: *` is rejected if the name already exists. The check is
+performed atomically under the workspace lock. Omitting the header keeps the default last-writer-wins, so
+existing clients are unaffected.
+
 > **Safe by default.** The write endpoints are off unless `--allow-edit` is passed, request bodies are size
 > capped, and the service has no authentication — so `--allow-edit` (like `--ui`) is for a **trusted /
 > loopback host only**. Bind to `127.0.0.1` (or sit behind an authenticating proxy) before exposing it.

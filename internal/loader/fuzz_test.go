@@ -1,6 +1,7 @@
 package loader
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/maxgfr/feelc/internal/ir"
@@ -17,6 +18,11 @@ func FuzzCompile(f *testing.F) {
 	f.Add([]byte(fuzzSeedSrc))
 	f.Add([]byte("model \"t\" {}\ndecision d : number {\n  needs: x\n  hit: first\n  >= 1 => 1\n  default => 0\n}\n"))
 	f.Add([]byte("input x : number in [0..10]\n"))
+	// Deeply nested expressions exercise the parser's recursion-depth guard: each of these crosses
+	// maxParseDepth so the front-end must return a clean error, never overflow the stack (a fatal crash).
+	f.Add([]byte("decision d : number = " + strings.Repeat("(", 600) + "1" + strings.Repeat(")", 600) + "\n"))
+	f.Add([]byte("input a : number\ndecision d : number = " + strings.Repeat("a[", 600) + "0" + strings.Repeat("]", 600) + "\n"))
+	f.Add([]byte("decision d : number = for " + strings.Repeat("x in [1], ", 600) + "x in [1] return 1\n"))
 	f.Add([]byte(""))
 	f.Fuzz(func(_ *testing.T, src []byte) {
 		_, _, _, _ = Compile(src) // must not panic; an error result is fine

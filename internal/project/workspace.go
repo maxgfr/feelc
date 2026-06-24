@@ -2,6 +2,7 @@ package project
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,12 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 )
+
+// ErrPreconditionFailed is returned by the *IfMatch / *IfNoneMatch mutators when the caller's expected
+// hash does not match the current module's hash (an optimistic-concurrency conflict — the module was
+// modified since the caller last read it). The HTTP layer maps it to 412 Precondition Failed. The check
+// is performed inside w.mu, atomically with the write, so it cannot race a concurrent mutation.
+var ErrPreconditionFailed = errors.New("precondition failed: the module was modified by someone else (stale hash)")
 
 // Workspace is a project rooted at a directory that supports mutation (edit / create / delete modules)
 // and hot-reload. Every mutation follows the GOLDEN RULE: validate an in-memory candidate first, and
@@ -77,15 +84,25 @@ func (w *Workspace) load() (*Project, error) {
 	return Load(w.dir) // single-file project: nothing to reuse
 }
 
-// PutModule replaces an existing module's source, validating that the whole project still links before
-// writing. Returns the new project on success; on failure the on-disk project and current snapshot are
-// untouched (golden rule).
+// PutModule replaces an existing module's source (last-writer-wins). See PutModuleIfMatch.
 func (w *Workspace) PutModule(name, source string) (*Project, error) {
+	return w.PutModuleIfMatch(name, source, "")
+}
+
+// PutModuleIfMatch replaces an existing module's source, validating that the whole project still links
+// before writing. Returns the new project on success; on failure the on-disk project and current snapshot
+// are untouched (golden rule). If ifMatch is non-empty it must equal the current module's Hash, else
+// ErrPreconditionFailed — the optimistic-concurrency guard. The comparison happens inside w.mu, atomically
+// with the write, so it closes the read-then-write TOCTOU window. Empty ifMatch ⇒ last-writer-wins.
+func (w *Workspace) PutModuleIfMatch(name, source, ifMatch string) (*Project, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	m, ok := w.cur.Module(name)
 	if !ok {
 		return nil, fmt.Errorf("no such module %q (use create to add it)", name)
+	}
+	if ifMatch != "" && ifMatch != m.Hash {
+		return nil, ErrPreconditionFailed
 	}
 	if err := w.validateCandidate(w.sourcesReplacing(name, source)); err != nil {
 		return nil, err
@@ -96,15 +113,25 @@ func (w *Workspace) PutModule(name, source string) (*Project, error) {
 	return w.reloadLocked()
 }
 
-// CreateModule adds a new module. With a manifest it also appends the module entry; without one the new
-// file is picked up by auto-discovery.
+// CreateModule adds a new module (no precondition). See CreateModuleIfNoneMatch.
 func (w *Workspace) CreateModule(name, source string) (*Project, error) {
+	return w.CreateModuleIfNoneMatch(name, source, false)
+}
+
+// CreateModuleIfNoneMatch adds a new module. With a manifest it also appends the module entry; without one
+// the new file is picked up by auto-discovery. When ifNoneMatchStar is true (HTTP If-None-Match: *) and a
+// module of that name already exists, it returns ErrPreconditionFailed (→ 412) instead of the plain
+// "already exists" error (→ 422), giving the create the same optimistic-concurrency semantics as PUT.
+func (w *Workspace) CreateModuleIfNoneMatch(name, source string, ifNoneMatchStar bool) (*Project, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if err := validateModuleName(name); err != nil {
 		return nil, err
 	}
 	if _, ok := w.cur.Module(name); ok {
+		if ifNoneMatchStar {
+			return nil, ErrPreconditionFailed
+		}
 		return nil, fmt.Errorf("module %q already exists", name)
 	}
 	path := name + ".rules"
@@ -133,13 +160,23 @@ func (w *Workspace) CreateModule(name, source string) (*Project, error) {
 	return w.reloadLocked()
 }
 
-// DeleteModule removes a module, rejecting the delete if another module's `uses` binding depends on it.
+// DeleteModule removes a module (no precondition). See DeleteModuleIfMatch.
 func (w *Workspace) DeleteModule(name string) (*Project, error) {
+	return w.DeleteModuleIfMatch(name, "")
+}
+
+// DeleteModuleIfMatch removes a module, rejecting the delete if another module's `uses` binding depends
+// on it. If ifMatch is non-empty it must equal the module's current Hash, else ErrPreconditionFailed
+// (optimistic-concurrency guard, checked under w.mu). Empty ifMatch ⇒ delete unconditionally.
+func (w *Workspace) DeleteModuleIfMatch(name, ifMatch string) (*Project, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	m, ok := w.cur.Module(name)
 	if !ok {
 		return nil, fmt.Errorf("no such module %q", name)
+	}
+	if ifMatch != "" && ifMatch != m.Hash {
+		return nil, ErrPreconditionFailed
 	}
 	if deps := w.dependentsOf(name); len(deps) > 0 {
 		return nil, fmt.Errorf("module %q is used by %s (remove the `uses` binding first)", name, strings.Join(deps, ", "))

@@ -43,6 +43,7 @@ feelc serve --rules <f.rules> [--addr :8080] [--watch] [--strict] [--ui]
 feelc serve --project <dir>   [--addr :8080] [--watch] [--strict] [--ui] [--allow-edit]
 feelc serve --ui              # start empty; author a model in the browser
 # opt-in hardening (any mode):  [--auth-token <tok>]  [--rate-limit <rps>]
+feelc healthcheck [--addr :8080]   # probe a running server's /readyz; exit 0 if ready, ≠0 otherwise
 ```
 
 `--rules` and `--project` are mutually exclusive. `--watch` hot-reloads on file change; `--strict` refuses
@@ -55,6 +56,11 @@ For exposed deployments, the server is hardened **opt-in** (default = open, loop
 (or `FEELC_AUTH_TOKEN`) requires `Authorization: Bearer <tok>` on every route except the health probes
 (missing/invalid ⇒ `401`); `--rate-limit <rps>` token-buckets requests per client IP (`429` over budget).
 The server also shuts down gracefully on `SIGINT`/`SIGTERM` (draining in-flight requests).
+
+`feelc healthcheck` performs an HTTP `GET /readyz` on `--addr` (loopback) and exits `0` when the server is
+ready, non-zero otherwise — it is the container `HEALTHCHECK` for the distroless image (which has no shell
+or `curl`): the same static binary probes itself. Orchestrators (Kubernetes, ECS) typically `httpGet`
+`/healthz` (liveness) and `/readyz` (readiness) directly and don't need it.
 
 ## Environment
 

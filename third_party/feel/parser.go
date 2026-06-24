@@ -46,8 +46,19 @@ func ParseString(input string) (Node, error) {
 	return parser.Parse()
 }
 
+// maxParseDepth bounds the recursion depth of the recursive-descent parser. Untrusted source text
+// reaches the parser over HTTP (POST /v1/run, /v1/verify, /v1/graph, …); deeply nested input such as
+// 1+(2+(3+…)), a[b[c[…]]], [[[[…]]]], {a:{b:{…}}}, or comma-chained `for` would otherwise overflow the
+// goroutine stack — a FATAL crash that recover() cannot catch (it kills the whole process). We fail
+// cleanly with an error instead. The bound is well below ir/codec.go's maxDecodeDepth=1000 because each
+// AST level here descends through several precedence frames (expression→inOp→…→singleElement), so a
+// level consumes much more stack than one codec frame. 400 is vastly more than any legitimate rule cell
+// (which nests <10 deep) yet fires long before the OS stack limit.
+const maxParseDepth = 400
+
 type Parser struct {
 	scanner *Scanner
+	depth   int // current recursion depth (bounded by maxParseDepth; guards against stack overflow)
 }
 
 func NewParser(scanner *Scanner) *Parser {
@@ -55,6 +66,19 @@ func NewParser(scanner *Scanner) *Parser {
 		scanner: scanner,
 	}
 }
+
+// enter increments the recursion depth and reports an error if the parser has nested too deeply. Each
+// guarded entry pairs it with a deferred leave(). Returning an error (rather than panicking) lets the
+// depth limit surface through the normal diag error path as a clean compile error.
+func (p *Parser) enter() error {
+	p.depth++
+	if p.depth > maxParseDepth {
+		return fmt.Errorf("expression nested too deeply (> %d levels)", maxParseDepth)
+	}
+	return nil
+}
+
+func (p *Parser) leave() { p.depth-- }
 
 func (p Parser) Unexpected(expects ...string) *UnexpectedToken {
 	// extract caller stack dump
@@ -168,6 +192,12 @@ func (p *Parser) parseUnaryTest() (Node, error) {
 }
 
 func (p *Parser) expression() (Node, error) {
+	// Depth guard: every nested construct (parenthesised sub-expr, index, funcall arg, array/map element,
+	// if/some/every body, range bound) funnels through expression(), so guarding it here bounds them all.
+	if err := p.enter(); err != nil {
+		return nil, err
+	}
+	defer p.leave()
 	return p.inOp()
 }
 
@@ -811,6 +841,12 @@ func (p *Parser) parseIfExpression() (Node, error) {
 }
 
 func (p *Parser) parseForExpr() (Node, error) {
+	// Depth guard: comma-chained `for x in a, y in b, …` recurses into parseForExpr directly (below),
+	// bypassing expression(), so it needs its own guard to bound the recursion.
+	if err := p.enter(); err != nil {
+		return nil, err
+	}
+	defer p.leave()
 	rng := p.startTextRange()
 	err := p.scanner.Next()
 	if err != nil {

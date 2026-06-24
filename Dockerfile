@@ -26,6 +26,12 @@ USER nonroot:nonroot
 VOLUME ["/work"]
 EXPOSE 8080
 ENTRYPOINT ["feelc"]
+# Liveness/readiness without a shell or curl: the same static binary probes /readyz on :8080 (exec form,
+# absolute path — distroless has no shell and no guaranteed PATH for the HEALTHCHECK context). If you
+# override --addr in CMD, override the probe's --addr to match. Orchestrators (K8s, ECS) usually httpGet
+# /healthz and /readyz directly instead and can ignore this.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/usr/local/bin/feelc", "healthcheck", "--addr", ":8080"]
 # Read-only by default. To enable in-browser editing on a trusted host, append --allow-edit:
 #   docker run --rm -p 127.0.0.1:8080:8080 -v "$PWD/proj:/work" feelc serve --project /work --ui --watch --allow-edit
 CMD ["serve", "--project", "/work", "--addr", ":8080", "--ui", "--watch"]
