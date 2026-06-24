@@ -161,6 +161,8 @@ textarea {
 .sim-form .f-row input[type="checkbox"] { width: 16px; height: 16px; }
 .sim-form .f-warn { font-size: 11px; color: var(--warn); display: none; }
 .sim-form .f-warn.show { display: inline; }
+.sim-form .field.inactive { opacity: 0.45; }
+.sim-form .f-inactive { font-size: 10px; color: var(--muted); font-style: italic; margin-left: auto; }
 .sim-form .sim-empty { font-size: 12px; color: var(--muted); font-style: italic; }
 
 .json-adv { margin-bottom: 8px; }

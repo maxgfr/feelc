@@ -424,10 +424,14 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	case doc.Full:
 		if ft, err := explain.ExplainFull(cm, doc.Decision, doc.Input); err == nil {
 			resp["trace"] = explain.NormalizeFullJSON(ft) // decimals as fixed-notation numbers, like `output`
+		} else {
+			resp["traceError"] = err.Error() // never silently drop the trace; `output` is already returned
 		}
 	case doc.Explain:
 		if tr, err := explain.Explain(cm, doc.Decision, doc.Input); err == nil {
 			resp["trace"] = explain.NormalizeJSON(tr)
+		} else {
+			resp["traceError"] = err.Error()
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
