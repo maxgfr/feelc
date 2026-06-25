@@ -10,7 +10,7 @@
 > rules, and the engine *proves* and runs them — **100% deterministic, reproducible and auditable**
 > (no LLM in the core). In the spirit of IBM ODM/ILOG, reimagined for the age of LLMs: author by
 > chatting with your own model, visualize the decision graph, prove completeness & consistency, and ship
-> a single CGO-free binary — or try it in your browser via WebAssembly.
+> a single CGO-free binary or try it in your browser via WebAssembly.
 
 **▶ [Try the playground](https://maxgfr.github.io/feelc/playground/)** — the real engine, compiled to
 WebAssembly, runs entirely in your browser (no backend). Or [read the docs](https://maxgfr.github.io/feelc/).
