@@ -12,6 +12,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to (re)publish to npm, e.g. 1.11.0 (default: latest git tag). Use to recover a release whose npm publish was skipped."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -78,3 +83,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # tag/changelog push + GitHub Release (contents: write)
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }} # optional npm "Automation" token (bypasses 2FA); empty -> OIDC
+
+  # Manual recovery: (re)publish a single already-tagged version to npm WITHOUT cutting a new release —
+  # for when a release's npm publish was skipped (e.g. before NPM_TOKEN/OIDC was set up). Run from the
+  # Actions tab; leave `version` blank to publish the latest tag. Idempotent (release-publish.sh no-ops
+  # if the version is already on the registry).
+  publish-npm:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm OIDC trusted publishing (provenance)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need tags to resolve the default (latest) version
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          check-latest: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g npm@latest # OIDC trusted publishing needs a recent npm (>= 11.5.1)
+      - run: npm ci
+      - name: Resolve target version
+        id: ver
+        run: |
+          V="${{ inputs.version }}"
+          [ -z "$V" ] && V="$(git describe --tags --abbrev=0 | sed 's/^v//')"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Publishing feelc@$V"
+      - name: Publish to npm
+        run: bash scripts/release-publish.sh "${{ steps.ver.outputs.version }}"
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }} # automation token (bypasses 2FA); empty -> OIDC
