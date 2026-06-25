@@ -48,7 +48,9 @@ nothing downstream reorders or renumbers, so a model hashes identically however 
 | `cmd/feelc-wasm` | The in-browser engine (`GOOS=js`), via a build-tag stub split ([ADR 0017](adr/0017-wasm-playground.md)). |
 | `internal/*` | The engine (above). |
 | `third_party/feel` | Vendored FEEL parser fork, pinned via a `replace` in `go.mod` — do not de-vendor. |
-| `skill/` | The portable authoring skill (`SKILL.md` + scripts). |
+| `skills/feelc-rules/` | The portable authoring skill (`SKILL.md` + scripts + references), `npx skills add maxgfr/feelc`. |
+| `.claude-plugin/` | Claude Code plugin + marketplace manifests, so the repo installs via `/plugin`. |
+| `.mcp.json` | Bundled MCP server config (`feelc mcp`), auto-discovered by Claude Code and the plugin. |
 | `site/` | The docs site generator (`build.mjs`) and the WASM playground ([ADR 0018](adr/0018-docs-site.md)). |
 | `docs/` | Reference docs + `docs/adr/` (decision records). |
 | `examples/`, `sample-project/`, `testdata/` | Verified reference models, a project-mode example, fixtures. |

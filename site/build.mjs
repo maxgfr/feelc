@@ -21,6 +21,27 @@ const examplesSrc = join(root, "examples");
 const docsOut = join(siteDir, "docs");
 const GH = "https://github.com/maxgfr/feelc";
 
+// Shared chrome injected into every generated page (and mirrored verbatim in the static
+// site/index.html + site/playground/index.html so all surfaces share one identity + theme).
+const WORDMARK =
+  '<svg class="wordmark" viewBox="0 0 24 24" width="20" height="20" role="img" aria-label="feelc logo">' +
+  '<rect class="mk-bg" x="2" y="2" width="20" height="20" rx="5"/>' +
+  '<path class="mk-ck" d="M7 12.4l3.2 3.2L17 8.8" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const THEME_INIT =
+  `<script>(function(){var t;try{var q=new URLSearchParams(location.search).get('theme');` +
+  `t=(q==='light'||q==='dark')?q:localStorage.getItem('feelc.theme');}catch(e){}` +
+  `if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';` +
+  `document.documentElement.dataset.theme=t;})();</script>`;
+const THEME_TOGGLE =
+  `<button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle light or dark theme" title="Toggle theme">` +
+  `<span class="icon-moon" aria-hidden="true">☾</span><span class="icon-sun" aria-hidden="true">☀</span></button>`;
+const THEME_SCRIPT =
+  `<script>(function(){var t=document.getElementById('theme-toggle');if(t)t.addEventListener('click',function(){` +
+  `var d=document.documentElement,n=d.dataset.theme==='light'?'dark':'light';d.dataset.theme=n;` +
+  `try{localStorage.setItem('feelc.theme',n);}catch(e){}});` +
+  `var m=document.getElementById('docs-nav-toggle');if(m)m.addEventListener('click',function(){` +
+  `var x=document.body.classList.toggle('nav-open');m.setAttribute('aria-expanded',String(x));});})();</script>`;
+
 marked.setOptions({ gfm: true, breaks: false });
 
 // Ordered reference docs. The first (`index.html`, from docs/README.md) is the docs landing map. `href`
@@ -51,7 +72,7 @@ const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 function sidebar(activeHref) {
   return (
     "<h4>Reference</h4>" +
-    DOCS.map((d) => `<a href="${d.href}"${d.href === activeHref ? ' class="active"' : ""}>${esc(d.title)}</a>`).join("\n")
+    DOCS.map((d) => `<a href="${d.href}"${d.href === activeHref ? ' class="active" aria-current="page"' : ""}>${esc(d.title)}</a>`).join("\n")
   );
 }
 
@@ -62,20 +83,26 @@ function page(title, activeHref, contentHtml) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>feelc docs — ${esc(title)}</title>
+  ${THEME_INIT}
+  <link rel="stylesheet" href="../theme.css" />
   <link rel="stylesheet" href="../style.css" />
 </head>
 <body>
+  <a class="skip-link" href="#content">Skip to content</a>
   <nav class="nav">
-    <div class="brand"><a href="../" style="color:inherit">feelc</a><span> · docs</span></div>
+    <button id="docs-nav-toggle" class="docs-nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="docs-aside">☰</button>
+    <a class="brand" href="../">${WORDMARK} feelc<span> · docs</span></a>
     <div class="links">
       <a href="../playground/">Playground</a>
-      <a href="https://github.com/maxgfr/feelc" target="_blank" rel="noopener">GitHub</a>
+      <a href="${GH}" target="_blank" rel="noopener">GitHub</a>
+      ${THEME_TOGGLE}
     </div>
   </nav>
   <div class="docs">
-    <aside>${sidebar(activeHref)}</aside>
-    <div class="content">${contentHtml}</div>
+    <aside id="docs-aside">${sidebar(activeHref)}</aside>
+    <main class="content" id="content">${contentHtml}</main>
   </div>
+  ${THEME_SCRIPT}
 </body>
 </html>
 `;
@@ -101,7 +128,9 @@ function renderDocs() {
   mkdirSync(docsOut, { recursive: true });
   for (const d of DOCS) {
     const md = readFileSync(join(docsSrc, d.file), "utf8");
-    writeFileSync(join(docsOut, d.href), page(d.title, d.href, fixLinks(marked.parse(md))));
+    // a11y: marked emits bare <th> (column headers) — add scope="col" for cell↔header association.
+    const html = fixLinks(marked.parse(md)).replace(/<th(\s|>)/g, '<th scope="col"$1');
+    writeFileSync(join(docsOut, d.href), page(d.title, d.href, html));
     console.log("docs:", d.href);
   }
 }
@@ -168,7 +197,18 @@ function copyShared() {
   console.log("shared: internal/service/web/shared.js -> site/playground/shared.js");
 }
 
+// copyTheme mirrors the design-system stylesheet (tokens + base + shared components, the single source
+// of truth in the embedded serve --ui) into the site, so the playground and docs share one identity and
+// the light/dark palette is defined exactly once — same anti-drift contract as copyShared().
+function copyTheme() {
+  const src = join(root, "internal", "service", "web", "theme.css");
+  const dst = join(siteDir, "theme.css");
+  writeFileSync(dst, readFileSync(src, "utf8"));
+  console.log("theme: internal/service/web/theme.css -> site/theme.css");
+}
+
 renderDocs();
 copyShared();
+copyTheme();
 buildExamples();
 checkLinks();

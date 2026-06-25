@@ -67,15 +67,18 @@ npm i --no-save marked && node site/build.mjs    # renders site/docs/ + site/exa
 Editing a `docs/*.md` page or adding a `docs/adr/NNNN-*.md` is all that is needed — the nav updates
 automatically. See [`docs/architecture.md`](docs/architecture.md) for the package map and repo layout.
 
-## The authoring skill (`skill/`)
+## The authoring skill (`skills/feelc-rules/`)
 
-The `feelc-rules` skill lives in the **`skill/` subdirectory** of the repo (not at the root). A
-bare `npx skills add maxgfr/feelc` is therefore **NOT enough**: it targets the root, which has no
-`SKILL.md`. Use the **tree-URL** pointing at the subdirectory:
+The `feelc-rules` skill lives in [`skills/feelc-rules/`](skills/feelc-rules/) — the standard flat layout
+registries discover automatically, so the one-liner just works:
 
 ```sh
-npx skills add https://github.com/maxgfr/feelc/tree/main/skill
+npx skills add maxgfr/feelc
 ```
+
+The same repo is also a Claude Code **plugin marketplace** (`.claude-plugin/`): from inside Claude Code,
+`/plugin marketplace add maxgfr/feelc` then `/plugin install feelc@feelc` installs the skill **and** the
+MCP server in one step. The MCP server alone can be wired with `feelc mcp install`.
 
 The skill never decides a result "off the top of its head": the `feelc` binary (compile / verify / run /
 check / explain) is the **deterministic oracle**.

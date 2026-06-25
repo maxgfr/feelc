@@ -37,9 +37,20 @@ function connectCard() {
     `Your key stays in your browser; the engine never calls an LLM at runtime.</div>` +
     `<button type="button" class="primary cc-btn">Connect your AI</button>` +
     `<div class="cc-skill">Prefer your editor or a coding agent? The same draft→verify→repair loop is a portable ` +
-    `<a href="https://github.com/maxgfr/feelc/tree/main/skill" target="_blank" rel="noopener">feelc skill</a>.</div>`;
+    `<a href="https://github.com/maxgfr/feelc/tree/main/skills/feelc-rules" target="_blank" rel="noopener">feelc skill</a>.</div>`;
   card.querySelector(".cc-btn").addEventListener("click", openSettings);
   return card;
+}
+
+// toast shows a transient, non-blocking notification (replaces alert()); a11y-announced via #toasts.
+function toast(msg, kind) {
+  const wrap = $("toasts");
+  if (!wrap) return;
+  const t = document.createElement("div");
+  t.className = "toast" + (kind ? " " + kind : "");
+  t.textContent = msg;
+  wrap.appendChild(t);
+  setTimeout(() => { t.style.transition = "opacity .25s"; t.style.opacity = "0"; setTimeout(() => t.remove(), 260); }, 3200);
 }
 
 // ---- HTTP transport: the `api` shared.js + project.js call ----
@@ -72,12 +83,30 @@ function pushMsg(role, content) {
   $("thread").appendChild(div);
   $("thread").scrollTop = $("thread").scrollHeight;
 }
-function pushError(text) {
+function pushError(text, retry) {
   const div = document.createElement("div");
   div.className = "msg error";
   div.textContent = text;
+  if (typeof retry === "function") {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "ghost retry"; b.textContent = "Retry";
+    b.addEventListener("click", () => { div.remove(); retry(); });
+    div.appendChild(document.createElement("br"));
+    div.appendChild(b);
+  }
   $("thread").appendChild(div);
   $("thread").scrollTop = $("thread").scrollHeight;
+}
+
+// pushThinking shows an animated "drafting…" placeholder while the LLM responds; returns a remover.
+function pushThinking() {
+  const div = document.createElement("div");
+  div.className = "msg assistant thinking";
+  div.innerHTML = `drafting<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>`;
+  div.setAttribute("aria-label", "drafting a reply");
+  $("thread").appendChild(div);
+  $("thread").scrollTop = $("thread").scrollHeight;
+  return () => div.remove();
 }
 
 // applyDraft installs LLM-authored rules into the editor and kicks the live pipeline (auto-verify is
@@ -98,22 +127,27 @@ async function sendChat(e) {
   pushMsg("user", prompt);
   const btn = $("send-btn");
   btn.disabled = true; btn.textContent = "…";
+  const stopThinking = pushThinking();
+  // retry re-submits the same prompt (without duplicating it in the thread).
+  const retry = () => { input.value = prompt; sendChat(new Event("submit")); };
   try {
     let spec = (typeof projectChatRequest === "function") ? projectChatRequest(messages, cfg) : null;
     if (!spec) spec = { path: "/v1/chat", body: JSON.stringify({ messages, llm: cfg }) };
     const { ok, status, data } = await api(spec.path, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: spec.body,
     });
+    stopThinking();
     if (status === 501) {
       pushError("No LLM configured. Open ⚙ LLM settings to add a provider, model and API key.");
       $("settings").showModal();
       return;
     }
-    if (!ok) { pushError(`Chat failed (${status}): ${data?.error || "unknown error"}`); return; }
+    if (!ok) { pushError(`Chat failed (${status}): ${data?.error || "unknown error"}`, retry); return; }
     pushMsg("assistant", data.message || "(empty reply)");
     if (data.rules) applyDraft(data.rules);
   } catch (err) {
-    pushError("Network error: " + err.message);
+    stopThinking();
+    pushError("Network error: " + err.message, retry);
   } finally {
     btn.disabled = false; btn.textContent = "Send";
   }
@@ -222,7 +256,9 @@ function openSettings() {
   $("cfg-model").value = c.model || "";
   $("cfg-baseurl").value = c.baseURL || "";
   $("cfg-key").value = c.apiKey || "";
+  const err = $("settings-err"); err.hidden = true; err.textContent = "";
   $("settings").showModal();
+  $("cfg-model").focus();
 }
 function onSettingsClose() {
   if ($("settings").returnValue === "save") {
@@ -247,6 +283,16 @@ window.addEventListener("DOMContentLoaded", () => {
   $("tests-btn").addEventListener("click", genTests);
   $("settings-btn").addEventListener("click", openSettings);
   $("llm-status").addEventListener("click", openSettings);
+  // block "Save" with an empty model/key so the dialog can't silently store an unusable config.
+  $("settings-form").addEventListener("submit", (e) => {
+    if (!e.submitter || e.submitter.value !== "save") return;
+    const model = $("cfg-model").value.trim(), key = $("cfg-key").value;
+    if (model && key) return;
+    e.preventDefault();
+    const err = $("settings-err");
+    err.textContent = !key ? "An API key is required." : "A model name is required.";
+    err.hidden = false;
+  });
   $("settings").addEventListener("close", onSettingsClose);
   $("chat-input").addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") $("chat-form").requestSubmit();

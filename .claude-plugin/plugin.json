@@ -1,0 +1,14 @@
+{
+  "name": "feelc",
+  "displayName": "feelc — DMN/FEEL rules engine",
+  "version": "0.2.0",
+  "description": "Write, verify and test business rules in the feelc DSL (DMN/FEEL, deterministic). The AI writes the DSL; the feelc binary is the oracle. Bundles the feelc-rules skill and the feelc MCP server.",
+  "author": {
+    "name": "maxgfr",
+    "url": "https://github.com/maxgfr"
+  },
+  "homepage": "https://github.com/maxgfr/feelc",
+  "repository": "https://github.com/maxgfr/feelc",
+  "license": "Apache-2.0",
+  "keywords": ["feelc", "dmn", "feel", "business-rules", "decision-table", "rules-engine"]
+}

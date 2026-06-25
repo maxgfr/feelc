@@ -4,33 +4,67 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>feelc — AI authoring</title>
+  <script>
+    // set the theme before first paint (no flash): ?theme= override, else stored choice, else OS preference.
+    (function () {
+      var t;
+      try {
+        var q = new URLSearchParams(location.search).get('theme');
+        t = (q === 'light' || q === 'dark') ? q : localStorage.getItem('feelc.theme');
+      } catch (e) {}
+      if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <a class="skip-link" href="#source">Skip to the editor</a>
+  <h1 class="visually-hidden">feelc — AI rule authoring</h1>
   <header>
-    <div class="brand">feelc<span> · AI-native rule engine</span></div>
-    <div class="status" id="llm-status">LLM: not configured</div>
-    <button id="settings-btn" class="ghost">⚙ LLM settings</button>
+    <span class="brand">
+      <svg class="wordmark" viewBox="0 0 24 24" width="20" height="20" role="img" aria-label="feelc logo">
+        <rect class="mk-bg" x="2" y="2" width="20" height="20" rx="5" />
+        <path class="mk-ck" d="M7 12.4l3.2 3.2L17 8.8" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      feelc<span> · AI-native rule engine</span>
+    </span>
+    <div class="header-actions">
+      <button class="status" id="llm-status" type="button" aria-haspopup="dialog">LLM: not configured</button>
+      <button id="settings-btn" class="ghost" type="button" aria-haspopup="dialog">⚙ LLM settings</button>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle light or dark theme" title="Toggle theme">
+        <span class="icon-moon" aria-hidden="true">☾</span><span class="icon-sun" aria-hidden="true">☀</span>
+      </button>
+    </div>
   </header>
+
+  <!-- mobile-only: which pane is visible -->
+  <div class="pane-switch" role="group" aria-label="Choose panel">
+    <button type="button" data-pane="chat" aria-pressed="true">Chat</button>
+    <button type="button" data-pane="editor" aria-pressed="false">Editor</button>
+  </div>
 
   <main>
     <!-- Left: chat -->
-    <section class="pane chat">
+    <section class="pane chat" aria-label="Describe your rules">
       <h2>Describe your rules</h2>
       <p class="ai-howto">Plain English → your LLM drafts the <code>.rules</code> → the engine compiles,
         <b>verifies</b> &amp; repairs, accepting only what proves out. No LLM at runtime.
-        <a id="skill-link" href="https://github.com/maxgfr/feelc/tree/main/skill" target="_blank" rel="noopener">Use the skill in your editor ↗</a></p>
-      <div id="thread" class="thread"></div>
+        <a id="skill-link" href="https://github.com/maxgfr/feelc/tree/main/skills/feelc-rules" target="_blank" rel="noopener">Use the skill in your editor ↗</a></p>
+      <div id="thread" class="thread" aria-live="polite" aria-label="Conversation"></div>
       <form id="chat-form" class="chat-form">
+        <label class="visually-hidden" for="chat-input">Describe your rules</label>
         <textarea id="chat-input" rows="3" placeholder="e.g. Credit eligibility from score, debt-to-income and age…"></textarea>
         <div class="row">
           <label class="auto"><input type="checkbox" id="auto-verify" checked /> auto-verify</label>
-          <button id="send-btn" type="submit">Send</button>
+          <button id="send-btn" type="submit" class="primary">Send</button>
         </div>
       </form>
 
       <details class="ingest">
         <summary>Ingest a specification → rules</summary>
+        <label class="visually-hidden" for="ingest-source">Specification to ingest</label>
         <textarea id="ingest-source" rows="4" placeholder="Paste a business policy, contract clause, requirements or rules — any domain. The AI drafts rules with @source links, then the engine verifies and repairs them deterministically."></textarea>
         <div class="row">
           <label>repair rounds <input type="number" id="ingest-rounds" min="1" max="5" value="3" /></label>
@@ -40,7 +74,7 @@
     </section>
 
     <!-- Right: editor + verify + run -->
-    <section class="pane editor">
+    <section class="pane editor" aria-label="Rules editor and simulation">
       <div class="tabbar">
         <h2>.rules</h2>
         <div class="actions">
@@ -50,33 +84,35 @@
           <button id="tests-btn" title="Ask the LLM to draft test cases, then check them deterministically">AI tests</button>
         </div>
       </div>
+      <label class="visually-hidden" for="source">Rules source</label>
       <textarea id="source" spellcheck="false" placeholder="The generated model appears here — editable."></textarea>
 
-      <div class="report" id="report"></div>
+      <div class="report" id="report" aria-live="polite"></div>
       <div class="graph" id="graph"></div>
       <div class="trace" id="trace"></div>
 
       <div class="run">
         <div class="run-head">
           <h3>Inputs &amp; simulation</h3>
-          <label class="goal-label">decision <select id="goal" title="Which decision to evaluate"></select></label>
-          <span class="recompute idle" id="recompute">live</span>
+          <label class="goal-label" for="goal">decision <select id="goal" title="Which decision to evaluate"><option value="">…</option></select></label>
+          <span class="recompute idle" id="recompute" aria-live="polite">live</span>
           <button id="explain-btn" title="Narrate the last result in plain English (LLM)">Explain</button>
         </div>
         <div id="sim-form" class="sim-form"></div>
         <details class="json-adv">
           <summary>edit inputs as JSON</summary>
+          <label class="visually-hidden" for="input">Inputs as JSON</label>
           <textarea id="input" rows="4" spellcheck="false" placeholder='{"credit_score":700,"annual_income":60000,"monthly_debt":1500,"age":40}'></textarea>
           <div class="json-err" id="json-err"></div>
         </details>
-        <div class="result" id="result"></div>
-        <div class="narration" id="narration"></div>
+        <div class="result" id="result" aria-live="polite"></div>
+        <div class="narration" id="narration" aria-live="polite"></div>
       </div>
     </section>
   </main>
 
   <!-- LLM settings dialog -->
-  <dialog id="settings">
+  <dialog id="settings" aria-label="LLM settings">
     <form method="dialog" id="settings-form">
       <h3>LLM settings <span class="hint">(stored locally in your browser)</span></h3>
       <label>Provider
@@ -88,6 +124,7 @@
       <label>Model <input id="cfg-model" placeholder="claude-sonnet-4-6" /></label>
       <label>Base URL <span class="hint">(optional)</span><input id="cfg-baseurl" placeholder="default" /></label>
       <label>API key <input id="cfg-key" type="password" placeholder="sk-…" /></label>
+      <div class="field-err" id="settings-err" hidden></div>
       <p class="note">The key is sent to your local <code>feelc serve</code>, which forwards the
         request to the provider. It is not stored or logged server-side. Use only on a machine you trust.</p>
       <div class="dialog-actions">
@@ -97,6 +134,26 @@
     </form>
   </dialog>
 
+  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <script>
+    // theme toggle + mobile pane switcher (kept inline so it works without shared.js).
+    (function () {
+      var tg = document.getElementById('theme-toggle');
+      if (tg) tg.addEventListener('click', function () {
+        var d = document.documentElement, n = d.dataset.theme === 'light' ? 'dark' : 'light';
+        d.dataset.theme = n;
+        try { localStorage.setItem('feelc.theme', n); } catch (e) {}
+      });
+      var ps = document.querySelector('.pane-switch');
+      if (ps) ps.addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-pane]'); if (!b) return;
+        document.body.dataset.pane = b.dataset.pane;
+        ps.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      });
+      document.body.dataset.pane = 'chat';
+    })();
+  </script>
   <script src="shared.js"></script>
   <script src="app.js"></script>
   <script src="project.js"></script>

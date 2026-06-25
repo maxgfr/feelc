@@ -7,8 +7,8 @@
 // feelc discovery, in order:
 //   1. $FEELC_BIN (explicit path)
 //   2. `feelc` on the PATH
-//   3. binary already built at the repo root: ../../feelc
-//   4. build from the repo sources: `go build -o ../../feelc ./cmd/feelc`
+//   3. binary already built at the repo root: ../../../feelc
+//   4. build from the repo sources: `go build -o ../../../feelc ./cmd/feelc`
 // (3 and 4 work when the skill runs INSIDE the feelc repo; in a standalone install,
 //  provide $FEELC_BIN or put feelc on the PATH — see references/install.md.)
 // Otherwise: installation message + exit 1.
@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(here, "..", ".."); // feelc/skill/scripts -> feelc/ repo root
+const repoRoot = join(here, "..", "..", ".."); // feelc/skills/feelc-rules/scripts -> feelc/ repo root
 const localBin = join(repoRoot, "feelc");
 
 function onPath(cmd) {

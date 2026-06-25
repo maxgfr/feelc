@@ -73,7 +73,15 @@ function renderModuleList() {
   list.innerHTML = "";
   (PROJECT.modules || []).forEach((m) => {
     const item = document.createElement("div");
-    item.className = "module-item" + (m.name === CURRENT_MODULE ? " active" : "");
+    const isActive = m.name === CURRENT_MODULE;
+    item.className = "module-item" + (isActive ? " active" : "");
+    item.setAttribute("role", "button");
+    item.tabIndex = 0;
+    item.setAttribute("aria-label", `module ${m.name}${m.blockers > 0 ? `, ${m.blockers} blocker(s)` : ""}`);
+    if (isActive) item.setAttribute("aria-current", "true");
+    item.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectModule(m.name); }
+    });
 
     const dot = document.createElement("span");
     dot.className = "dot " + (m.blockers > 0 ? "err" : "ok");
@@ -154,26 +162,64 @@ async function saveModule() {
   await refreshProject();
 }
 
+// modalDialog builds an accessible native <dialog> (focus-trapped, Esc-closable, styled by theme.css)
+// and resolves to the clicked button's value. `fields` is optional markup placed above the actions.
+function modalDialog({ body, confirmLabel = "OK", danger = false, focusSel }) {
+  return new Promise((resolve) => {
+    const dlg = document.createElement("dialog");
+    dlg.innerHTML =
+      `<form method="dialog" class="mini-form">${body}` +
+      `<div class="dialog-actions">` +
+      `<button value="cancel" class="ghost">Cancel</button>` +
+      `<button value="ok" class="primary">${escapeHtml(confirmLabel)}</button>` +
+      `</div></form>`;
+    document.body.appendChild(dlg);
+    dlg.addEventListener("close", () => { const v = dlg.returnValue; dlg.remove(); resolve(v); });
+    dlg.showModal();
+    const f = focusSel && dlg.querySelector(focusSel);
+    if (f) f.focus();
+    void danger;
+  });
+}
+
 async function createModulePrompt() {
-  const name = prompt("New module name (letters, digits, underscore):");
+  const dlg = document.createElement("dialog");
+  dlg.innerHTML =
+    `<form method="dialog" class="mini-form">` +
+    `<label class="mini-label">New module name <span class="hint">(letters, digits, underscore)</span>` +
+    `<input class="mini-input" id="mini-mod-name" placeholder="pricing" autocomplete="off" /></label>` +
+    `<div class="dialog-actions"><button value="cancel" class="ghost">Cancel</button>` +
+    `<button value="ok" class="primary">Create</button></div></form>`;
+  document.body.appendChild(dlg);
+  const input = dlg.querySelector(".mini-input");
+  const name = await new Promise((resolve) => {
+    dlg.addEventListener("close", () => { const ok = dlg.returnValue === "ok"; const v = input.value.trim(); dlg.remove(); resolve(ok ? v : null); });
+    dlg.showModal(); input.focus();
+  });
   if (!name) return;
   const tmpl = `model "${name}" {\n  rounding: half_even\n}\n\ninput x : number\n\ndecision y : number = x\n`;
   const { ok, status, data } = await api("/v1/modules", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, source: tmpl }),
   });
-  if (!ok) { alert(`create failed (${status}): ${errText(data)}`); return; }
+  if (!ok) { toast(`create failed (${status}): ${errText(data)}`, "err"); return; }
   await refreshProject();
   selectModule(name);
+  toast(`module "${name}" created`, "ok");
 }
 
 async function deleteModule(name) {
-  if (!confirm(`Delete module "${name}"? This removes its .rules file.`)) return;
+  const v = await modalDialog({
+    body: `<p>Delete module <b>${escapeHtml(name)}</b>? This removes its <code>.rules</code> file.</p>`,
+    confirmLabel: "Delete", danger: true,
+  });
+  if (v !== "ok") return;
   const { ok, status, data } = await api(`/v1/modules/${encodeURIComponent(name)}`, { method: "DELETE" });
-  if (!ok) { alert(`delete failed (${status}): ${errText(data)}`); return; }
+  if (!ok) { toast(`delete failed (${status}): ${errText(data)}`, "err"); return; }
   if (CURRENT_MODULE === name) CURRENT_MODULE = null;
   await refreshProject();
   if (PROJECT.modules.length && !CURRENT_MODULE) selectModule(PROJECT.modules[0].name);
+  toast(`module "${name}" deleted`, "ok");
 }
 
 function errText(data) {

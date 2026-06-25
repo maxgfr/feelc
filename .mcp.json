@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "feelc": {
+      "command": "feelc",
+      "args": ["mcp"]
+    }
+  }
+}

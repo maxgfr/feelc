@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -217,6 +219,7 @@ Usage:
   feelc serve  --rules <file.rules> [--addr :8080] [--watch] [--strict] [--ui]
   feelc serve  --project <dir> [--addr :8080] [--watch] [--strict] [--ui] [--allow-edit]
   feelc mcp                          # MCP server over stdio (verify/run/explain/… as agent tools)
+  feelc mcp install [--target project|claude-desktop|claude-code] [--print] [--force]
   feelc healthcheck [--addr :8080]
   feelc version
 
@@ -847,11 +850,157 @@ func cmdServe(args []string) error {
 // verify/run/explain/required/check/graph/model as tools so any MCP-capable agent can author rules and
 // let the deterministic engine decide outcomes (ADR 0026). No flags: the transport is stdin/stdout.
 func cmdMCP(args []string) error {
+	// `feelc mcp install …` wires the server into an agent config; bare `feelc mcp` serves over stdio.
+	if len(args) > 0 && args[0] == "install" {
+		return cmdMCPInstall(args[1:])
+	}
 	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	return mcp.Serve(os.Stdin, os.Stdout, Version)
+}
+
+// cmdMCPInstall registers the feelc MCP server into an agent's config file by merging a
+// {"mcpServers":{"feelc":{"command":…,"args":["mcp"]}}} entry, without clobbering existing
+// servers or sibling keys. Targets: a Claude Code project's .mcp.json (default), the user-scope
+// ~/.claude.json, or Claude Desktop's per-OS claude_desktop_config.json. Idempotent: re-running is
+// a no-op unless --force. --print emits the JSON snippet and writes nothing.
+func cmdMCPInstall(args []string) error {
+	fs := flag.NewFlagSet("mcp install", flag.ContinueOnError)
+	target := fs.String("target", "project", "where to write: project | claude-desktop | claude-code")
+	pathOverride := fs.String("path", "", "config file to write/merge (overrides --target)")
+	name := fs.String("name", "feelc", "MCP server key name")
+	command := fs.String("command", "", "command to invoke (default: this binary's absolute path)")
+	printOnly := fs.Bool("print", false, "print the merged JSON to stdout and write nothing")
+	force := fs.Bool("force", false, "overwrite an existing server entry with the same name")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	cmdPath := *command
+	if cmdPath == "" {
+		// Prefer this binary's absolute path so the config keeps working even if `feelc` is not on
+		// the MCP client's PATH; fall back to a bare "feelc" if the executable path is unavailable.
+		if exe, err := os.Executable(); err == nil {
+			cmdPath = exe
+		} else {
+			cmdPath = "feelc"
+		}
+	}
+
+	// --print is read-only: emit the canonical snippet (merged into an empty base) and stop.
+	if *printOnly {
+		merged, _, err := mergeMCPConfig(nil, *name, cmdPath, true)
+		if err != nil {
+			return err
+		}
+		_, err = os.Stdout.Write(merged)
+		return err
+	}
+
+	cfgPath, err := resolveConfigPath(*target, *pathOverride)
+	if err != nil {
+		return err
+	}
+	existing, err := os.ReadFile(cfgPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		existing = nil // missing file → fresh {} base
+	}
+	merged, changed, err := mergeMCPConfig(existing, *name, cmdPath, *force)
+	if err != nil {
+		return fmt.Errorf("%s: %w", cfgPath, err)
+	}
+	if !changed {
+		fmt.Fprintf(os.Stderr, "feelc: %q already present in %s (use --force to overwrite)\n", *name, cfgPath)
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(cfgPath, merged, 0o644); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "feelc: wrote %q MCP server to %s\n", *name, cfgPath)
+	return nil
+}
+
+// mergeMCPConfig adds (or, with force, overwrites) mcpServers[name] = {command, args:["mcp"]} into the
+// given JSON config (nil/empty ⇒ a fresh {} base), preserving every other key and sibling server. It
+// returns the indented JSON (trailing newline), whether anything changed, and an error if `existing`
+// is not valid JSON. Idempotent: when the entry is already present and --force is off, it is a no-op
+// (changed=false) and the input config is returned re-serialized unchanged.
+func mergeMCPConfig(existing []byte, name, command string, force bool) ([]byte, bool, error) {
+	root := map[string]any{}
+	if len(bytes.TrimSpace(existing)) > 0 {
+		if err := json.Unmarshal(existing, &root); err != nil {
+			return nil, false, fmt.Errorf("not valid JSON: %w", err)
+		}
+	}
+	servers, _ := root["mcpServers"].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+	if _, present := servers[name]; present && !force {
+		out, err := json.MarshalIndent(root, "", "  ")
+		if err != nil {
+			return nil, false, err
+		}
+		return append(out, '\n'), false, nil
+	}
+	servers[name] = map[string]any{"command": command, "args": []any{"mcp"}}
+	root["mcpServers"] = servers
+	out, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return nil, false, err
+	}
+	return append(out, '\n'), true, nil
+}
+
+// resolveConfigPath maps a --target (or an explicit --path override) to the config file to merge.
+func resolveConfigPath(target, override string) (string, error) {
+	if override != "" {
+		return override, nil
+	}
+	switch target {
+	case "project", "":
+		return ".mcp.json", nil // Claude Code project scope (CWD)
+	case "claude-code":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(home, ".claude.json"), nil // Claude Code user scope
+	case "claude-desktop":
+		return claudeDesktopConfigPath()
+	default:
+		return "", fmt.Errorf("unknown --target %q (want project | claude-desktop | claude-code)", target)
+	}
+}
+
+// claudeDesktopConfigPath returns the per-OS Claude Desktop config file location.
+func claudeDesktopConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"), nil
+	case "windows":
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "Claude", "claude_desktop_config.json"), nil
+		}
+		return filepath.Join(home, "AppData", "Roaming", "Claude", "claude_desktop_config.json"), nil
+	default: // linux and other unix
+		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+			return filepath.Join(xdg, "Claude", "claude_desktop_config.json"), nil
+		}
+		return filepath.Join(home, ".config", "Claude", "claude_desktop_config.json"), nil
+	}
 }
 
 // cmdHealthcheck probes the local /readyz endpoint and exits 0 (ready) or non-zero otherwise. It is the

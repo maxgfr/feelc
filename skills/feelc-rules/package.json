@@ -5,11 +5,11 @@
   "license": "Apache-2.0",
   "type": "module",
   "author": "maxgfr",
-  "homepage": "https://github.com/maxgfr/feelc/tree/main/skill",
+  "homepage": "https://github.com/maxgfr/feelc/tree/main/skills/feelc-rules",
   "repository": {
     "type": "git",
     "url": "https://github.com/maxgfr/feelc.git",
-    "directory": "skill"
+    "directory": "skills/feelc-rules"
   },
   "keywords": [
     "feelc",

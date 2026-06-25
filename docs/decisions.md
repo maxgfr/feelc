@@ -31,6 +31,7 @@ Record (the detailed context + consequences live in [`docs/adr/`](https://github
 | [0024](adr/0024-batch-evaluate-api.md) | Batch-evaluate API (`evaluateBatch`) | Amortize the JS↔WASM JSON boundary across N rows (measured 2.1–2.3× for bulk/reactive eval). |
 | [0025](adr/0025-bounded-quantifiers.md) | Bounded quantifiers `every/some of {…} satisfies ?` | Quantify over a fixed scalar tuple (verifiable) without a list type or unbounded iteration. |
 | [0026](adr/0026-mcp-server.md) | MCP server (`feelc mcp`) | Expose verify/run/explain/… as MCP tools so any agent can author + deterministically verify rules. |
+| [0027](adr/0027-skill-distribution.md) | Skill distribution (skills.sh / plugin / `feelc mcp install`) | Make the skill one-liner-installable: `skills/feelc-rules/` flat layout, a Claude Code plugin marketplace, and an idempotent MCP config installer. |
 
 ADRs are append-only: an accepted decision is never rewritten — a later change is a dated note on the same
 ADR or a new superseding one.

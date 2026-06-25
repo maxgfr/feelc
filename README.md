@@ -198,12 +198,22 @@ or `ANTHROPIC_API_KEY` env), AI endpoints return `501` and the engine still work
 feelc serve --ui            # then open http://localhost:8080/ (no --rules needed)
 ```
 
-**2. Claude Code + the bundled skill.** A **portable skill** (Claude Code, Codex, Cursor…) is bundled
-in [`skill/`](skill/): it guides an agent through the *interview → DSL → `verify` → `run` → iterate*
-flow, using `feelc` as a deterministic oracle. See [`skill/SKILL.md`](skill/SKILL.md).
+**2. Claude Code + the bundled skill.** A **portable skill** (Claude Code, Codex, Cursor…) lives in
+[`skills/feelc-rules/`](skills/feelc-rules/): it guides an agent through the *interview → DSL →
+`verify` → `run` → iterate* flow, using `feelc` as a deterministic oracle. See
+[`skills/feelc-rules/SKILL.md`](skills/feelc-rules/SKILL.md). Install it any of three ways:
 
 ```sh
-node skill/scripts/feelc-skill.mjs verify --rules examples/credit/credit.rules --json
+npx skills add maxgfr/feelc        # 1. skills.sh — drops the skill into .claude/skills/feelc-rules
+# 2. as a Claude Code plugin (skill + MCP server), from inside Claude Code:
+#      /plugin marketplace add maxgfr/feelc   then   /plugin install feelc@feelc
+feelc mcp install                  # 3. wire the MCP server into ./.mcp.json (or --target claude-desktop)
+```
+
+Or run the skill's wrapper directly (it locates the `feelc` binary itself):
+
+```sh
+node skills/feelc-rules/scripts/feelc-skill.mjs verify --rules examples/credit/credit.rules --json
 ```
 
 ## Example

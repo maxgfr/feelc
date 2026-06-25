@@ -93,8 +93,9 @@ split — the AI writes the `.rules`; the deterministic engine is the oracle:
   LLM proposes, the VM disposes" — the model can't hallucinate a rule outcome.
 - **Deterministic & exact at runtime.** No LLM in the decision path: same inputs → same auditable output,
   bit-for-bit, replayable. Generated rules are trustworthy because the *engine*, not the model, executes.
-- **A ready agent skill.** `skill/` is a portable Claude/Codex/Cursor skill with the red→green authoring
-  loop and references; the `feelc` binary is the deterministic tool.
+- **A ready agent skill.** `skills/feelc-rules/` is a portable Claude/Codex/Cursor skill (`npx skills add
+  maxgfr/feelc`, or a Claude Code `/plugin`) with the red→green authoring loop and references; the `feelc`
+  binary is the deterministic tool.
 - **Runs anywhere the agent's app runs.** `feelc` (WASM) executes the generated rules in the
   browser/Node/edge with no server — byte-identical to the CLI ([embedding.md](embedding.html)).
 - **Reviewable artifacts.** `.rules` is plain text, git-diffable, and compiles to a content-hashed

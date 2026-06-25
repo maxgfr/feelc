@@ -20,7 +20,7 @@ import (
 )
 
 // SystemPrompt is the authoring guidance handed to the model. It is the single source of truth for
-// what the LLM may emit; it must stay in sync with docs/feel-subset.md and skill/references/*.
+// what the LLM may emit; it must stay in sync with docs/feel-subset.md and skills/feelc-rules/references/*.
 //
 //go:embed prompt/system.md
 var SystemPrompt string

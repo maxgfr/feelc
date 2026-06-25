@@ -5,19 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>feelc — AI-native, deterministic business-rules engine</title>
   <meta name="description" content="A business-rules language (DMN/FEEL) compiled to a deterministic engine. AI writes the rules; the engine executes, verifies and explains them — 100% reproducible, runnable right in your browser." />
+  <script>(function(){var t;try{var q=new URLSearchParams(location.search).get('theme');t=(q==='light'||q==='dark')?q:localStorage.getItem('feelc.theme');}catch(e){}if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';document.documentElement.dataset.theme=t;})();</script>
+  <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   <nav class="nav">
-    <div class="brand">feelc<span> · rule engine</span></div>
+    <span class="brand">
+      <svg class="wordmark" viewBox="0 0 24 24" width="20" height="20" role="img" aria-label="feelc logo"><rect class="mk-bg" x="2" y="2" width="20" height="20" rx="5"/><path class="mk-ck" d="M7 12.4l3.2 3.2L17 8.8" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      feelc<span> · rule engine</span>
+    </span>
     <div class="links">
       <a href="playground/">Playground</a>
       <a href="docs/">Docs</a>
       <a href="https://github.com/maxgfr/feelc" target="_blank" rel="noopener">GitHub</a>
       <a class="cta" href="playground/">Try it →</a>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle light or dark theme" title="Toggle theme"><span class="icon-moon" aria-hidden="true">☾</span><span class="icon-sun" aria-hidden="true">☀</span></button>
     </div>
   </nav>
 
+  <main id="main">
   <section class="hero">
     <h1>Business rules that an AI writes and a machine proves.</h1>
     <p class="tagline">
@@ -33,6 +41,7 @@
   </section>
 
   <section class="features">
+    <h2 class="visually-hidden">Features</h2>
     <div class="feature"><h3>Deterministic by construction</h3><p>Exact decimals, no floats, no LLM on the execution path. The same inputs always give the same output — bit-for-bit, on every platform.</p></div>
     <div class="feature"><h3>Formally verified</h3><p>The engine proves completeness (no uncovered case), absence of conflicts, and flags dead rules — with concrete counter-examples.</p></div>
     <div class="feature"><h3>AI-authored</h3><p>Describe rules in natural language and let an LLM draft the model; the engine compiles, verifies and repairs it. AI proposes, the VM disposes.</p></div>
@@ -59,8 +68,10 @@ decision discount_pct : number {
 }</code></pre>
   </section>
 
+  </main>
   <footer class="site">
     feelc · Apache-2.0 · <a href="https://github.com/maxgfr/feelc" target="_blank" rel="noopener">github.com/maxgfr/feelc</a>
   </footer>
+  <script>(function(){var t=document.getElementById('theme-toggle');if(t)t.addEventListener('click',function(){var d=document.documentElement,n=d.dataset.theme==='light'?'dark':'light';d.dataset.theme=n;try{localStorage.setItem('feelc.theme',n);}catch(e){}});})();</script>
 </body>
 </html>

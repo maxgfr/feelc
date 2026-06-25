@@ -128,7 +128,7 @@ func TestChatAPIError(t *testing.T) {
 }
 
 // TestSystemPromptSync guards against the embedded prompt drifting away from the canonical v2
-// subset (docs/feel-subset.md, skill/references/*). If a construct is renamed there, update here too.
+// subset (docs/feel-subset.md, skills/feelc-rules/references/*). If a construct is renamed there, update here too.
 func TestSystemPromptSync(t *testing.T) {
 	for _, tok := range []string{"```rules", "hit:", "collect sum", "round(x)", "default", "not(", "unique", "literal"} {
 		if !strings.Contains(SystemPrompt, tok) {

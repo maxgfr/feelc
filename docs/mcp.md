@@ -14,7 +14,16 @@ feelc mcp        # speaks JSON-RPC 2.0 over stdin/stdout (newline-delimited); no
 
 ## Configure a client
 
-Claude Desktop / Code (`claude_desktop_config.json` or `.mcp.json`):
+**One command** — `feelc mcp install` writes/merges the config for you, idempotently (it never clobbers
+other servers or sibling keys, and points at this binary's absolute path):
+
+```bash
+feelc mcp install                          # → ./.mcp.json (Claude Code project scope)
+feelc mcp install --target claude-desktop  # → the per-OS claude_desktop_config.json
+feelc mcp install --print                  # just print the JSON snippet, write nothing
+```
+
+Or add it by hand — Claude Desktop / Code (`claude_desktop_config.json` or `.mcp.json`):
 
 ```json
 {
@@ -24,8 +33,9 @@ Claude Desktop / Code (`claude_desktop_config.json` or `.mcp.json`):
 }
 ```
 
-Any client that launches a stdio MCP server works the same way — point it at the `feelc` binary with
-the `mcp` argument.
+Any client that launches a stdio MCP server works the same way — point it at the `feelc` binary with the
+`mcp` argument. Installing the [Claude Code plugin](https://github.com/maxgfr/feelc) (`/plugin install
+feelc@feelc`) wires this server up automatically.
 
 ## Tools
 

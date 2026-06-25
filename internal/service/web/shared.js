@@ -136,9 +136,9 @@ function renderGraph(container, graph) {
 
   const controls = document.createElement("div");
   controls.className = "graph-controls";
-  const mkBtn = (label, title, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.title = title; b.onclick = fn; controls.appendChild(b); };
+  const mkBtn = (label, title, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.title = title; b.setAttribute("aria-label", title); b.onclick = fn; controls.appendChild(b); };
 
-  const svg = svgEl("svg", { class: "drg", width: "100%", viewBox: `0 0 ${W} ${H}` });
+  const svg = svgEl("svg", { class: "drg", width: "100%", viewBox: `0 0 ${W} ${H}`, role: "group", "aria-label": "Decision-requirements graph — inputs and decisions" });
   const defs = svgEl("defs", {});
   const mkMarker = (id, color) => { const m = svgEl("marker", { id, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }); m.appendChild(svgEl("path", { d: "M0,0 L10,5 L0,10 z", fill: color })); return m; };
   defs.appendChild(mkMarker("arrow", "#6b7785"));
@@ -166,7 +166,7 @@ function renderGraph(container, graph) {
     if (n.hitPolicy) rows.push(`hit policy: ${escapeHtml(n.hitPolicy)}`);
     if (n.line) rows.push(`source line ${n.line}`);
     if (n.findings && n.findings.length) rows.push(`<div class="gi-find">${n.findings.map((f) => "• " + escapeHtml(f)).join("<br/>")}</div>`);
-    inspect.innerHTML = `<button class="gi-close" type="button" title="close">×</button>` + rows.join("<br/>");
+    inspect.innerHTML = `<button class="gi-close" type="button" title="close" aria-label="Close inspector">×</button>` + rows.join("<br/>");
     inspect.querySelector(".gi-close").onclick = () => { inspect.hidden = true; };
     inspect.hidden = false;
   };
@@ -175,7 +175,11 @@ function renderGraph(container, graph) {
   nodes.forEach((n) => {
     const p = pos[n.id];
     if (!p) return;
-    const node = svgEl("g", { class: "gnode", transform: `translate(${p.x},${p.y})`, "data-name": n.name, "data-kind": n.kind });
+    const node = svgEl("g", {
+      class: "gnode", transform: `translate(${p.x},${p.y})`, "data-name": n.name, "data-kind": n.kind,
+      tabindex: "0", role: "button",
+      "aria-label": `${n.kind} ${n.local || n.name}` + (n.hitPolicy ? `, ${n.hitPolicy}` : "") + (n.findings && n.findings.length ? `, ${n.findings.length} finding(s)` : ""),
+    });
     const fill = sevFill[n.severity] || (n.kind === "input" ? "#243240" : "#1f6feb");
     const stroke = n.module ? modColor[n.module] : "#2a3340";
     const rect = svgEl("rect", { x: 0, y: 0, width: nodeW, height: nodeH, rx: n.kind === "input" ? 22 : 8, fill, stroke, "stroke-width": n.module ? "2" : "1", class: "gn-rect" });
@@ -193,6 +197,7 @@ function renderGraph(container, graph) {
     const sub = n.kind === "input" ? (n.type || "") : (n.hitPolicy || (n.decisionKind === "expression" ? "expr" : ""));
     if (sub) { const st = svgEl("text", { x: nodeW / 2, y: nodeH - 6, "text-anchor": "middle", fill: "#c5d0dc", "font-size": "9" }); st.textContent = sub; node.appendChild(st); }
     node.addEventListener("click", (ev) => { ev.stopPropagation(); selectNode(n); });
+    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); selectNode(n); } });
     svg.appendChild(node);
   });
   svg.addEventListener("click", () => { inspect.hidden = true; });

@@ -1,0 +1,15 @@
+{
+  "name": "feelc",
+  "description": "The feelc plugin: a deterministic DMN/FEEL business-rules engine for Claude Code (authoring skill + MCP server).",
+  "owner": {
+    "name": "maxgfr",
+    "url": "https://github.com/maxgfr"
+  },
+  "plugins": [
+    {
+      "name": "feelc",
+      "source": "./",
+      "description": "Author, verify and run deterministic DMN/FEEL business rules. Bundles the feelc-rules authoring skill and the feelc MCP server (verify/run/explain/check/graph as agent tools)."
+    }
+  ]
+}

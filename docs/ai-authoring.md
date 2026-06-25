@@ -36,16 +36,27 @@ one before the first request.
 
 ### 2. The portable skill (Claude Code, Codex, Cursor, …)
 
-A self-contained skill is bundled in [`skill/`](https://github.com/maxgfr/feelc/tree/main/skill). It guides
-a coding agent through the **interview → write → verify → run → iterate** loop, using the `feelc` binary as
-a **deterministic oracle** — the agent never decides a rule's outcome "in its head", it always runs feelc.
+A self-contained skill lives in
+[`skills/feelc-rules/`](https://github.com/maxgfr/feelc/tree/main/skills/feelc-rules). It guides a coding
+agent through the **interview → write → verify → run → iterate** loop, using the `feelc` binary as a
+**deterministic oracle** — the agent never decides a rule's outcome "in its head", it always runs feelc.
+
+Install it through any of three channels:
 
 ```sh
-node skill/scripts/feelc-skill.mjs verify --rules examples/credit/credit.rules --json
+npx skills add maxgfr/feelc                  # skills.sh → .claude/skills/feelc-rules
+# inside Claude Code: /plugin marketplace add maxgfr/feelc  then  /plugin install feelc@feelc
+feelc mcp install                            # wire the MCP server into ./.mcp.json
 ```
 
-See [`skill/SKILL.md`](https://github.com/maxgfr/feelc/blob/main/skill/SKILL.md) for the full flow,
-the supported subset, how to read the diagnostics, and the forbidden patterns.
+Or run the wrapper directly (it locates the `feelc` binary itself):
+
+```sh
+node skills/feelc-rules/scripts/feelc-skill.mjs verify --rules examples/credit/credit.rules --json
+```
+
+See [`skills/feelc-rules/SKILL.md`](https://github.com/maxgfr/feelc/blob/main/skills/feelc-rules/SKILL.md)
+for the full flow, the supported subset, how to read the diagnostics, and the forbidden patterns.
 
 ## The red→green loop (`POST /v1/ingest`)
 
