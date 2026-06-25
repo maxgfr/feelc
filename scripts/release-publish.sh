@@ -30,8 +30,20 @@ if [ -n "${NPM_TOKEN:-}" ]; then
   npm publish -w feelc --access public --provenance # fatal on failure — a configured publish must succeed
 else
   echo "npm: NPM_TOKEN not set — attempting OIDC trusted publishing for feelc@$VERSION"
-  if ! npm publish -w feelc --access public --provenance; then
-    echo "::error title=npm publish failed::feelc@$VERSION was NOT published (no NPM_TOKEN and OIDC trusted publishing is not configured/authorized — npm returned ENEEDAUTH). Fix: add an NPM_TOKEN automation secret (npmjs -> Access Tokens -> Generate -> Automation), OR configure OIDC trusted publishing (npmjs -> package feelc -> Trusted Publishing -> repo maxgfr/feelc, workflow npm.yml), then re-run the 'publish-npm' workflow. The cross-platform binaries were released."
+  # OIDC trusted publishing needs two things at runtime: a recent npm AND the GitHub Actions OIDC
+  # request env vars (granted by `permissions: id-token: write`). If those env vars are absent, npm
+  # SILENTLY skips the OIDC exchange and falls straight through to ENEEDAUTH — which looks identical
+  # to "no auth at all". Surface the npm version, registry and OIDC-env presence so the cause is
+  # unambiguous in the logs, and publish with --loglevel verbose so the registry's token-exchange
+  # response (the actual reason for any rejection) is visible.
+  echo "npm: version $(npm --version) | registry $(npm config get registry)"
+  if [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] && [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+    echo "npm: OIDC request env present — 'id-token: write' is in effect; npm will attempt the OIDC token exchange."
+  else
+    echo "::error title=OIDC env missing::ACTIONS_ID_TOKEN_REQUEST_URL/TOKEN are not set in this job, so npm cannot do OIDC trusted publishing (it will fail with ENEEDAUTH). The job needs 'permissions: id-token: write' AND must not be a context where GitHub withholds the OIDC token (e.g. a fork PR). This is a workflow/permissions issue, not an npmjs config issue."
+  fi
+  if ! npm publish -w feelc --access public --provenance --loglevel verbose; then
+    echo "::error title=npm publish failed::feelc@$VERSION was NOT published — npm returned ENEEDAUTH. Either (a) the OIDC request env was missing (see the annotation above — a workflow/permissions issue), or (b) the env was present but npmjs rejected the exchange because no trusted publisher matches repo maxgfr/feelc + workflow npm.yml on refs/heads/main (fix at npmjs -> package feelc -> Settings -> Trusted Publishing). Fallback: add an NPM_TOKEN automation secret (npmjs -> Access Tokens -> Generate -> Automation), then re-run the 'publish-npm' workflow. The cross-platform binaries were released."
     exit 0 # keep the binary release green; the ::error:: annotation surfaces the miss instead of hiding it
   fi
 fi
