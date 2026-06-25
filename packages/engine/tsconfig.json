@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    // TS 6 flags `baseUrl` (injected by tsup's dts build) as a deprecation error; this opts into the
+    // documented migration grace period until it is removed in TS 7. See https://aka.ms/ts6.
+    "ignoreDeprecations": "6.0",
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",

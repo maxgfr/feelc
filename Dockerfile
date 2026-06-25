@@ -8,7 +8,7 @@
 # UI are persisted back to the mounted volume; --watch hot-reloads external changes.
 
 # ---- build ----
-FROM golang:1.23-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 # Copy the whole module first: go.mod uses a local `replace` for the vendored feel fork
 # (./third_party/feel), so module resolution needs the tree present.

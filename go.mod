@@ -1,6 +1,6 @@
 module github.com/maxgfr/feelc
 
-go 1.23
+go 1.25.0
 
 require (
 	github.com/cockroachdb/apd/v3 v3.2.3
@@ -9,9 +9,9 @@ require (
 )
 
 require (
-	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
-	golang.org/x/sys v0.13.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
 )
 
 // Vendored fork: exports FunCall.Args (FunCallArg{Name, Arg}) to read invocation arguments
