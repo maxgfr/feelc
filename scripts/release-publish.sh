@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Publish the feelc npm package for a release. Called by .releaserc.json's exec publishCmd:
+# Publish the feelc npm package for a release. Called by .releaserc.json's @semantic-release/exec
+# publishCmd (after the tag + goreleaser binary build, before @semantic-release/github cuts the Release):
 #   scripts/release-publish.sh <version>
 #
 # Auth precedence:

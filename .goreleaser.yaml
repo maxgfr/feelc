@@ -31,6 +31,10 @@ changelog:
   disable: true
 
 release:
+  # goreleaser only BUILDS the cross-platform binaries into dist/; it does NOT create the GitHub Release.
+  # @semantic-release/github owns the Release (rich Conventional-Commits notes) and uploads dist/* as
+  # assets. This avoids two tools racing to create the same vX.Y.Z release.
+  disable: "true"
   github:
     owner: maxgfr
     name: feelc

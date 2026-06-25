@@ -1,10 +1,10 @@
 name: npm
 
 # CI on PRs, and the FULL release on push to main. On main, semantic-release computes the next version
-# from Conventional Commits, then (via the exec plugin) tags it, goreleaser publishes the cross-platform
-# binaries, and `feelc` is published to npm via OIDC trusted publishing — no token, with provenance.
-# OIDC trusted publishing is configured against THIS workflow file (npm.yml), which is why the publish
-# lives here. See RELEASING.md.
+# from Conventional Commits, writes & pushes CHANGELOG.md, tags it, goreleaser builds the cross-platform
+# binaries, a GitHub Release is created (with the generated notes + the binaries as assets), and `feelc`
+# is published to npm via OIDC trusted publishing — no token, with provenance. OIDC trusted publishing is
+# configured against THIS workflow file (npm.yml), which is why the publish lives here. See RELEASING.md.
 
 on:
   push:
@@ -67,12 +67,14 @@ jobs:
         with:
           node-version: 22
       - run: npm install -g npm@latest # OIDC trusted publishing needs a recent npm (>= 11.5.1)
-      - run: npm ci
-      # semantic-release (exec plugin): tag + push -> goreleaser binaries -> scripts/release-publish.sh
-      # bumps the npm version and publishes feelc (NPM_TOKEN automation token if set, else OIDC). The npm
-      # bump happens AFTER goreleaser so the tree is clean when goreleaser builds from the tag.
-      - name: Release (version, tag, binaries, npm publish)
-        run: npx --yes -p semantic-release -p @semantic-release/exec semantic-release
+      - run: npm ci # installs the semantic-release plugin chain (root devDependencies)
+      # semantic-release runs the whole release: commit-analyzer + release-notes-generator compute the
+      # version and notes; @semantic-release/changelog writes CHANGELOG.md; @semantic-release/git commits
+      # & pushes it to main ([skip ci]); the exec plugin tags, runs goreleaser (binaries -> dist/) then
+      # scripts/release-publish.sh (npm version bump + publish, NPM_TOKEN automation token if set, else
+      # OIDC); @semantic-release/github creates the GitHub Release with the notes and uploads dist/* assets.
+      - name: Release (version, changelog, tag, binaries, GitHub release, npm publish)
+        run: npx semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # tag/changelog push + GitHub Release (contents: write)
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }} # optional npm "Automation" token (bypasses 2FA); empty -> OIDC
