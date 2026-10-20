@@ -41,12 +41,12 @@ A self-contained skill lives in
 agent through the **interview → write → verify → run → iterate** loop, using the `feelc` binary as a
 **deterministic oracle** — the agent never decides a rule's outcome "in its head", it always runs feelc.
 
-Install it through any of three channels:
+Install it with [`npx skills`](https://github.com/vercel-labs/skills) (any agent; `-g` global, `-a
+<agent>` to target one), then register the MCP server with your agent (see [mcp.md](mcp.md)):
 
 ```sh
-npx skills add maxgfr/feelc                  # skills.sh → .claude/skills/feelc-rules
-# inside Claude Code: /plugin marketplace add maxgfr/feelc  then  /plugin install feelc@feelc
-feelc mcp install                            # wire the MCP server into ./.mcp.json
+npx skills add maxgfr/feelc                  # the skill (update later with: npx skills update)
+claude mcp add feelc -- feelc mcp            # MCP server: Claude Code (or codex / opencode mcp add …)
 ```
 
 Or run the wrapper directly (it locates the `feelc` binary itself):

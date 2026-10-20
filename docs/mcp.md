@@ -34,8 +34,19 @@ Or add it by hand — Claude Desktop / Code (`claude_desktop_config.json` or `.m
 ```
 
 Any client that launches a stdio MCP server works the same way — point it at the `feelc` binary with the
-`mcp` argument. Installing the [Claude Code plugin](https://github.com/maxgfr/feelc) (`/plugin install
-feelc@feelc`) wires this server up automatically.
+`mcp` argument. Per-agent one-liners:
+
+```sh
+claude mcp add feelc -- feelc mcp      # Claude Code
+codex mcp add feelc -- feelc mcp       # Codex (~/.codex/config.toml)
+opencode mcp add feelc -- feelc mcp    # OpenCode (--global for ~/.config/opencode/opencode.json)
+```
+
+OpenCode by hand (`opencode.json`, `.opencode/opencode.json` or `~/.config/opencode/opencode.json`):
+
+```json
+{ "mcp": { "servers": { "feelc": { "type": "local", "command": ["feelc", "mcp"] } } } }
+```
 
 ## Tools
 
