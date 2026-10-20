@@ -257,4 +257,4 @@ Apache-2.0. See [LICENSE](./LICENSE).
 
 These skills run when explicitly invoked: `feelc-rules`. Use `$name` in Codex or `/name` in Claude Code and OpenCode (with the plugin namespace when installed as a Claude plugin).
 
-The skill bundle disables implicit selection: Claude Code and OpenCode read `disable-model-invocation: true` from `SKILL.md`, and Codex reads `allow_implicit_invocation: false` from `agents/openai.yaml`.
+The skill bundle disables implicit selection: Claude Code and OpenCode read `disable-model-invocation: true` from `SKILL.md`.
