@@ -76,9 +76,9 @@ registries discover automatically, so the one-liner just works:
 npx skills add maxgfr/feelc
 ```
 
-The same repo is also a Claude Code **plugin marketplace** (`.claude-plugin/`): from inside Claude Code,
-`/plugin marketplace add maxgfr/feelc` then `/plugin install feelc@feelc` installs the skill **and** the
-MCP server in one step. The MCP server alone can be wired with `feelc mcp install`.
+`npx skills` installs the skill only; the MCP server is registered per agent (`claude mcp add feelc --
+feelc mcp`, `codex mcp add feelc -- feelc mcp`, `opencode mcp add feelc -- feelc mcp`, or `feelc mcp
+install` for `.mcp.json`) — see [docs/mcp.md](docs/mcp.md).
 
 The skill never decides a result "off the top of its head": the `feelc` binary (compile / verify / run /
 check / explain) is the **deterministic oracle**.

@@ -198,17 +198,28 @@ or `ANTHROPIC_API_KEY` env), AI endpoints return `501` and the engine still work
 feelc serve --ui            # then open http://localhost:8080/ (no --rules needed)
 ```
 
-**2. Claude Code + the bundled skill.** A **portable skill** (Claude Code, Codex, Cursor…) lives in
+**2. Coding agents + the bundled skill.** A **portable skill** (Claude Code, Codex, OpenCode, Cursor…) lives in
 [`skills/feelc-rules/`](skills/feelc-rules/): it guides an agent through the *interview → DSL →
 `verify` → `run` → iterate* flow, using `feelc` as a deterministic oracle. See
-[`skills/feelc-rules/SKILL.md`](skills/feelc-rules/SKILL.md). Install it any of three ways:
+[`skills/feelc-rules/SKILL.md`](skills/feelc-rules/SKILL.md). Install it with [`npx skills`](https://github.com/vercel-labs/skills):
 
 ```sh
-npx skills add maxgfr/feelc        # 1. skills.sh — drops the skill into .claude/skills/feelc-rules
-# 2. as a Claude Code plugin (skill + MCP server), from inside Claude Code:
-#      /plugin marketplace add maxgfr/feelc   then   /plugin install feelc@feelc
-feelc mcp install                  # 3. wire the MCP server into ./.mcp.json (or --target claude-desktop)
+npx skills add maxgfr/feelc        # any agent (Claude Code, Codex, OpenCode, Cursor…); -g for global, -a <agent> to pick one
+npx skills update                  # later: pull the latest skill
 ```
+
+**MCP server.** `npx skills` installs the skill only; register `feelc mcp` with your agent separately:
+
+```sh
+claude mcp add feelc -- feelc mcp      # Claude Code (or: feelc mcp install → ./.mcp.json, --target claude-desktop)
+codex mcp add feelc -- feelc mcp       # Codex
+opencode mcp add feelc -- feelc mcp    # OpenCode (--global for ~/.config/opencode/opencode.json)
+```
+
+OpenCode by hand, in `opencode.json` / `.opencode/opencode.json`:
+`{"mcp":{"servers":{"feelc":{"type":"local","command":["feelc","mcp"]}}}}`.
+
+Installed the old Claude Code plugin? Run `/plugin uninstall feelc@feelc` and `/plugin marketplace remove feelc`, then use the commands above.
 
 Or run the skill's wrapper directly (it locates the `feelc` binary itself):
 
