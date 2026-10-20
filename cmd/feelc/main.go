@@ -16,7 +16,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -219,7 +218,7 @@ Usage:
   feelc serve  --rules <file.rules> [--addr :8080] [--watch] [--strict] [--ui]
   feelc serve  --project <dir> [--addr :8080] [--watch] [--strict] [--ui] [--allow-edit]
   feelc mcp                          # MCP server over stdio (verify/run/explain/… as agent tools)
-  feelc mcp install [--target project|claude-desktop|claude-code] [--print] [--force]
+  feelc mcp install [--print] [--path <file> [--force]] [--name feelc] [--command <path>]
   feelc healthcheck [--addr :8080]
   feelc version
 
@@ -850,7 +849,7 @@ func cmdServe(args []string) error {
 // verify/run/explain/required/check/graph/model as tools so any MCP-capable agent can author rules and
 // let the deterministic engine decide outcomes (ADR 0026). No flags: the transport is stdin/stdout.
 func cmdMCP(args []string) error {
-	// `feelc mcp install …` wires the server into an agent config; bare `feelc mcp` serves over stdio.
+	// `feelc mcp install …` prints (or, with --path, merges) the client config; bare `feelc mcp` serves over stdio.
 	if len(args) > 0 && args[0] == "install" {
 		return cmdMCPInstall(args[1:])
 	}
@@ -861,21 +860,31 @@ func cmdMCP(args []string) error {
 	return mcp.Serve(os.Stdin, os.Stdout, Version)
 }
 
-// cmdMCPInstall registers the feelc MCP server into an agent's config file by merging a
-// {"mcpServers":{"feelc":{"command":…,"args":["mcp"]}}} entry, without clobbering existing
-// servers or sibling keys. Targets: a Claude Code project's .mcp.json (default), the user-scope
-// ~/.claude.json, or Claude Desktop's per-OS claude_desktop_config.json. Idempotent: re-running is
-// a no-op unless --force. --print emits the JSON snippet and writes nothing.
+// cmdMCPInstall wires the feelc MCP server into an agent without assuming which agent (ADR 0029).
+// With --path it merges a {"mcpServers":{"feelc":{"command":…,"args":["mcp"]}}} entry into that JSON
+// file, without clobbering existing servers or sibling keys (idempotent: a no-op unless --force).
+// Without --path it writes nothing: it prints that snippet on stdout and the per-agent registration
+// commands (Claude Code, Codex, OpenCode) on stderr. --print emits the snippet alone.
 func cmdMCPInstall(args []string) error {
+	for _, a := range args {
+		if a == "--target" || a == "-target" || strings.HasPrefix(a, "--target=") || strings.HasPrefix(a, "-target=") {
+			return fmt.Errorf("mcp install: --target was removed; use --path <file> for any mcpServers JSON file, or run `feelc mcp install` for the per-agent commands")
+		}
+	}
 	fs := flag.NewFlagSet("mcp install", flag.ContinueOnError)
-	target := fs.String("target", "project", "where to write: project | claude-desktop | claude-code")
-	pathOverride := fs.String("path", "", "config file to write/merge (overrides --target)")
+	pathFlag := fs.String("path", "", "mcpServers JSON config file to write/merge (default: write nothing, print instructions)")
 	name := fs.String("name", "feelc", "MCP server key name")
 	command := fs.String("command", "", "command to invoke (default: this binary's absolute path)")
-	printOnly := fs.Bool("print", false, "print the merged JSON to stdout and write nothing")
-	force := fs.Bool("force", false, "overwrite an existing server entry with the same name")
+	printOnly := fs.Bool("print", false, "print the mcpServers JSON snippet to stdout and write nothing")
+	force := fs.Bool("force", false, "with --path: overwrite an existing server entry with the same name")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("mcp install: unexpected argument %q", fs.Arg(0))
+	}
+	if *printOnly && *pathFlag != "" {
+		return fmt.Errorf("mcp install: --print and --path are exclusive (--print writes nothing)")
 	}
 
 	cmdPath := *command
@@ -889,20 +898,21 @@ func cmdMCPInstall(args []string) error {
 		}
 	}
 
-	// --print is read-only: emit the canonical snippet (merged into an empty base) and stop.
-	if *printOnly {
-		merged, _, err := mergeMCPConfig(nil, *name, cmdPath, true)
+	if *pathFlag == "" {
+		snippet, _, err := mergeMCPConfig(nil, *name, cmdPath, true)
 		if err != nil {
 			return err
 		}
-		_, err = os.Stdout.Write(merged)
-		return err
+		if _, err := os.Stdout.Write(snippet); err != nil {
+			return err
+		}
+		if !*printOnly {
+			fmt.Fprint(os.Stderr, mcpAgentInstructions(*name, cmdPath))
+		}
+		return nil
 	}
 
-	cfgPath, err := resolveConfigPath(*target, *pathOverride)
-	if err != nil {
-		return err
-	}
+	cfgPath := *pathFlag
 	existing, err := os.ReadFile(cfgPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -926,6 +936,35 @@ func cmdMCPInstall(args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "feelc: wrote %q MCP server to %s\n", *name, cfgPath)
 	return nil
+}
+
+// mcpAgentInstructions renders the per-agent commands that register the server, printed by
+// `feelc mcp install` when no --path is given. Every agent owns its own config format and location,
+// so feelc names the agent's own command instead of writing into any one agent's files.
+func mcpAgentInstructions(name, command string) string {
+	cmd := shellQuote(command)
+	var b strings.Builder
+	b.WriteString("\nAdd the snippet above to any client that reads an mcpServers JSON file (or merge it with\n")
+	b.WriteString("feelc mcp install --path <file>), or register the server with your agent:\n\n")
+	for _, agent := range []string{"claude", "codex", "opencode"} {
+		fmt.Fprintf(&b, "  %s mcp add %s -- %s mcp\n", agent, name, cmd)
+	}
+	return b.String()
+}
+
+// shellQuote single-quotes s for a POSIX shell when it holds anything beyond a safe path charset.
+func shellQuote(s string) string {
+	safe := s != ""
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("/._-+:@%=,", r)) {
+			safe = false
+			break
+		}
+	}
+	if safe {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // mergeMCPConfig adds (or, with force, overwrites) mcpServers[name] = {command, args:["mcp"]} into the
@@ -958,49 +997,6 @@ func mergeMCPConfig(existing []byte, name, command string, force bool) ([]byte, 
 		return nil, false, err
 	}
 	return append(out, '\n'), true, nil
-}
-
-// resolveConfigPath maps a --target (or an explicit --path override) to the config file to merge.
-func resolveConfigPath(target, override string) (string, error) {
-	if override != "" {
-		return override, nil
-	}
-	switch target {
-	case "project", "":
-		return ".mcp.json", nil // Claude Code project scope (CWD)
-	case "claude-code":
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(home, ".claude.json"), nil // Claude Code user scope
-	case "claude-desktop":
-		return claudeDesktopConfigPath()
-	default:
-		return "", fmt.Errorf("unknown --target %q (want project | claude-desktop | claude-code)", target)
-	}
-}
-
-// claudeDesktopConfigPath returns the per-OS Claude Desktop config file location.
-func claudeDesktopConfigPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"), nil
-	case "windows":
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, "Claude", "claude_desktop_config.json"), nil
-		}
-		return filepath.Join(home, "AppData", "Roaming", "Claude", "claude_desktop_config.json"), nil
-	default: // linux and other unix
-		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-			return filepath.Join(xdg, "Claude", "claude_desktop_config.json"), nil
-		}
-		return filepath.Join(home, ".config", "Claude", "claude_desktop_config.json"), nil
-	}
 }
 
 // cmdHealthcheck probes the local /readyz endpoint and exits 0 (ready) or non-zero otherwise. It is the

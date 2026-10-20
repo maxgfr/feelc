@@ -211,9 +211,10 @@ npx skills update                  # later: pull the latest skill
 **MCP server.** `npx skills` installs the skill only; register `feelc mcp` with your agent separately:
 
 ```sh
-claude mcp add feelc -- feelc mcp      # Claude Code (or: feelc mcp install → ./.mcp.json, --target claude-desktop)
+claude mcp add feelc -- feelc mcp      # Claude Code
 codex mcp add feelc -- feelc mcp       # Codex
 opencode mcp add feelc -- feelc mcp    # OpenCode (--global for ~/.config/opencode/opencode.json)
+feelc mcp install                      # print the mcpServers JSON + these commands; --path <file> merges it into a file
 ```
 
 OpenCode by hand, in `opencode.json` / `.opencode/opencode.json`:

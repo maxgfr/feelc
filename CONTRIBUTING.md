@@ -77,8 +77,8 @@ npx skills add maxgfr/feelc
 ```
 
 `npx skills` installs the skill only; the MCP server is registered per agent (`claude mcp add feelc --
-feelc mcp`, `codex mcp add feelc -- feelc mcp`, `opencode mcp add feelc -- feelc mcp`, or `feelc mcp
-install` for `.mcp.json`) — see [docs/mcp.md](docs/mcp.md).
+feelc mcp`, `codex mcp add feelc -- feelc mcp`, `opencode mcp add feelc -- feelc mcp`; `feelc mcp
+install` prints them and the `mcpServers` JSON) — see [docs/mcp.md](docs/mcp.md).
 
 The skill never decides a result "off the top of its head": the `feelc` binary (compile / verify / run /
 check / explain) is the **deterministic oracle**.

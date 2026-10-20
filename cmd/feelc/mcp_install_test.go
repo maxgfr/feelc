@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -125,22 +126,90 @@ func TestMergeMCPConfig_InvalidJSON(t *testing.T) {
 	}
 }
 
-func TestResolveConfigPath(t *testing.T) {
-	if p, err := resolveConfigPath("project", ""); err != nil || p != ".mcp.json" {
-		t.Errorf("project target = %q, %v; want .mcp.json", p, err)
+func TestMCPAgentInstructions(t *testing.T) {
+	got := mcpAgentInstructions("feelc", "/usr/local/bin/feelc")
+	for _, want := range []string{
+		"claude mcp add feelc -- /usr/local/bin/feelc mcp",
+		"codex mcp add feelc -- /usr/local/bin/feelc mcp",
+		"opencode mcp add feelc -- /usr/local/bin/feelc mcp",
+		"--path <file>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("instructions missing %q:\n%s", want, got)
+		}
 	}
-	if p, err := resolveConfigPath("anything", "/tmp/custom.json"); err != nil || p != "/tmp/custom.json" {
-		t.Errorf("override = %q, %v; want /tmp/custom.json", p, err)
+	if got := mcpAgentInstructions("feelc", "/Applications/My Tools/feelc"); !strings.Contains(got, "-- '/Applications/My Tools/feelc' mcp") {
+		t.Errorf("a path with a space must be shell-quoted:\n%s", got)
 	}
-	if _, err := resolveConfigPath("bogus", ""); err == nil {
-		t.Errorf("expected error on unknown target")
+}
+
+func TestShellQuote(t *testing.T) {
+	for in, want := range map[string]string{
+		"feelc":                "feelc",
+		"/usr/local/bin/feelc": "/usr/local/bin/feelc",
+		`C:\feelc.exe`:         `'C:\feelc.exe'`,
+		"/a b/feelc":           "'/a b/feelc'",
+		"it's":                 `'it'\''s'`,
+		"":                     "''",
+	} {
+		if got := shellQuote(in); got != want {
+			t.Errorf("shellQuote(%q) = %q, want %q", in, got, want)
+		}
 	}
-	// claude-desktop resolves to an absolute path ending in claude_desktop_config.json.
-	p, err := resolveConfigPath("claude-desktop", "")
+}
+
+func TestCmdMCPInstall_PathMergesIdempotently(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "nested", "mcp.json")
+	if err := cmdMCPInstall([]string{"--path", cfg, "--command", "feelc"}); err != nil {
+		t.Fatalf("install --path: %v", err)
+	}
+	first, err := os.ReadFile(cfg)
 	if err != nil {
-		t.Fatalf("claude-desktop: %v", err)
+		t.Fatalf("config not written: %v", err)
 	}
-	if !filepath.IsAbs(p) || !strings.HasSuffix(p, "claude_desktop_config.json") {
-		t.Errorf("claude-desktop path = %q, want absolute …/claude_desktop_config.json", p)
+	if srv := servers(t, parse(t, first))["feelc"].(map[string]any); srv["command"] != "feelc" {
+		t.Errorf("command = %v, want feelc", srv["command"])
+	}
+	if err := cmdMCPInstall([]string{"--path", cfg, "--command", "other"}); err != nil {
+		t.Fatalf("second install: %v", err)
+	}
+	if second, _ := os.ReadFile(cfg); string(second) != string(first) {
+		t.Errorf("re-running without --force rewrote the file:\n%s", second)
+	}
+}
+
+func TestCmdMCPInstall_NoPathWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	stdout, stderr := os.Stdout, os.Stderr
+	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devnull.Close()
+	os.Stdout, os.Stderr = devnull, devnull
+	defer func() { os.Stdout, os.Stderr = stdout, stderr }()
+	if err := cmdMCPInstall(nil); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("feelc mcp install without --path must write nothing, found %v", entries)
+	}
+}
+
+func TestCmdMCPInstall_RejectsRemovedAndConflictingFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"--target", "project"},
+		{"--target=claude-desktop"},
+		{"--print", "--path", "x.json"},
+		{"stray"},
+	} {
+		if err := cmdMCPInstall(args); err == nil {
+			t.Errorf("cmdMCPInstall(%q) succeeded, want an error", args)
+		}
 	}
 }

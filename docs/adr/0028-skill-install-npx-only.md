@@ -1,6 +1,6 @@
 # ADR 0028 — Install the skill with `npx skills` only; register the MCP server per agent
 
-- **Status**: Accepted (2026-10-20)
+- **Status**: Accepted (2026-10-20); the "`feelc mcp install` for `.mcp.json`" clause superseded by [ADR 0029](0029-mcp-install-agent-neutral.md)
 - **Deciders**: maxgfr
 
 ## Context

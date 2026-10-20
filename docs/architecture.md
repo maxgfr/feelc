@@ -49,7 +49,7 @@ nothing downstream reorders or renumbers, so a model hashes identically however 
 | `internal/*` | The engine (above). |
 | `third_party/feel` | Vendored FEEL parser fork, pinned via a `replace` in `go.mod` — do not de-vendor. |
 | `skills/feelc-rules/` | The portable authoring skill (`SKILL.md` + scripts + references), `npx skills add maxgfr/feelc`. |
-| `.mcp.json` | Project MCP server config (`feelc mcp`), auto-discovered by Claude Code when working in the repo. |
+| `.mcp.json` | Project MCP server config (`feelc mcp`), for contributors working in the repo (clients that read a project `.mcp.json` pick it up). |
 | `site/` | The docs site generator (`build.mjs`) and the WASM playground ([ADR 0018](adr/0018-docs-site.md)). |
 | `docs/` | Reference docs + `docs/adr/` (decision records). |
 | `examples/`, `sample-project/`, `testdata/` | Verified reference models, a project-mode example, fixtures. |
