@@ -1,7 +1,7 @@
 # MCP server (`feelc mcp`)
 
 feelc ships as a [Model Context Protocol](https://modelcontextprotocol.io) server so any MCP-capable
-agent (Claude Code/Desktop, Cursor, …) can **author rules and have the deterministic engine verify, run
+agent (Claude Code, Codex, OpenCode, Cursor, …) can **author rules and have the deterministic engine verify, run
 and explain them** — the LLM writes, feelc decides ([ADR 0008](adr/0008-llm-authoring-boundary.md),
 [ADR 0026](adr/0026-mcp-server.md)). The model never sits on the execution path; every tool is pure,
 deterministic Go that reuses the same code as `feelc run`/`verify`/….
@@ -14,16 +14,18 @@ feelc mcp        # speaks JSON-RPC 2.0 over stdin/stdout (newline-delimited); no
 
 ## Configure a client
 
-**One command** — `feelc mcp install` writes/merges the config for you, idempotently (it never clobbers
-other servers or sibling keys, and points at this binary's absolute path):
+Each agent owns its config format and location, so feelc does not write into any one agent's files.
+`feelc mcp install` prints what to add and how ([ADR 0029](adr/0029-mcp-install-agent-neutral.md)); with
+`--path` it merges the entry into a file you name, idempotently (it never clobbers other servers or sibling
+keys, and points at this binary's absolute path):
 
 ```bash
-feelc mcp install                          # → ./.mcp.json (Claude Code project scope)
-feelc mcp install --target claude-desktop  # → the per-OS claude_desktop_config.json
-feelc mcp install --print                  # just print the JSON snippet, write nothing
+feelc mcp install                       # print the mcpServers JSON + the per-agent commands, write nothing
+feelc mcp install --print               # just the JSON snippet
+feelc mcp install --path .mcp.json      # merge it into any mcpServers JSON file (--force to overwrite)
 ```
 
-Or add it by hand — Claude Desktop / Code (`claude_desktop_config.json` or `.mcp.json`):
+Or add it by hand to any client that reads an `mcpServers` JSON file:
 
 ```json
 {

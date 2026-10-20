@@ -1,6 +1,6 @@
 # ADR 0027 — Skill distribution: skills.sh, Claude Code plugin, and `feelc mcp install`
 
-- **Status**: Accepted (2026-06-25); channel 2 (Claude Code plugin) superseded by [ADR 0028](0028-skill-install-npx-only.md)
+- **Status**: Accepted (2026-06-25); channel 2 (Claude Code plugin) superseded by [ADR 0028](0028-skill-install-npx-only.md); channel 3's `--target` (Claude Code / Claude Desktop paths) superseded by [ADR 0029](0029-mcp-install-agent-neutral.md)
 - **Deciders**: maxgfr
 
 ## Context

@@ -46,7 +46,9 @@ Install it with [`npx skills`](https://github.com/vercel-labs/skills) (any agent
 
 ```sh
 npx skills add maxgfr/feelc                  # the skill (update later with: npx skills update)
-claude mcp add feelc -- feelc mcp            # MCP server: Claude Code (or codex / opencode mcp add …)
+claude mcp add feelc -- feelc mcp            # MCP server: Claude Code
+codex mcp add feelc -- feelc mcp             #   … Codex
+opencode mcp add feelc -- feelc mcp          #   … OpenCode
 ```
 
 Or run the wrapper directly (it locates the `feelc` binary itself):
