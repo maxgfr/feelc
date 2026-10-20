@@ -4,7 +4,6 @@ description: Author, verify, and test deterministic business rules and decision 
 license: Apache-2.0
 metadata:
   version: 0.2.0
-  opencode/autoinvoke: 'false'
 disable-model-invocation: true
 ---
 
