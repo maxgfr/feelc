@@ -267,6 +267,6 @@ Apache-2.0. See [LICENSE](./LICENSE).
 
 ## Manual skill invocation
 
-These skills run when explicitly invoked: `feelc-rules`. Use `$name` in Codex or `/name` in Claude Code and OpenCode (with the plugin namespace when installed as a Claude plugin).
+These skills run when explicitly invoked: `feelc-rules`. Use `$name` in Codex or `/name` in Claude Code and OpenCode.
 
 The skill bundle disables implicit selection: Claude Code and OpenCode read `disable-model-invocation: true` from `SKILL.md`.
